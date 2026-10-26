@@ -1,45 +1,53 @@
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
   TemplateRef,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatChipsModule } from '@angular/material/chips';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatDialog } from '@angular/material/dialog';
-import { SearchFieldComponent } from '../../shared/ui/search-field.component';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
-  Observable,
   catchError,
+  debounceTime,
   exhaustMap,
+  finalize,
   firstValueFrom,
+  map,
   of,
+  startWith,
   switchMap,
   timeout,
   timer,
 } from 'rxjs';
-import { AuthService } from '../../core/auth/auth.service';
-import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
-import { executionStateLabel } from '../../shared/models/execution';
-import { AiAssistantActivity } from '../../shared/models/ai-tools';
-import { formatFullDateTime } from '../../shared/models/date-format';
-import { joinBadges, mediaBadges } from '../../shared/models/media-badges';
-import { AiToolsService } from '../../shared/services/ai-tools.service';
-import { ExecutionDetailPolling } from '../../shared/services/execution-detail-polling';
+import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import {
-  ExecutionTracking,
-  INITIAL_EXECUTION_TRACKING,
-} from '../../shared/services/execution-tracking';
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
+import { ClusterApi } from '../../shared/services/cluster-api';
+import { LibraryActivity } from '../../shared/services/library-activity';
+import {
+  LibraryActivityFile,
+  LibraryActivityResponse,
+  LibraryActivityStatus,
+} from '../../shared/models/library-activity';
+import { ExecutionResponse, executionStateLabel } from '../../shared/models/execution';
+import { formatFileSize } from '../../shared/models/file-size';
+import { formatFullDateTime, formatRelativeTime } from '../../shared/models/date-format';
+import { mediaBadges, joinBadges } from '../../shared/models/media-badges';
+import { ExecutionTracking } from '../../shared/services/execution-tracking';
+import { ExecutionDetailPolling } from '../../shared/services/execution-detail-polling';
 import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import {
@@ -56,361 +64,213 @@ import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-fi
 import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeline-logs.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
-import { CategoryTabOption } from '../../shared/ui/category-tabs.component';
-import { SubnavComponent } from '../../shared/ui/subnav.component';
+import { SubnavComponent, SubnavOption } from '../../shared/ui/subnav.component';
 import { SubnavTemplateComponent } from '../../shared/templates/subnav-template.component';
-import {
-  ACTIVITY_GROUPS,
-  ACTIVITY_STATES,
-  ActivityGroup,
-  ActivityItem,
-  ActivityKind,
-  aiDuration,
-  aiErrorName,
-  aiItem,
-  aiOperationName,
-  aiProviderName,
-  aiStatusName,
-  executionItem,
-  metadataSize,
-} from './activity-items';
+import { MatDialog } from '@angular/material/dialog';
 
-type KindFilter = 'all' | ActivityKind;
-type GroupFilter = 'all' | ActivityGroup;
-type ActivityRole = 'operate' | 'diagnose';
-
-const VIEW_TO_GROUP: Readonly<Record<string, ActivityGroup>> = {
-  queue: 'queue',
-  active: 'active',
-  errors: 'errors',
-  cancelled: 'cancelled',
-  history: 'done',
-};
-const ROLE_GROUPS: Readonly<Record<ActivityRole, readonly ActivityGroup[]>> = {
-  operate: ['queue', 'active'],
-  diagnose: ['errors', 'cancelled', 'done'],
-};
-const GROUP_TO_ROLE: Readonly<Record<ActivityGroup, ActivityRole>> = {
-  queue: 'operate',
-  active: 'operate',
-  errors: 'diagnose',
-  cancelled: 'diagnose',
-  done: 'diagnose',
-};
-
-function roleFromView(view: string | null, kind: string | null): ActivityRole {
-  const group = view ? VIEW_TO_GROUP[view] : undefined;
-  if (view === 'active' && kind === 'ai') return 'diagnose';
-  if (group) return GROUP_TO_ROLE[group];
-  if (view === 'operate' || view === 'diagnose') return view;
-  return kind === 'ai' ? 'diagnose' : 'operate';
+const ACTIVITY_STATUSES: readonly { value: LibraryActivityStatus; label: string }[] = [
+  { value: 'untreated', label: 'Non traité' },
+  { value: 'active', label: 'En cours de traitement' },
+  { value: 'done', label: 'Déjà traité' },
+  { value: 'failed', label: 'Échec du traitement' },
+  { value: 'disabled', label: 'Traitement désactivé' },
+];
+const PAGE_SIZE = 50;
+const PAGE_REFRESH_MS = 10000;
+interface ActivityPageState {
+  readonly status: 'loading' | 'ready' | 'error';
+  readonly data: LibraryActivityResponse | null;
+  readonly revision: number;
 }
-/** Nombre de lignes « Terminés » affichées avant « Afficher plus ». */
-const DONE_PAGE_SIZE = 25;
-const AI_REFRESH_MS = 15000;
+
+function validStatus(value: string | null): value is LibraryActivityStatus {
+  return ACTIVITY_STATUSES.some((status) => status.value === value);
+}
+
+function statusFromLegacyView(view: string | null): LibraryActivityStatus {
+  switch (view) {
+    case 'active':
+      return 'active';
+    case 'errors':
+      return 'failed';
+    case 'history':
+      return 'done';
+    default:
+      return 'untreated';
+  }
+}
+
+function viewFromStatus(status: LibraryActivityStatus): string {
+  switch (status) {
+    case 'active':
+      return 'active';
+    case 'failed':
+      return 'errors';
+    case 'done':
+      return 'history';
+    default:
+      return 'queue';
+  }
+}
+
+function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-activity-page',
   imports: [
     PageHeaderComponent,
-    DataTableComponent,
     DetailDrawerComponent,
     DetailFieldListComponent,
     ExecutionPipelineLogsComponent,
     IconComponent,
     MatButtonModule,
     MatCheckboxModule,
-    MatChipsModule,
+    MatFormFieldModule,
     MatProgressBarModule,
-    SummaryTilesComponent,
-    SearchFieldComponent,
+    MatSelectModule,
     MatTabsModule,
     SubnavComponent,
     SubnavTemplateComponent,
-    RouterLink,
     StatusBadgeComponent,
+    DataTableComponent,
   ],
   templateUrl: './activity-page.component.html',
   styleUrl: './activity-page.component.scss',
 })
 export class ActivityPageComponent {
-  protected readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly pageShellContext = inject(PageShellContextService);
+  private readonly activityApi = inject(LibraryActivity);
+  private readonly clusterApi = inject(ClusterApi);
   private readonly tracking = inject(ExecutionTracking);
   private readonly detailPolling = inject(ExecutionDetailPolling);
-  private readonly aiTools = inject(AiToolsService);
   private readonly downloads = inject(FileDownload);
   private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly groups = ACTIVITY_GROUPS;
-  protected readonly roleTabs: readonly CategoryTabOption[] = [
-    { value: 'operate', label: 'Exploiter' },
-    { value: 'diagnose', label: 'Diagnostiquer' },
-  ];
-  protected readonly roleFilter = signal<ActivityRole>(
-    roleFromView(
-      this.route.snapshot.queryParamMap.get('view'),
-      this.route.snapshot.queryParamMap.get('type'),
-    ),
-  );
-  protected readonly visibleGroups = computed(() =>
-    this.groups.filter(
-      (group) =>
-        ROLE_GROUPS[this.roleFilter()].includes(group.id) ||
-        (this.roleFilter() === 'diagnose' &&
-          this.kindFilter() !== 'execution' &&
-          this.auth.isAdmin() &&
-          group.id === 'active'),
-    ),
-  );
-  protected readonly activityHeading = computed(() =>
-    this.roleFilter() === 'operate'
-      ? 'Opérations à prendre en charge'
-      : 'Résultats à diagnostiquer',
-  );
-  protected readonly activitySubheading = computed(() =>
-    this.roleFilter() === 'operate'
-      ? 'Annulez une opération autorisée ou ouvrez son suivi détaillé.'
-      : 'Consultez les tentatives, leurs événements, leurs résultats et les demandes IA.',
-  );
-  protected readonly aiState = signal<{
-    readonly items: readonly AiAssistantActivity[];
-    readonly error: boolean;
-    readonly loaded: boolean;
-  }>({ items: [], error: false, loaded: false });
-
-  protected readonly kindFilter = signal<KindFilter>(
-    this.route.snapshot.queryParamMap.get('type') === 'ai'
-      ? 'ai'
-      : this.route.snapshot.queryParamMap.get('type') === 'execution'
-        ? 'execution'
-        : 'all',
-  );
-  protected readonly groupFilter = signal<GroupFilter>(
-    VIEW_TO_GROUP[this.route.snapshot.queryParamMap.get('view') ?? ''] ?? 'all',
+  protected readonly statuses = ACTIVITY_STATUSES;
+  protected readonly status = signal<LibraryActivityStatus>(
+    validStatus(this.route.snapshot.queryParamMap.get('state'))
+      ? (this.route.snapshot.queryParamMap.get('state') as LibraryActivityStatus)
+      : statusFromLegacyView(this.route.snapshot.queryParamMap.get('view')),
   );
   protected readonly search = signal('');
-  protected readonly pageOffset = signal(0);
-  protected readonly pageNumber = computed(() => this.pageOffset() / DONE_PAGE_SIZE + 1);
-  protected readonly trackingState = toSignal(
-    toObservable(
-      computed(() => ({
-        states:
-          this.kindFilter() === 'ai' ||
-          (this.roleFilter() === 'diagnose' && this.groupFilter() === 'active')
-            ? []
-            : this.groupFilter() === 'all'
-              ? ROLE_GROUPS[this.roleFilter()].flatMap((group) => ACTIVITY_STATES[group])
-              : ACTIVITY_STATES[this.groupFilter() as ActivityGroup],
-        offset: this.pageOffset(),
-      })),
-    ).pipe(
-      switchMap(({ states, offset }) =>
-        this.tracking.observeStates(states, DONE_PAGE_SIZE, offset),
-      ),
-    ),
+  protected readonly libraryFilter = signal<string | null>(
+    this.route.snapshot.queryParamMap.get('library'),
+  );
+  protected readonly flowFilter = signal<string | null>(
+    this.route.snapshot.queryParamMap.get('flow'),
+  );
+  protected readonly nodeFilter = signal<string | null>(
+    this.route.snapshot.queryParamMap.get('node'),
+  );
+  protected readonly filtersOpen = signal(false);
+  protected readonly refreshRevision = signal(0);
+  protected readonly additionalFiles = signal<readonly LibraryActivityFile[]>([]);
+  protected readonly loadingMore = signal(false);
+  protected readonly actionBusy = signal(false);
+  protected readonly feedback = signal('');
+  protected readonly selectedActionIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly selectedFile = signal<LibraryActivityFile | null>(null);
+  protected readonly selectedExecution = signal<ExecutionResponse | null>(null);
+  protected readonly executionLoading = signal(false);
+  protected readonly selectedDetailTab = signal(0);
+
+  protected readonly libraries = toSignal(
+    this.clusterApi.listLibraries().pipe(catchError(() => of([]))),
     {
-      initialValue: INITIAL_EXECUTION_TRACKING,
+      initialValue: [],
     },
   );
-  private readonly openedItem = signal<ActivityItem | null>(null);
-  protected readonly summary = computed<readonly SummaryTile[]>(() => {
-    const data = this.trackingState().data;
-    if (this.roleFilter() === 'operate')
-      return [
-        {
-          label: 'À traiter',
-          value: data ? String(data.queuedCount) : '—',
-          detail: 'Exécutions en attente dans la file',
-        },
-        {
-          label: 'En cours',
-          value: data ? String(data.activeCount) : '—',
-          detail: 'Traitements actifs sur le cluster',
-        },
-      ];
-    return [
-      {
-        label: 'Erreurs',
-        value: data ? String(data.failedCount) : '—',
-        detail: 'Tentatives à examiner',
-        tone: data?.failedCount ? 'attention' : 'default',
-      },
-      {
-        label: 'Annulés',
-        value: data ? String(data.cancelledCount) : '—',
-        detail: 'Traitements annulés',
-      },
-      {
-        label: 'Terminés',
-        value: data ? String(data.succeededCount + (data.deferredCount ?? 0)) : '—',
-        detail: 'Traitements réussis ou différés',
-      },
-    ];
+  protected readonly nodes = toSignal(this.clusterApi.listNodes().pipe(catchError(() => of([]))), {
+    initialValue: [],
   });
-  protected readonly busy = signal(false);
-  protected readonly selectedKey = signal<string | null>(
-    this.route.snapshot.queryParamMap.get('request')
-      ? 'ai:' + this.route.snapshot.queryParamMap.get('request')
-      : null,
-  );
-  protected readonly selectedDetailTab = signal(0);
-  protected readonly selectedActionIds = signal<ReadonlySet<string>>(new Set());
-  protected readonly selectedActionItems = computed(() =>
-    this.allItems().filter(
-      (item) => item.execution && this.selectedActionIds().has(item.execution.id),
-    ),
-  );
-  protected readonly selectedCancelableItems = computed(() =>
-    this.selectedActionItems().filter((item) =>
-      ['queued', 'running'].includes(item.execution?.state ?? ''),
-    ),
+  protected readonly flowOptions = computed(() =>
+    [
+      ...new Set(
+        this.libraries()
+          .map((library) => library.flowName)
+          .filter((name): name is string => !!name),
+      ),
+    ].sort((a, b) => a.localeCompare(b, 'fr-FR')),
   );
 
-  protected readonly allItems = computed<readonly ActivityItem[]>(() => [
-    ...(this.trackingState().data?.executions ?? []).map(executionItem),
-    ...this.aiState().items.map(aiItem),
+  private readonly request = computed(() => ({
+    status: this.status(),
+    libraryId: this.libraryFilter() ?? undefined,
+    flow: this.flowFilter() ?? undefined,
+    nodeId: this.nodeFilter() ?? undefined,
+    search: this.search(),
+    limit: PAGE_SIZE,
+    offset: 0,
+  }));
+  private readonly requestKey = computed(() =>
+    JSON.stringify({
+      status: this.status(),
+      libraryId: this.libraryFilter(),
+      flow: this.flowFilter(),
+      node: this.nodeFilter(),
+      search: this.search().trim(),
+    }),
+  );
+  private readonly pageState = toSignal(
+    toObservable(
+      computed(() => ({ query: this.request(), revision: this.refreshRevision() })),
+    ).pipe(
+      debounceTime(180),
+      switchMap(({ query, revision }) =>
+        timer(0, PAGE_REFRESH_MS).pipe(
+          exhaustMap(() =>
+            this.activityApi.list(query).pipe(
+              timeout(20000),
+              map((data): ActivityPageState => ({ status: 'ready', data, revision })),
+              catchError(() => of({ status: 'error', data: null, revision })),
+            ),
+          ),
+          startWith({ status: 'loading', data: null, revision } as ActivityPageState),
+        ),
+      ),
+    ),
+    { initialValue: { status: 'loading', data: null, revision: 0 } as ActivityPageState },
+  );
+
+  protected readonly files = computed(() => [
+    ...(this.pageState().data?.files ?? []),
+    ...this.additionalFiles(),
   ]);
-  /** Éléments du type et de la recherche courants, avant filtre d’état (pour les compteurs). */
-  private readonly scoped = computed(() => {
-    const kind = this.kindFilter();
-    const query = this.search().trim().toLocaleLowerCase('fr');
-    const role = this.roleFilter();
-    return this.allItems().filter(
-      (item) =>
-        (role === 'operate'
-          ? ROLE_GROUPS.operate.includes(item.group) && item.kind === 'execution'
-          : ROLE_GROUPS.diagnose.includes(item.group) ||
-            (item.kind === 'ai' && item.group === 'active')) &&
-        (kind === 'all' || item.kind === kind) &&
-        (!query ||
-          [
-            item.title,
-            item.subtitle,
-            item.stateLabel,
-            item.execution?.library,
-            item.execution?.media,
-          ]
-            .filter(Boolean)
-            .some((value) => String(value).toLocaleLowerCase('fr').includes(query))),
-    );
-  });
-  protected readonly counts = computed(() => {
-    const counts: Record<GroupFilter, number> = {
-      all: 0,
-      active: 0,
-      queue: 0,
-      errors: 0,
-      cancelled: 0,
-      done: 0,
-    };
-    for (const item of this.scoped()) {
-      counts.all++;
-      counts[item.group]++;
-    }
-    const data = this.trackingState().data;
-    if (data && this.kindFilter() !== 'ai' && !this.search().trim()) {
-      const executionCounts = {
-        active: data.activeCount,
-        queue: data.queuedCount,
-        errors: data.failedCount,
-        cancelled: data.cancelledCount,
-        done: data.succeededCount + (data.deferredCount ?? 0),
-      };
-      if (this.roleFilter() === 'diagnose') executionCounts.active = 0;
-      for (const group of ACTIVITY_GROUPS)
-        counts[group.id] =
-          executionCounts[group.id] +
-          this.scoped().filter((item) => item.kind === 'ai' && item.group === group.id).length;
-      counts.all = this.visibleGroups().reduce((total, group) => total + counts[group.id], 0);
-    }
-    return counts;
-  });
-  protected readonly sections = computed(() => {
-    const filter = this.groupFilter();
-    const scoped = this.scoped();
-    return this.visibleGroups()
-      .filter((group) => filter === 'all' || filter === group.id)
-      .map((group) => {
-        const all = scoped
-          .filter((item) => item.group === group.id)
-          .sort((a, b) =>
-            group.id === 'queue' ? a.sortTime - b.sortTime : b.sortTime - a.sortTime,
-          );
-        const items = all;
-        const more =
-          this.kindFilter() !== 'ai' &&
-          (this.trackingState().moreStates ?? []).some((state) =>
-            ACTIVITY_STATES[group.id].includes(state),
-          );
-        return { ...group, items, total: this.counts()[group.id], more };
-      })
-      .filter((section) => section.items.length > 0);
-  });
+  protected readonly counts = computed(() => this.pageState().data?.counts ?? null);
+  protected readonly statusOptions = computed<readonly SubnavOption[]>(() =>
+    ACTIVITY_STATUSES.map((item) => ({
+      value: item.value,
+      label: item.label,
+      count: this.counts()?.[item.value],
+    })),
+  );
   protected readonly countText = computed(() => {
-    if (this.kindFilter() === 'ai')
-      return this.aiState().loaded
-        ? `${this.counts().all} demande(s) chargée(s)`
-        : 'Chargement de l’assistant…';
-    const data = this.trackingState().data;
-    if (!data) return 'Données indisponibles';
-    if (this.roleFilter() === 'operate')
-      return `${data.queuedCount} à traiter · ${data.activeCount} en cours`;
-    const aiRunningCount =
-      this.kindFilter() === 'execution'
-        ? 0
-        : this.scoped().filter((item) => item.kind === 'ai' && item.group === 'active').length;
-    return `${data.failedCount} ${data.failedCount === 1 ? 'erreur' : 'erreurs'} · ${data.cancelledCount} annulée(s) · ${data.succeededCount + (data.deferredCount ?? 0)} terminée(s)${aiRunningCount ? ` · ${aiRunningCount} demande(s) IA en cours` : ''}`;
+    const count = this.counts();
+    if (!count) return 'Chargement des fichiers…';
+    const total = count.untreated + count.active + count.done + count.failed + count.disabled;
+    return `${total} fichier${total === 1 ? '' : 's'} suivi${total === 1 ? '' : 's'}`;
   });
-  protected readonly emptyStateReady = computed(() => {
-    if (this.roleFilter() === 'operate' || this.kindFilter() === 'execution')
-      return this.trackingState().status === 'ready';
-    if (this.kindFilter() === 'ai') return this.aiState().loaded && !this.aiState().error;
-    return (
-      this.trackingState().status === 'ready' &&
-      (!this.auth.isAdmin() || this.aiState().loaded || this.aiState().error)
-    );
-  });
-  protected readonly emptyStateTitle = computed(() =>
-    this.roleFilter() === 'operate'
-      ? 'Aucune opération à prendre en charge'
-      : 'Aucun résultat à diagnostiquer',
+  protected readonly currentStatusLabel = computed(
+    () => ACTIVITY_STATUSES.find((item) => item.value === this.status())?.label ?? 'Activité',
   );
-  protected readonly emptyStateDescription = computed(() =>
-    this.roleFilter() === 'operate'
-      ? 'La file et les traitements actifs sont vides.'
-      : 'Aucun élément ne correspond à ces filtres.',
+  protected readonly hasMore = computed(
+    () => (this.pageState().data?.totalCount ?? 0) > this.files().length,
   );
-  protected readonly feedback = computed(() => {
-    const state = this.trackingState();
-    if (this.kindFilter() !== 'ai' && state.status === 'loading')
-      return this.roleFilter() === 'operate'
-        ? 'Chargement des opérations…'
-        : 'Chargement de l’historique…';
-    if (this.kindFilter() !== 'ai' && state.status === 'error')
-      return 'Actualisation impossible. Les dernières données reçues peuvent être obsolètes.';
-    if (
-      this.roleFilter() === 'diagnose' &&
-      this.aiState().error &&
-      this.kindFilter() !== 'execution'
-    )
-      return 'Les demandes de l’assistant sont momentanément indisponibles.';
-    if (this.roleFilter() === 'diagnose' && this.kindFilter() === 'ai' && !this.aiState().loaded)
-      return 'Chargement des demandes de l’assistant…';
-    return '';
-  });
-
-  protected readonly selected = computed(
-    () =>
-      this.allItems().find((item) => item.key === this.selectedKey()) ??
-      (this.openedItem()?.key === this.selectedKey() ? this.openedItem() : null),
+  protected readonly selectedCancelableFiles = computed(() =>
+    this.files().filter(
+      (file) =>
+        file.executionId &&
+        file.executionState === 'running' &&
+        this.selectedActionIds().has(file.executionId),
+    ),
   );
-  protected readonly selectedExecution = computed(() => this.selected()?.execution ?? null);
-  protected readonly selectedAi = computed(() => this.selected()?.ai ?? null);
 
   private readonly detailState = this.detailPolling.observe(
     toObservable(computed(() => this.selectedExecution()?.id ?? null)),
@@ -428,17 +288,50 @@ export class ActivityPageComponent {
 
   protected readonly drawerContent = viewChild<TemplateRef<unknown>>('detailContent');
   protected readonly drawerFooter = viewChild<TemplateRef<unknown>>('detailFooter');
-
-  protected readonly drawerTitle = computed(() => this.selected()?.title ?? 'Détails');
+  protected readonly drawerTitle = computed(() => {
+    const file = this.selectedFile();
+    return file ? baseName(file.relativePath) : 'Détails du fichier';
+  });
   protected readonly drawerDescription = computed(() => {
-    const item = this.selected();
-    if (!item) return '';
-    return [item.kind === 'ai' ? 'Assistant IA' : 'Traitement', item.stateLabel].join(' · ');
+    const file = this.selectedFile();
+    if (!file) return '';
+    return [file.library, this.statusLabel(file.status), file.flow].filter(Boolean).join(' · ');
   });
-  protected readonly canCancel = computed(() => {
-    const state = this.selectedExecution()?.state;
-    return state === 'queued' || state === 'running';
+  protected readonly fileFields = computed<readonly DetailField[]>(() => {
+    const file = this.selectedFile();
+    if (!file) return [];
+    return [
+      { section: 'Fichier', label: 'Chemin relatif', value: file.relativePath, copiable: true },
+      { section: 'Fichier', label: 'Taille', value: formatFileSize(file.bytes) },
+      { section: 'Fichier', label: 'Modifié le', value: formatFullDateTime(file.modifiedAt) },
+      { section: 'Bibliothèque', label: 'Nom', value: file.library },
+      {
+        section: 'Bibliothèque',
+        label: 'État du traitement',
+        value: this.statusLabel(file.status),
+      },
+      {
+        section: 'Traitement',
+        label: 'Flow attribué',
+        value: file.flow ? `${file.flow} · v${file.flowVersion}` : 'Aucun flow attribué',
+      },
+      { section: 'Traitement', label: 'Nœud', value: file.node ?? '—' },
+      {
+        section: 'Traitement',
+        label: 'Détail',
+        value: file.detail ?? 'Aucun détail supplémentaire.',
+      },
+      {
+        section: 'Traitement',
+        label: 'Identifiant d’exécution',
+        value: file.executionId ?? 'Aucune exécution',
+        copiable: Boolean(file.executionId),
+      },
+    ];
   });
+  protected readonly canCancel = computed(() =>
+    ['queued', 'running'].includes(this.selectedExecution()?.state ?? ''),
+  );
   protected readonly canRetry = computed(() => this.selectedExecution()?.state === 'failed');
 
   protected readonly eventColumns: readonly DataTableColumn[] = [
@@ -463,7 +356,6 @@ export class ActivityPageComponent {
     { key: 'profile', label: 'Profil figé' },
     { key: 'worker', label: 'Identifiant worker' },
   ];
-
   protected readonly videoEncodingRows = computed<readonly DataTableRow[]>(() =>
     (this.selectedExecution()?.videoEncodings ?? []).map((encoding, index) => ({
       id: `${encoding.flowNodeId}-${encoding.encoderId}-${index}`,
@@ -481,239 +373,295 @@ export class ActivityPageComponent {
       profile: `${encoding.profileName} · v${encoding.profileVersion}`,
     })),
   );
-
   protected readonly executionFields = computed<readonly DetailField[]>(() => {
-    const e = this.selectedExecution();
-    if (!e) return [];
-    const duration = e.startedAt
+    const execution = this.selectedExecution();
+    if (!execution) return [];
+    const duration = execution.startedAt
       ? Math.max(
           0,
           Math.floor(
-            (Date.parse(e.finishedAt ?? this.trackingState().data?.observedAt ?? e.updatedAt) -
-              Date.parse(e.startedAt)) /
+            (Date.parse(execution.finishedAt ?? execution.updatedAt) -
+              Date.parse(execution.startedAt)) /
               1000,
           ),
         ) + ' s'
       : '—';
     return [
-      { section: 'Exécution', label: 'Identifiant', value: e.id, copiable: true },
-      { section: 'Exécution', label: 'État', value: executionStateLabel(e) },
-      {
-        section: 'Attribution',
-        label: 'Serveur propriétaire',
-        value: e.ownership?.ownerPeerId ?? '—',
-        copiable: true,
-      },
-      {
-        section: 'Attribution',
-        label: 'Époque',
-        value: e.ownership ? String(e.ownership.epoch) : '—',
-      },
+      { section: 'Exécution', label: 'Identifiant', value: execution.id, copiable: true },
+      { section: 'Exécution', label: 'État', value: executionStateLabel(execution) },
       {
         section: 'Exécution',
         label: 'Progression',
-        value: e.progress === null ? '—' : e.progress + ' %',
+        value: execution.progress === null ? '—' : execution.progress + ' %',
       },
-      { section: 'Exécution', label: 'Étape ou résultat', value: e.detail || '—' },
+      { section: 'Exécution', label: 'Étape ou résultat', value: execution.detail || '—' },
       {
         section: 'Média',
         label: 'Caractéristiques',
-        value: joinBadges(mediaBadges(e.beforeMetadata)) || '—',
+        value: joinBadges(mediaBadges(execution.beforeMetadata)) || '—',
       },
-      { section: 'Média', label: 'Taille avant', value: metadataSize(e.beforeMetadata) },
-      { section: 'Média', label: 'Taille après', value: metadataSize(e.afterMetadata) },
+      {
+        section: 'Média',
+        label: 'Taille avant',
+        value: this.metadataSize(execution.beforeMetadata),
+      },
+      {
+        section: 'Média',
+        label: 'Taille après',
+        value: this.metadataSize(execution.afterMetadata),
+      },
       {
         section: 'Média',
         label: 'Résultat publié',
-        value: e.publishedPath ?? '—',
-        copiable: Boolean(e.publishedPath),
+        value: execution.publishedPath ?? '—',
+        copiable: Boolean(execution.publishedPath),
       },
-      { section: 'Source et traitement', label: 'Bibliothèque', value: e.library },
-      { section: 'Source et traitement', label: 'Média', value: e.media },
+      { section: 'Source et traitement', label: 'Bibliothèque', value: execution.library },
+      { section: 'Source et traitement', label: 'Média', value: execution.media },
       {
         section: 'Source et traitement',
         label: 'Flow',
-        value: `${e.flow} · v${e.flowVersion}`,
+        value: `${execution.flow} · v${execution.flowVersion}`,
       },
-      { section: 'Source et traitement', label: 'Worker', value: e.node ?? '—' },
-      { section: 'Chronologie', label: 'Ajoutée à la file', value: formatFullDateTime(e.queuedAt) },
-      { section: 'Chronologie', label: 'Démarrée', value: formatFullDateTime(e.startedAt) },
-      { section: 'Chronologie', label: 'Terminée', value: formatFullDateTime(e.finishedAt) },
+      { section: 'Source et traitement', label: 'Worker', value: execution.node ?? '—' },
+      {
+        section: 'Chronologie',
+        label: 'Ajoutée à la file',
+        value: formatFullDateTime(execution.queuedAt),
+      },
+      { section: 'Chronologie', label: 'Démarrée', value: formatFullDateTime(execution.startedAt) },
+      {
+        section: 'Chronologie',
+        label: 'Terminée',
+        value: formatFullDateTime(execution.finishedAt),
+      },
       { section: 'Chronologie', label: 'Durée', value: duration },
-      { section: 'Chronologie', label: 'Tentative', value: e.attempt },
-    ];
-  });
-  protected readonly beforeSize = computed(() =>
-    metadataSize(this.selectedExecution()?.beforeMetadata),
-  );
-  protected readonly afterSize = computed(() =>
-    metadataSize(this.selectedExecution()?.afterMetadata),
-  );
-
-  protected readonly aiFields = computed<readonly DetailField[]>(() => {
-    const a = this.selectedAi();
-    if (!a) return [];
-    return [
-      { section: 'Demande', label: 'Identifiant', value: a.requestId, copiable: true },
-      ...(a.conversationTitle
-        ? [{ section: 'Demande', label: 'Conversation', value: a.conversationTitle }]
-        : []),
-      { section: 'Demande', label: 'Opération', value: aiOperationName(a.operation) },
-      { section: 'Demande', label: 'Fournisseur', value: aiProviderName(a.provider) },
-      { section: 'Demande', label: 'État', value: aiStatusName(a.status) },
-      {
-        section: 'Demande',
-        label: 'Catégorie d’erreur',
-        value: a.errorCategory ? aiErrorName(a.errorCategory) : '—',
-      },
-      { section: 'Demande', label: 'Outils', value: a.tools?.length ? a.tools.join(', ') : '—' },
-      { section: 'Chronologie', label: 'Début', value: formatFullDateTime(a.startedAt) },
-      {
-        section: 'Chronologie',
-        label: 'Dernière mise à jour',
-        value: formatFullDateTime(a.updatedAt),
-      },
-      {
-        section: 'Chronologie',
-        label: 'Durée',
-        value: a.durationMilliseconds !== null ? aiDuration(a.durationMilliseconds) : '—',
-      },
+      { section: 'Chronologie', label: 'Tentative', value: execution.attempt },
     ];
   });
 
   constructor() {
-    toObservable(
-      computed(() => ({
-        enabled:
-          this.auth.isAdmin() &&
-          this.roleFilter() === 'diagnose' &&
-          this.kindFilter() !== 'execution',
-      })),
-    )
-      .pipe(
-        switchMap(({ enabled }) =>
-          enabled
-            ? timer(0, AI_REFRESH_MS).pipe(
-                exhaustMap(() =>
-                  this.aiTools.listAssistantActivity().pipe(
-                    timeout(20000),
-                    catchError(() => of(null)),
-                  ),
-                ),
-              )
-            : of([]),
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe((items) =>
-        this.aiState.update((state) =>
-          items ? { items, error: false, loaded: true } : { ...state, error: true },
-        ),
-      );
+    effect(() => {
+      this.requestKey();
+      this.additionalFiles.set([]);
+    });
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans Activité…',
+        onSearchQueryChange: (query) => this.search.set(query),
+        searchResults: (query) => this.searchResults(query),
+        filter: {
+          label: 'Filtres',
+          activeCount: () =>
+            Number(Boolean(this.libraryFilter())) +
+            Number(Boolean(this.flowFilter())) +
+            Number(Boolean(this.nodeFilter())),
+          toggle: () => this.filtersOpen.update((open) => !open),
+        },
+      }),
+    );
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
-      this.applyQueryParams(params.get('view'), params.get('type'));
+      const requested = params.get('state');
+      const state = validStatus(requested) ? requested : statusFromLegacyView(params.get('view'));
+      if (state !== this.status()) this.status.set(state);
+      const library = params.get('library');
+      if (library !== this.libraryFilter()) this.libraryFilter.set(library);
+      const flow = params.get('flow');
+      if (flow !== this.flowFilter()) this.flowFilter.set(flow);
+      const node = params.get('node');
+      if (node !== this.nodeFilter()) this.nodeFilter.set(node);
     });
   }
 
-  protected setKind(kind: KindFilter): void {
-    const selectedKind = kind === 'ai' && !this.auth.isAdmin() ? 'all' : kind;
-    if (selectedKind === 'ai' && this.roleFilter() !== 'diagnose') {
-      this.roleFilter.set('diagnose');
-      this.groupFilter.set('all');
-    }
-    this.kindFilter.set(selectedKind);
-    this.pageOffset.set(0);
-    this.clearActionSelection();
+  protected setStatus(value: string): void {
+    if (!validStatus(value) || value === this.status()) return;
+    this.status.set(value);
+    this.selectedActionIds.set(new Set());
     this.close();
-    this.syncViewInUrl();
+    this.syncQueryParams();
   }
-  protected setRole(value: string): void {
-    if (value !== 'operate' && value !== 'diagnose') return;
-    const role = value;
-    if (role === this.roleFilter()) return;
-    this.roleFilter.set(role);
-    this.groupFilter.set('all');
-    if (role === 'operate') this.kindFilter.set('all');
-    this.pageOffset.set(0);
-    this.clearActionSelection();
+
+  protected setLibrary(value: string): void {
+    const libraryId = value || null;
+    if (libraryId === this.libraryFilter()) return;
+    this.libraryFilter.set(libraryId);
+    this.selectedActionIds.set(new Set());
     this.close();
-    this.syncViewInUrl();
+    this.syncQueryParams();
   }
-  protected setGroup(group: GroupFilter): void {
-    if (group !== 'all') {
-      const diagnosticAiActivity =
-        group === 'active' && this.roleFilter() === 'diagnose' && this.auth.isAdmin();
-      if (diagnosticAiActivity) this.kindFilter.set('ai');
-      else {
-        const role = GROUP_TO_ROLE[group];
-        this.roleFilter.set(role);
-        if (role === 'operate' && this.kindFilter() === 'ai') this.kindFilter.set('all');
-      }
-    }
-    this.groupFilter.set(group);
-    this.pageOffset.set(0);
-    this.clearActionSelection();
+
+  protected setFlow(value: string): void {
+    const flow = value || null;
+    if (flow === this.flowFilter()) return;
+    this.flowFilter.set(flow);
+    this.selectedActionIds.set(new Set());
     this.close();
-    this.syncViewInUrl();
+    this.syncQueryParams();
   }
-  protected nextPage(group: ActivityGroup): void {
-    const offset = this.groupFilter() === group ? this.pageOffset() : 0;
-    this.roleFilter.set(GROUP_TO_ROLE[group]);
-    this.groupFilter.set(group);
-    this.pageOffset.set(offset + DONE_PAGE_SIZE);
+
+  protected setNode(value: string): void {
+    const node = value || null;
+    if (node === this.nodeFilter()) return;
+    this.nodeFilter.set(node);
+    this.selectedActionIds.set(new Set());
     this.close();
-    this.syncViewInUrl();
+    this.syncQueryParams();
   }
-  protected previousPage(): void {
-    this.pageOffset.update((offset) => Math.max(0, offset - DONE_PAGE_SIZE));
+
+  protected clearFilters(): void {
+    this.libraryFilter.set(null);
+    this.flowFilter.set(null);
+    this.nodeFilter.set(null);
+    this.selectedActionIds.set(new Set());
+    this.close();
+    this.syncQueryParams();
   }
-  private applyQueryParams(view: string | null, type: string | null): void {
-    const role = roleFromView(view, type);
-    const requestedGroup = view ? VIEW_TO_GROUP[view] : undefined;
-    const group =
-      requestedGroup &&
-      (ROLE_GROUPS[role].includes(requestedGroup) ||
-        (role === 'diagnose' && requestedGroup === 'active' && type === 'ai'))
-        ? requestedGroup
-        : 'all';
-    const kind: KindFilter =
-      type === 'ai' && role === 'diagnose' && this.auth.isAdmin()
-        ? 'ai'
-        : type === 'execution'
-          ? 'execution'
-          : 'all';
-    const changed =
-      role !== this.roleFilter() || group !== this.groupFilter() || kind !== this.kindFilter();
-    this.roleFilter.set(role);
-    this.groupFilter.set(group);
-    this.kindFilter.set(kind);
-    if (changed) {
-      this.pageOffset.set(0);
-      this.clearActionSelection();
-      this.close();
-    }
-  }
-  private syncViewInUrl(): void {
-    const group = this.groupFilter();
-    const view = group === 'all' ? this.roleFilter() : group === 'done' ? 'history' : group;
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: {
-        view,
-        type: this.kindFilter() === 'all' ? null : this.kindFilter(),
-        request: null,
-      },
-      queryParamsHandling: 'merge',
+
+  protected toggleActionSelection(file: LibraryActivityFile, checked: boolean): void {
+    if (!file.executionId) return;
+    this.selectedActionIds.update((current) => {
+      const next = new Set(current);
+      if (checked) next.add(file.executionId!);
+      else next.delete(file.executionId!);
+      return next;
     });
   }
-  protected open(item: ActivityItem): void {
-    this.openedItem.set(item);
+
+  protected clearActionSelection(): void {
+    this.selectedActionIds.set(new Set());
+  }
+
+  protected open(file: LibraryActivityFile): void {
+    this.selectedFile.set(file);
+    this.selectedExecution.set(null);
     this.selectedDetailTab.set(0);
-    this.selectedKey.set(item.key);
+    this.executionLoading.set(Boolean(file.executionId));
+    if (!file.executionId) return;
+    this.tracking
+      .execution(file.executionId)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        catchError(() => of(null)),
+      )
+      .subscribe((execution) => {
+        if (this.selectedFile()?.id !== file.id) return;
+        this.selectedExecution.set(execution);
+        this.executionLoading.set(false);
+      });
   }
+
   protected close(): void {
-    this.selectedKey.set(null);
+    this.selectedFile.set(null);
+    this.selectedExecution.set(null);
+    this.executionLoading.set(false);
   }
+
+  protected rowTime(file: LibraryActivityFile): string {
+    const instant = file.updatedAt ?? file.modifiedAt;
+    return formatRelativeTime(instant);
+  }
+
+  protected fileName(path: string): string {
+    return baseName(path);
+  }
+
+  protected statusLabel(value: LibraryActivityStatus): string {
+    return ACTIVITY_STATUSES.find((status) => status.value === value)?.label ?? value;
+  }
+
+  protected statusTone(
+    value: LibraryActivityStatus,
+  ): 'accent' | 'neutral' | 'danger' | 'success' | 'warning' {
+    switch (value) {
+      case 'active':
+        return 'accent';
+      case 'done':
+        return 'success';
+      case 'failed':
+        return 'danger';
+      case 'disabled':
+        return 'warning';
+      default:
+        return 'neutral';
+    }
+  }
+
+  protected async loadMore(): Promise<void> {
+    const query = this.request();
+    const expectedKey = this.requestKey();
+    const offset = this.files().length;
+    if (this.loadingMore() || !this.hasMore()) return;
+    this.loadingMore.set(true);
+    this.activityApi
+      .list({ ...query, offset })
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.loadingMore.set(false)),
+      )
+      .subscribe({
+        next: (response) => {
+          if (this.requestKey() === expectedKey)
+            this.additionalFiles.update((files) => [...files, ...response.files]);
+        },
+        error: () => this.feedback.set('Impossible de charger la suite des fichiers.'),
+      });
+  }
+
+  protected async runBulkCancel(): Promise<void> {
+    const targets = this.selectedCancelableFiles();
+    if (!targets.length || this.actionBusy()) return;
+    const accepted = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          data: {
+            title: `Annuler ${targets.length} exécution(s) ?`,
+            message: 'Une demande sera envoyée pour les exécutions encore en cours.',
+            confirmLabel: 'Annuler les exécutions',
+            variant: 'danger',
+          } satisfies ConfirmationDialogData,
+        })
+        .afterClosed(),
+    );
+    if (!accepted) return;
+    this.actionBusy.set(true);
+    const results = await Promise.allSettled(
+      targets.map((file) => firstValueFrom(this.tracking.cancel(file.executionId!))),
+    );
+    this.actionBusy.set(false);
+    this.selectedActionIds.set(new Set());
+    this.tracking.refresh();
+    this.refreshRevision.update((value) => value + 1);
+    const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+    this.notifications.show(`${succeeded}/${targets.length} exécution(s) annulée(s).`);
+  }
+
+  protected cancelSelected(): void {
+    const execution = this.selectedExecution();
+    if (!execution) return;
+    this.confirm(
+      {
+        title: 'Annuler cette exécution ?',
+        message: `« ${execution.media} » recevra une demande d’annulation. Un traitement en cours attend la confirmation du worker.`,
+        confirmLabel: 'Annuler l’exécution',
+        variant: 'danger',
+      },
+      () => this.perform('cancel', execution.id),
+    );
+  }
+
+  protected retrySelected(): void {
+    const execution = this.selectedExecution();
+    if (!execution) return;
+    this.confirm(
+      {
+        title: 'Créer une nouvelle tentative ?',
+        message: `Une nouvelle exécution de « ${execution.media} » sera ajoutée à la file. L’échec restera dans l’historique.`,
+        confirmLabel: 'Mettre en file',
+      },
+      () => this.perform('retry', execution.id),
+    );
+  }
+
   protected downloadArtifact(row: DataTableRow): void {
     const id = this.selectedExecution()?.id;
     if (id)
@@ -725,71 +673,43 @@ export class ActivityPageComponent {
       );
   }
 
-  protected canCancelItem(item: ActivityItem): boolean {
-    return item.execution?.state === 'queued' || item.execution?.state === 'running';
+  private searchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = query.trim().toLocaleLowerCase('fr-FR');
+    return this.files()
+      .filter(
+        (file) =>
+          !normalized ||
+          [file.relativePath, file.library, file.flow, file.node, this.statusLabel(file.status)]
+            .filter(Boolean)
+            .join(' ')
+            .toLocaleLowerCase('fr-FR')
+            .includes(normalized),
+      )
+      .slice(0, 8)
+      .map((file) => ({
+        id: `activity:${file.id}`,
+        label: baseName(file.relativePath),
+        description: `${file.library} · ${this.statusLabel(file.status)}`,
+        group: 'Activité',
+        glyph: '▣',
+        run: () => this.open(file),
+      }));
   }
-  protected toggleActionSelection(item: ActivityItem, checked: boolean): void {
-    const id = item.execution?.id;
-    if (!id) return;
-    this.selectedActionIds.update((current) => {
-      const next = new Set(current);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
-  protected clearActionSelection(): void {
-    this.selectedActionIds.set(new Set());
-  }
-  protected async runBulkCancel(): Promise<void> {
-    if (this.busy()) return;
-    const targets = this.selectedCancelableItems();
-    if (!targets.length) return;
-    const accepted = await firstValueFrom(
-      this.dialog
-        .open(ConfirmationDialogComponent, {
-          data: {
-            title: `Annuler ${targets.length} exécution(s) ?`,
-            message: 'Une demande sera envoyée pour les exécutions encore en attente ou en cours.',
-            confirmLabel: 'Annuler les exécutions',
-            variant: 'danger',
-          },
-        })
-        .afterClosed(),
-    );
-    if (!accepted) return;
-    this.busy.set(true);
-    const results = await Promise.allSettled(
-      targets.map((item) => firstValueFrom(this.tracking.cancel(item.execution!.id))),
-    );
-    this.busy.set(false);
-    this.selectedActionIds.set(new Set());
-    this.tracking.refresh();
-    const succeeded = results.filter((result) => result.status === 'fulfilled').length;
-    this.done(`${succeeded}/${targets.length} exécution(s) annulée(s).`);
-  }
-  protected cancelSelected(): void {
-    const e = this.selectedExecution();
-    if (e)
-      this.confirm(
-        {
-          title: 'Annuler cette exécution ?',
-          message: `« ${e.media} » recevra une demande d’annulation. Un traitement en cours attend la confirmation du worker.`,
-          confirmLabel: 'Annuler l’exécution',
-          variant: 'danger',
-        },
-        () => this.perform('cancel', e.id),
-      );
-  }
-  protected retry(id: string, media: string): void {
-    this.confirm(
-      {
-        title: 'Créer une nouvelle tentative ?',
-        message: `Une nouvelle exécution de « ${media} » sera ajoutée à la file. La tentative en échec restera dans l’historique.`,
-        confirmLabel: 'Mettre en file',
+
+  private syncQueryParams(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        state: this.status(),
+        view: viewFromStatus(this.status()),
+        library: this.libraryFilter(),
+        flow: this.flowFilter(),
+        node: this.nodeFilter(),
+        type: null,
+        request: null,
       },
-      () => this.perform('retry', id),
-    );
+      queryParamsHandling: 'merge',
+    });
   }
 
   private confirm(data: ConfirmationDialogData, onConfirm: () => void): void {
@@ -803,25 +723,37 @@ export class ActivityPageComponent {
   }
 
   private perform(action: 'cancel' | 'retry', id: string): void {
-    if (this.busy()) return;
-    this.busy.set(true);
-    const request: Observable<unknown> =
-      action === 'cancel' ? this.tracking.cancel(id) : this.tracking.retry(id);
-    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.done(
-          action === 'cancel'
-            ? 'Demande d’annulation enregistrée.'
-            : 'Nouvelle tentative mise en file.',
-        );
-        if (action === 'retry') this.setGroup('queue');
-      },
-      error: () => this.done('La demande a échoué ou l’état de l’exécution a changé.'),
-    });
+    if (this.actionBusy()) return;
+    this.actionBusy.set(true);
+    const succeed = () => {
+      this.actionBusy.set(false);
+      this.refreshRevision.update((value) => value + 1);
+      this.tracking.refresh();
+      this.notifications.show(
+        action === 'cancel'
+          ? 'Demande d’annulation enregistrée.'
+          : 'Nouvelle tentative mise en file.',
+      );
+      if (action === 'retry') this.setStatus('active');
+    };
+    const fail = () => {
+      this.actionBusy.set(false);
+      this.feedback.set('La demande a échoué ou l’état de l’exécution a changé.');
+    };
+    if (action === 'cancel')
+      this.tracking
+        .cancel(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({ next: succeed, error: fail });
+    else
+      this.tracking
+        .retry(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({ next: succeed, error: fail });
   }
-  private done(message: string): void {
-    this.busy.set(false);
-    this.tracking.refresh();
-    this.notifications.show(message);
+
+  protected metadataSize(metadata: ExecutionResponse['beforeMetadata'] | undefined): string {
+    const size = metadata?.format?.size;
+    return size != null ? formatFileSize(Number(size)) : '—';
   }
 }

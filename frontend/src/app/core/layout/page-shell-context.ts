@@ -30,6 +30,8 @@ export interface PageShellFilterAction {
  */
 export interface PageShellContext {
   readonly searchPlaceholder?: string;
+  /** Keeps the shell input and the current page's own filter in sync. */
+  readonly onSearchQueryChange?: (query: string) => void;
   readonly searchResults?: (query: string) => readonly PageShellSearchResult[];
   readonly actions?: readonly PageShellAction[];
   readonly filter?: PageShellFilterAction;

@@ -20,6 +20,7 @@ import {
   ExecutionEventResponse,
   ExecutionPipelineStep,
   ExecutionFilterQuery,
+  ExecutionResponse,
   ExecutionState,
 } from '../models/execution';
 
@@ -107,6 +108,10 @@ export class ExecutionTracking {
         return data;
       }),
     );
+  }
+
+  execution(id: string) {
+    return this.http.get<ExecutionResponse>('/api/v1/executions/' + encodeURIComponent(id));
   }
 
   /** Fetch each requested state independently so a large queue cannot hide history or active work. */

@@ -21,7 +21,7 @@
   (detailClosed)="onDetailClosed()"
   (actionClosed)="closeFlowCreation()"
   filterLabel=""
-  searchLabel="Rechercher un flow"
+  searchLabel=""
   searchLayout="end"
   [showToolbar]="true"
   [emptyState]="catalogState() === 'ready' && totalCount() === 0 ? emptyState : null"
@@ -43,7 +43,6 @@
       [busy]="importing()"
       (selected)="onImportFile($event)"
     />
-    <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
   </ng-template>
 
   <ng-template #catalogueSummary>

@@ -164,6 +164,7 @@ builder.Services.AddHostedService<ExecutionWaitService>();
 builder.Services.AddHostedService<FlowBackupService>();
 builder.Services.AddSingleton<LibraryRepository>();
 builder.Services.AddSingleton<LibraryWorkflowRepository>();
+builder.Services.AddSingleton<LibraryActivityRepository>();
 builder.Services.AddSingleton<LibraryProcessingRepository>();
 builder.Services.AddHostedService<LibraryMonitoringService>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
@@ -228,6 +229,7 @@ app.MapOperationsEndpoints();
 app.MapSystemLogEndpoints();
 
 app.MapLibraryWorkflowEndpoints();
+app.MapLibraryActivityEndpoints();
 app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
 app.MapClusterReconciliationEndpoints();

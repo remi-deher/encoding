@@ -5,6 +5,7 @@ import {
   ElementRef,
   afterNextRender,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -242,6 +243,11 @@ export class GlobalSearchBarComponent {
   private readonly allResults = computed(() => [...this.pageResults(), ...this.globalResults()]);
 
   constructor() {
+    effect(() => {
+      const context = this.context();
+      this.query.set('');
+      context?.onSearchQueryChange?.('');
+    });
     afterNextRender(() => {
       this.measureCapsule();
       const element = this.capsule()?.nativeElement;
@@ -272,6 +278,7 @@ export class GlobalSearchBarComponent {
 
   protected updateQuery(value: string): void {
     this.query.set(value);
+    this.context()?.onSearchQueryChange?.(value);
     this.activeIndex.set(0);
     this.openPanel();
   }
