@@ -18,7 +18,7 @@ L’audit du 26 octobre relève des surcharges des internes de MatSidenav, deux 
 
 ## Décision
 
-Le shell standard est un scaffold CSS avec navigation persistante, rail adaptatif et navigation basse. Les interactions superposées continuent à utiliser Material/CDK ; le graphe et l’accès public gardent leurs cadres spécialisés. Les gabarits partagés affichent les titres et les actions de page.
+Le shell standard est un scaffold CSS avec une navigation persistante de 248 px, repliable en rail de 88 px, et une navigation basse. Les deux largeurs sont des règles du shell, inchangées entre les routes et non redéfinies par les gabarits métier. Le rail s’adapte aux écrans de 761 à 1 100 px. Les interactions superposées continuent à utiliser Material/CDK ; le graphe et l’accès public gardent leurs cadres spécialisés. Les gabarits partagés affichent les titres et les actions de page.
 
 Forêt, Océan, Iris et Rose exposent les rôles système Material. Les alias applicatifs et contrôles Material consomment les mêmes couleurs. Les composants ne sont thémés qu’une fois : seules les variables système changent par palette/mode. La couleur est indépendante de la luminosité et persiste localement sans appel serveur.
 

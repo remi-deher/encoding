@@ -30,6 +30,10 @@ app-shell {
 }
 
 .application-shell {
+  // Shared navigation geometry belongs to the shell, not individual page templates.
+  --shell-sidebar-expanded-width: 248px;
+  --shell-sidebar-collapsed-width: 88px;
+
   height: 100dvh;
   min-height: 0;
   display: flex;
@@ -207,15 +211,15 @@ button.assistant-launcher {
   overflow: hidden;
 }
 .application-sidebar {
-  width: var(--sidebar-width);
-  flex: 0 0 var(--sidebar-width);
+  width: var(--shell-sidebar-expanded-width);
+  flex: 0 0 var(--shell-sidebar-expanded-width);
   background: var(--sidebar-background);
   transition:
     width 220ms var(--motion-emphasized),
     flex-basis 220ms var(--motion-emphasized);
   &.is-collapsed {
-    width: var(--rail-width);
-    flex-basis: var(--rail-width);
+    width: var(--shell-sidebar-collapsed-width);
+    flex-basis: var(--shell-sidebar-collapsed-width);
   }
 }
 
@@ -374,7 +378,10 @@ button.assistant-launcher {
 }
 
 .application-shell.rail-navigation-shell .application-header {
-  max-width: calc(var(--content-wide-width) + var(--sidebar-width) - var(--rail-width));
+  max-width: calc(
+    var(--content-wide-width) + var(--shell-sidebar-expanded-width) -
+      var(--shell-sidebar-collapsed-width)
+  );
 }
 
 @media (min-width: 1101px) {
