@@ -5,17 +5,9 @@ import {
   formatMemory,
   nodeAcceleratorBadges,
   nodeHardwareLabel,
-  nodeMemberSections,
-  nodeOsFamily,
-  OperatingSystemFamily,
   tidyProcessorName,
 } from '../../shared/models/node-hardware';
-import {
-  ResourceCardAction,
-  ResourceCardChip,
-  ResourceCardComponent,
-  ResourceCardSection,
-} from '../../shared/ui/resource-card.component';
+import type { ResourceCardAction } from '../../shared/ui/resource-card.component';
 import {
   nodeLifecycle,
   NODE_LIFECYCLE_LABELS,
@@ -71,9 +63,14 @@ import {
   NODE_MANAGEMENT_TABS,
   clusterAddressForm,
   clusterJoinSteps,
+  formatLastSignal,
   localNodeSheet,
+  memberNodeOverviewSections,
   reconciliationBannerPresentation,
+  runtimeEnvironmentLabel,
 } from '../../shared/models/node-management';
+import { NodeOverviewCardComponent } from './node-overview-card.component';
+import type { NodeOverviewLibrary } from './node-overview-card.component';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
@@ -162,14 +159,13 @@ interface PendingNodeEnrollmentRecord extends DataTableRow {
 interface MemberCard {
   readonly id: string;
   readonly title: string;
+  readonly subtitle: string;
   readonly statusLabel: string;
   readonly statusTone: StatusTone;
-  readonly badges: readonly string[];
-  readonly acceleratorBadges: readonly ResourceCardChip[];
-  readonly osFamily: OperatingSystemFamily;
-  readonly osLabel: string;
+  readonly roles: readonly string[];
   readonly meta: string;
-  readonly sections: readonly ResourceCardSection[];
+  readonly sections: readonly ResourceSheetSection[];
+  readonly libraries: readonly NodeOverviewLibrary[];
 }
 
 interface NodeRecord extends DataTableRow {
@@ -196,7 +192,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
   imports: [
     IconComponent,
     DataTableComponent,
-    ResourceCardComponent,
+    NodeOverviewCardComponent,
     DetailFieldListComponent,
     DetailCardGridComponent,
     ResourceSheetComponent,
@@ -251,6 +247,7 @@ export class NodeCatalogPageComponent {
   >(new Map());
   private readonly nodeAccessActivationBusy = signal<ReadonlySet<string>>(new Set());
   private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
+  protected readonly libraryAccessState = computed(() => this.libraryAccessLoadState());
 
   protected readonly isAdmin = inject(AuthService).isAdmin;
   protected readonly local = inject(LocalNodeController);
@@ -311,9 +308,33 @@ export class NodeCatalogPageComponent {
       isAdmin: this.isAdmin(),
     }),
   );
+  protected readonly localOverviewStatus = computed(() => {
+    const node = this.localNode();
+    return node
+      ? {
+          label: NODE_LIFECYCLE_LABELS[nodeLifecycle(node)],
+          tone: NODE_LIFECYCLE_TONES[nodeLifecycle(node)],
+        }
+      : {
+          label: this.local.agentUnavailable() ? 'Agent injoignable' : 'En ligne',
+          tone: this.local.agentUnavailable() ? ('warning' as const) : ('success' as const),
+        };
+  });
+  protected readonly localOverviewRoles = computed(() =>
+    (this.localNode()?.roles ?? this.local.status()?.roles ?? []).map(
+      (role) => NODE_ROLE_LABELS[role],
+    ),
+  );
+  protected readonly localOverviewMeta = computed(() => {
+    const lastSignal = formatLastSignal(this.localNode()?.lastSeenAt);
+    return `Dernier signal : ${lastSignal ?? (this.local.agentUnavailable() ? 'indisponible' : 'en attente')}`;
+  });
+  protected readonly localOverviewLibraries = computed(() =>
+    this.nodeOverviewLibraries(this.localNode()?.id ?? this.local.status()?.nodeId ?? null),
+  );
 
   protected onLocalSheetAction(actionId: string): void {
-    if (actionId === 'settings' || actionId === 'capabilities') {
+    if (actionId === 'capabilities') {
       const node = this.localNode();
       if (node) this.openNodeCard(node.id);
     } else if (actionId === 'toggle-server') {
@@ -663,6 +684,14 @@ export class NodeCatalogPageComponent {
                 label: 'Mémoire totale disponible',
                 value: formatMemory(inventory.memoryMb),
                 detail: `${inventory.memoryMb} Mo`,
+              },
+              {
+                label: 'Système',
+                value: `${inventory.operatingSystem} · ${inventory.architecture}`,
+              },
+              {
+                label: 'Environnement d’exécution',
+                value: runtimeEnvironmentLabel(inventory.runtimeEnvironment),
               },
               {
                 label: gpus.length > 1 ? 'Processeurs graphiques' : 'Processeur graphique',
@@ -1110,6 +1139,56 @@ export class NodeCatalogPageComponent {
       }),
     },
   ];
+  private nodeOverviewLibraries(nodeId: string | null): readonly NodeOverviewLibrary[] {
+    if (!nodeId) return [];
+    return this.allLibraries().flatMap((library) => {
+      const access = this.nodeAccessByLibrary()
+        .get(library.id)
+        ?.find((item) => item.nodeId === nodeId);
+      if (!access) return [];
+
+      const stateLabel = !library.isActive
+        ? 'Désactivée globalement'
+        : access.mode === 'unsupported'
+          ? 'Non pris en charge'
+          : access.isEnabled
+            ? 'Active'
+            : 'Désactivée sur ce nœud';
+      const stateTone: StatusTone = !library.isActive
+        ? 'neutral'
+        : access.mode === 'unsupported' || !access.isEnabled
+          ? 'warning'
+          : 'success';
+      const modeLabel =
+        access.mode === 'direct'
+          ? 'Accès direct'
+          : access.mode === 'transfer'
+            ? 'Transfert WebDAV'
+            : 'Aucun accès configuré';
+      const accessLabel =
+        [access.canRead ? 'Lecture' : null, access.canWrite ? 'Écriture' : null]
+          .filter((item): item is string => item !== null)
+          .join(' · ') || 'Aucun droit déclaré';
+
+      return [
+        {
+          id: library.id,
+          name: library.name,
+          path:
+            access.localPath ??
+            (access.mode === 'transfer'
+              ? 'Espace temporaire du worker'
+              : access.mode === 'unsupported'
+                ? 'Aucun accès actif'
+                : 'Chemin à configurer'),
+          stateLabel,
+          stateTone,
+          modeLabel,
+          accessLabel,
+        },
+      ];
+    });
+  }
   protected readonly nodeLibraries = computed<readonly NodeLibraryRecord[]>(() => {
     const node = this.selectedNode();
     if (!node) return [];
@@ -1212,21 +1291,19 @@ export class NodeCatalogPageComponent {
       return {
         id: node.id,
         title: formatNodeLabel(node.name, node.displayName),
+        subtitle: `Membre de ${this.clusterName()}`,
         statusLabel: NODE_LIFECYCLE_LABELS[lifecycle],
         statusTone: NODE_LIFECYCLE_TONES[lifecycle],
-        badges: node.roles.map((role) => NODE_ROLE_LABELS[role]),
-        acceleratorBadges: [],
-        osFamily: nodeOsFamily(node),
-        osLabel: node.inventory?.operatingSystem ?? 'Système d’exploitation inconnu',
+        roles: node.roles.map((role) => NODE_ROLE_LABELS[role]),
         meta: `Dernier signal : ${record.lastSignal}`,
-        sections: nodeMemberSections(
+        sections: memberNodeOverviewSections(
           node,
-          {
-            activeTasks: this.activityKnown() ? (this.activeTasks()[node.id] ?? 0) : null,
-            libraryAccess: record.libraryAccess,
-          },
-          { includeAccelerator: false },
+          this.activityKnown() && node.status === 'online'
+            ? (this.activeTasks()[node.id] ?? 0)
+            : null,
+          this.clusterName(),
         ),
+        libraries: this.nodeOverviewLibraries(node.id),
       };
     }),
   );
