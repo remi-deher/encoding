@@ -380,8 +380,8 @@ button.assistant-launcher {
 
 .application-shell.rail-navigation-shell .application-header {
   max-width: calc(
-    var(--content-wide-width) + var(--shell-sidebar-expanded-width) -
-      var(--shell-sidebar-collapsed-width)
+    var(--content-wide-width) +
+      var(--shell-sidebar-expanded-width) - var(--shell-sidebar-collapsed-width)
   );
 }
 
