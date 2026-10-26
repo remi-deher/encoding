@@ -52,6 +52,8 @@ import {
       (actionClosed)="actionClosed.emit()"
     >
       <app-subnav
+        #sectionNavigation
+        panelId="cluster-maintenance-panel"
         catalogue-navigation
         [label]="navigationLabel()"
         [options]="navigationOptions()"
@@ -68,7 +70,13 @@ import {
         <ng-content select="[catalogue-active-filters]" />
       </ng-template>
       <ng-template #catalogueTableSlot>
-        <ng-content select="[catalogue-table]" />
+        <section
+          id="cluster-maintenance-panel"
+          role="tabpanel"
+          [attr.aria-labelledby]="sectionNavigation.tabId(navigationSelected())"
+        >
+          <ng-content select="[catalogue-table]" />
+        </section>
       </ng-template>
       <ng-content select="ng-template" />
     </app-management-catalog-template>

@@ -1,13 +1,14 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input, output } from '@angular/core';
 import { CategoryTabOption } from '../ui/category-tabs.component';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
+import { PageHeaderComponent } from '../ui/page-header.component';
 import { SubnavComponent } from '../ui/subnav.component';
 
 /** Cadre commun des domaines d’administration et de leur édition protégée. */
 @Component({
   selector: 'app-platform-admin-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DetailDrawerComponent, SubnavComponent],
+  imports: [DetailDrawerComponent, SubnavComponent, PageHeaderComponent],
   template: `
     <app-detail-drawer
       [opened]="editorOpen()"
@@ -21,14 +22,21 @@ import { SubnavComponent } from '../ui/subnav.component';
       (closed)="editorClosed.emit()"
     >
       <div drawer-main>
-        <h1 class="visually-hidden">{{ title() }}</h1>
+        <app-page-header [title]="title()" />
         <app-subnav
+          #domainNavigation
+          panelId="platform-admin-panel"
           label="Domaines des paramètres"
           [options]="tabs()"
           [selected]="activeTab()"
           (selectedChange)="tabChange.emit($event)"
         />
-        <div class="platform-admin-content" role="tabpanel" [attr.aria-label]="description()">
+        <div
+          id="platform-admin-panel"
+          class="platform-admin-content"
+          role="tabpanel"
+          [attr.aria-labelledby]="domainNavigation.tabId(activeTab())"
+        >
           <ng-content select="[platform-admin-content]" />
         </div>
       </div>

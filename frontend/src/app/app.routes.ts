@@ -90,6 +90,7 @@ const applicationRoutes: Routes = [
   },
   {
     path: 'libraries/scripts',
+    canDeactivate: [unsavedChangesGuard],
     loadComponent: () =>
       import('./features/libraries/script-library-page.component').then(
         (module) => module.ScriptLibraryPageComponent,

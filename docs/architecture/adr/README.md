@@ -33,3 +33,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0015](0015-attribution-journalisee-des-taches.md) | Attribution initiale journalisée des tâches | implemented | runtime |
 | [0016](0016-transferts-et-reprise-manuelle.md) | Transferts inter-serveurs et reprise manuelle sans quorum | implemented | runtime |
 | [0017](0017-parametres-de-configuration-des-modeles-de-flow.md) | Paramètres de configuration portés par les modèles de flow | implemented | flows |
+| [0018](0018-shell-adaptatif-et-palettes.md) | Shell adaptatif et palettes Material partagées | implemented | ui |

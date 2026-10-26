@@ -47,6 +47,8 @@ import {
       [detailTitle]="detailTitle()"
       [detailDescription]="detailDescription()"
       [actionOpen]="actionOpen()"
+      [actionCloseGuarded]="actionCloseGuarded()"
+      (actionCloseRequested)="actionCloseRequested.emit()"
       [actionTitle]="actionTitle()"
       [actionDescription]="actionDescription()"
       [actionStep]="actionStep()"
@@ -146,6 +148,8 @@ export class ResourceCatalogTemplateComponent {
   readonly detailTitle = input('Détails');
   readonly detailDescription = input('');
   readonly actionOpen = input(false);
+  readonly actionCloseGuarded = input(false);
+  readonly actionCloseRequested = output<void>();
   readonly actionTitle = input('Ajouter');
   readonly actionDescription = input('');
   readonly actionStep = input<{ readonly current: number; readonly total: number } | null>(null);

@@ -1,9 +1,8 @@
 import { MatButtonModule } from '@angular/material/button';
-import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   TemplateRef,
   effect,
   inject,
@@ -13,6 +12,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { DrawerModalState } from './drawer-modal-state.service';
 import { MatDrawer, MatSidenavModule } from '@angular/material/sidenav';
 
 export type DrawerVariant = 'neutral' | 'info' | 'danger' | 'success';
@@ -143,15 +143,20 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
       width: 100%;
     }
 
-    .detail-drawer-panel {
+    .detail-drawer-panel.mat-drawer {
+      position: fixed;
+      inset-block: 0;
+      inset-inline-end: 0;
       width: min(1000px, 82vw);
       max-width: 100vw;
-      border-start-start-radius: var(--radius-2xl);
-      border-end-start-radius: var(--radius-2xl);
+      height: 100%;
+      border-radius: var(--radius-2xl) 0 0 var(--radius-2xl);
+      background: var(--surface-container-lowest);
+      box-shadow: var(--elevation-3);
       overflow: hidden;
+      z-index: 1000;
     }
-
-    .detail-drawer-panel_standard {
+    .detail-drawer-panel_standard.mat-drawer {
       width: min(560px, 100vw);
     }
 
@@ -318,7 +323,8 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
         max-width: 100vw;
       }
 
-      .detail-drawer-panel {
+      .detail-drawer-panel.mat-drawer {
+        width: 100vw;
         border-start-start-radius: var(--radius-2xl);
         border-start-end-radius: var(--radius-2xl);
         border-end-start-radius: 0;
@@ -327,6 +333,7 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
       :host(:not(.drawer-fill)) .detail-drawer-panel.mat-drawer-end {
         top: 48px;
         bottom: 0;
+        height: calc(100dvh - 48px);
       }
 
       :host(:not(.drawer-fill)) .detail-drawer-panel.mat-drawer-end:not(.mat-drawer-opened) {
@@ -379,8 +386,7 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
   `,
 })
 export class DetailDrawerComponent {
-  private readonly doc = inject(DOCUMENT);
-  private readonly destroyRef = inject(DestroyRef);
+  private readonly modalState = inject(DrawerModalState);
 
   /** `standard` : tiroir de 560 px pour une fiche ; `wide` : jusqu'à 1 000 px pour un éditeur. */
   readonly fill = input(false);
@@ -393,6 +399,9 @@ export class DetailDrawerComponent {
   readonly dismissible = input(true);
   /** Contrôle asynchrone facultatif, par exemple pour confirmer l’abandon d’une saisie. */
   readonly closeGuard = input<(() => boolean | Promise<boolean>) | undefined>();
+  /** La feature confirme avant de modifier opened ; aucun panneau ne se ferme entre-temps. */
+  readonly closeGuarded = input(false);
+  readonly closeRequested = output<void>();
   readonly mainScroll = input<'auto' | 'parent'>('auto');
   readonly opened = input(false);
   /** Teinte du bandeau : même vocabulaire que les modales (`DialogFrameComponent`). */
@@ -414,21 +423,8 @@ export class DetailDrawerComponent {
   private readonly drawer = viewChild(MatDrawer);
 
   constructor() {
-    this.destroyRef.onDestroy(() => {
-      this.doc.body?.classList.remove('detail-drawer-open');
-      const sidebar = this.doc.querySelector('.application-sidebar');
-      if (sidebar) {
-        sidebar.removeAttribute('inert');
-      }
-    });
-
-    effect(() => {
-      const isModalOpen = this.modal() && this.opened();
-      this.doc.body?.classList.toggle('detail-drawer-open', isModalOpen);
-      const sidebar = this.doc.querySelector('.application-sidebar');
-      if (sidebar) {
-        sidebar.toggleAttribute('inert', isModalOpen);
-      }
+    effect((onCleanup) => {
+      if (this.modal() && this.opened()) onCleanup(this.modalState.acquire(this));
     });
   }
 
@@ -445,7 +441,8 @@ export class DetailDrawerComponent {
     try {
       const guard = this.closeGuard();
       if (guard && !(await guard())) return;
-      this.drawer()?.close();
+      if (this.closeGuarded()) this.closeRequested.emit();
+      else void this.drawer()?.close();
     } finally {
       this.closePending.set(false);
     }

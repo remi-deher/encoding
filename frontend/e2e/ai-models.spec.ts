@@ -418,7 +418,7 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
     await expect(launcher).toBeVisible();
     const before = (await launcher.boundingBox())!;
     expect(before.width).toBeLessThanOrEqual(60);
-    const scroller = page.locator('mat-sidenav-content.page-transition-region');
+    const scroller = page.locator('.page-transition-region');
     await scroller.evaluate((element) => {
       const spacer = document.createElement('div');
       spacer.dataset.testid = 'assistant-scroll-spacer';

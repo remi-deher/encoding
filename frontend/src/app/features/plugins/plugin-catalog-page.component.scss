@@ -1,27 +1,27 @@
 .tools-grid,
 .store-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   gap: 16px;
   padding: 16px 0;
 }
 
 .tool-card,
 .store-card {
-  background: var(--surface-container, #1e1e24);
+  background: var(--surface-container);
   border-radius: var(--radius-lg, 16px);
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  gap: var(--space-4);
+  box-shadow: var(--elevation-1);
   transition:
     transform 0.2s var(--motion-spring-fast, ease),
     box-shadow 0.2s var(--motion-spring-fast, ease);
 
   &:hover {
-    background: var(--surface-container-high, #25252d);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    background: var(--surface-container-high);
+    box-shadow: var(--elevation-2);
   }
 }
 
@@ -48,13 +48,13 @@
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: var(--on-surface, #ffffff);
+    color: var(--text-primary);
   }
 
   .tool-version,
   .store-author {
     font-size: 12px;
-    color: var(--on-surface-variant, #a0a0aa);
+    color: var(--text-secondary);
     margin-top: 2px;
   }
 }
@@ -66,50 +66,26 @@
   gap: 6px;
 }
 
-.badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill, 999px);
-  background: var(--surface-container-highest, #32323c);
-  color: var(--on-surface-variant, #d0d0dc);
-
-  &.success {
-    background: rgba(34, 197, 94, 0.15);
-    color: #4ade80;
-  }
-
-  &.accent {
-    background: rgba(99, 102, 241, 0.15);
-    color: #818cf8;
-  }
-
-  &.warning {
-    background: rgba(234, 179, 8, 0.15);
-    color: #facc15;
-  }
-}
-
 .tool-description,
 .store-description {
-  font-size: 13px;
+  font-size: var(--font-body);
   line-height: 1.5;
-  color: var(--on-surface-variant, #b5b5c3);
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .tool-details {
-  background: var(--surface-container-lowest, #141418);
+  background: var(--surface-container-lowest);
   border-radius: var(--radius-md, 12px);
   padding: 12px;
   font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  color: var(--on-surface-variant, #a0a0aa);
+  color: var(--text-secondary);
 
   strong {
-    color: var(--on-surface, #ffffff);
+    color: var(--text-primary);
   }
 }
 
@@ -126,7 +102,7 @@
 /* Section Dépôts */
 .repositories-section {
   margin-bottom: 24px;
-  background: var(--surface-container-low, #19191f);
+  background: var(--surface-container-low);
   border-radius: var(--radius-xl, 20px);
   padding: 20px;
 
@@ -134,7 +110,7 @@
     margin: 0 0 12px 0;
     font-size: 15px;
     font-weight: 600;
-    color: var(--on-surface, #ffffff);
+    color: var(--text-primary);
   }
 }
 
@@ -149,7 +125,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--surface-container, #1e1e24);
+  background: var(--surface-container);
   border-radius: var(--radius-md, 12px);
   gap: 16px;
 
@@ -161,12 +137,12 @@
     .repo-name {
       font-weight: 600;
       font-size: 14px;
-      color: var(--on-surface, #ffffff);
+      color: var(--text-primary);
     }
 
     .repo-url {
       font-size: 12px;
-      color: var(--on-surface-variant, #888899);
+      color: var(--text-secondary);
       font-family: monospace;
     }
   }
@@ -226,4 +202,28 @@
 
 .store-upload {
   cursor: pointer;
+}
+
+.tool-card-header,
+.store-card-header {
+  flex-wrap: wrap;
+}
+.repo-info {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.repo-badges {
+  flex-wrap: wrap;
+  align-items: center;
+}
+@media (max-width: 760px) {
+  .repo-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .tool-card,
+  .store-card,
+  .repositories-section {
+    padding: var(--space-4);
+  }
 }

@@ -1,5 +1,7 @@
-<h1 class="visually-hidden">Activité</h1>
+<app-page-header title="Activité" />
 <app-subnav
+  #roleNavigation
+  panelId="activity-role-panel"
   label="Rôle de l’activité"
   [options]="roleTabs"
   [selected]="roleFilter()"
@@ -8,177 +10,185 @@
   <span subnav-actions class="activity-count-pill">{{ countText() }}</span>
 </app-subnav>
 
-@if (kindFilter() !== 'ai') {
-  <app-summary-tiles
-    class="activity-summary"
-    density="compact"
-    label="Traitements du cluster"
-    [tiles]="summary()"
-  />
-}
+<div
+  id="activity-role-panel"
+  role="tabpanel"
+  [attr.aria-labelledby]="roleNavigation.tabId(roleFilter())"
+>
+  @if (kindFilter() !== 'ai') {
+    <app-summary-tiles
+      class="activity-summary"
+      density="compact"
+      label="Traitements du cluster"
+      [tiles]="summary()"
+    />
+  }
 
-<section class="activity-panel" [attr.aria-label]="activityHeading()">
-  <div class="activity-toolbar">
-    <div class="activity-heading">
-      <div>
-        <h2>{{ activityHeading() }}</h2>
-        <p>{{ activitySubheading() }}</p>
+  <section class="activity-panel" [attr.aria-label]="activityHeading()">
+    <div class="activity-toolbar">
+      <div class="activity-heading">
+        <div>
+          <h2>{{ activityHeading() }}</h2>
+          <p>{{ activitySubheading() }}</p>
+        </div>
+        <app-search-field
+          class="activity-search"
+          variant="bar"
+          label="Rechercher dans les activités chargées"
+          [value]="search()"
+          (valueChange)="search.set($event)"
+        />
       </div>
-      <app-search-field
-        class="activity-search"
-        variant="bar"
-        label="Rechercher dans les activités chargées"
-        [value]="search()"
-        (valueChange)="search.set($event)"
-      />
-    </div>
-    @if (roleFilter() === 'diagnose') {
+      @if (roleFilter() === 'diagnose') {
+        <mat-chip-listbox
+          aria-label="Origine des éléments à diagnostiquer"
+          [value]="kindFilter()"
+          (change)="setKind($event.value ?? 'all')"
+        >
+          <mat-chip-option value="all">Tout</mat-chip-option>
+          <mat-chip-option value="execution">Traitements</mat-chip-option>
+          @if (auth.isAdmin()) {
+            <mat-chip-option value="ai">Assistant IA</mat-chip-option>
+          }
+        </mat-chip-listbox>
+      }
       <mat-chip-listbox
-        aria-label="Origine des éléments à diagnostiquer"
-        [value]="kindFilter()"
-        (change)="setKind($event.value ?? 'all')"
+        [attr.aria-label]="
+          roleFilter() === 'operate' ? 'État des opérations' : 'Résultat à examiner'
+        "
+        [value]="groupFilter()"
+        (change)="setGroup($event.value ?? 'all')"
       >
-        <mat-chip-option value="all">Tout</mat-chip-option>
-        <mat-chip-option value="execution">Traitements</mat-chip-option>
-        @if (auth.isAdmin()) {
-          <mat-chip-option value="ai">Assistant IA</mat-chip-option>
+        <mat-chip-option value="all">
+          {{ roleFilter() === 'operate' ? 'Toutes les opérations' : 'Tous les résultats' }}
+        </mat-chip-option>
+        @for (group of visibleGroups(); track group.id) {
+          <mat-chip-option [value]="group.id"
+            >{{ group.label }} ·
+            {{
+              (kindFilter() === 'ai' ? aiState().loaded : trackingState().data !== null)
+                ? counts()[group.id]
+                : '—'
+            }}</mat-chip-option
+          >
         }
       </mat-chip-listbox>
-    }
-    <mat-chip-listbox
-      [attr.aria-label]="roleFilter() === 'operate' ? 'État des opérations' : 'Résultat à examiner'"
-      [value]="groupFilter()"
-      (change)="setGroup($event.value ?? 'all')"
-    >
-      <mat-chip-option value="all">
-        {{ roleFilter() === 'operate' ? 'Toutes les opérations' : 'Tous les résultats' }}
-      </mat-chip-option>
-      @for (group of visibleGroups(); track group.id) {
-        <mat-chip-option [value]="group.id"
-          >{{ group.label }} ·
-          {{
-            (kindFilter() === 'ai' ? aiState().loaded : trackingState().data !== null)
-              ? counts()[group.id]
-              : '—'
-          }}</mat-chip-option
-        >
+      @if (pageOffset() > 0) {
+        <div class="activity-pagination" aria-label="Pagination des activités">
+          <button matButton="text" type="button" (click)="previousPage()">Page précédente</button>
+          <span>Page {{ pageNumber() }}</span>
+        </div>
       }
-    </mat-chip-listbox>
-    @if (pageOffset() > 0) {
-      <div class="activity-pagination" aria-label="Pagination des activités">
-        <button matButton="text" type="button" (click)="previousPage()">Page précédente</button>
-        <span>Page {{ pageNumber() }}</span>
+    </div>
+
+    @if (feedback()) {
+      <p class="activity-feedback" role="status">{{ feedback() }}</p>
+    }
+    @if (roleFilter() === 'operate' && selectedActionItems().length) {
+      <div
+        class="activity-selection"
+        role="toolbar"
+        aria-label="Actions sur les exécutions sélectionnées"
+      >
+        <span aria-live="polite">{{ selectedActionItems().length }} sélectionnée(s)</span>
+        @if (selectedCancelableItems().length) {
+          <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulkCancel()">
+            Annuler {{ selectedCancelableItems().length }}
+          </button>
+        }
+        <button matButton="text" type="button" (click)="clearActionSelection()">
+          Tout désélectionner
+        </button>
       </div>
     }
-  </div>
 
-  @if (feedback()) {
-    <p class="activity-feedback" role="status">{{ feedback() }}</p>
-  }
-  @if (roleFilter() === 'operate' && selectedActionItems().length) {
-    <div
-      class="activity-selection"
-      role="toolbar"
-      aria-label="Actions sur les exécutions sélectionnées"
-    >
-      <span aria-live="polite">{{ selectedActionItems().length }} sélectionnée(s)</span>
-      @if (selectedCancelableItems().length) {
-        <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulkCancel()">
-          Annuler {{ selectedCancelableItems().length }}
+    @for (section of sections(); track section.id) {
+      <h3 class="section-title">
+        {{ section.section }} <span>{{ section.total }}</span>
+      </h3>
+      <ul class="item-stack">
+        @for (item of section.items; track item.key) {
+          <li class="item-row" [class.is-selected]="selected()?.key === item.key">
+            @if (roleFilter() === 'operate' && item.execution && canCancelItem(item)) {
+              <mat-checkbox
+                class="item-select"
+                [checked]="selectedActionIds().has(item.execution.id)"
+                [disabled]="!canCancelItem(item)"
+                [aria-label]="'Sélectionner ' + item.title"
+                (change)="toggleActionSelection(item, $event.checked)"
+              />
+            }
+            <button type="button" class="item-main" (click)="open(item)">
+              <span class="item-icon" [class.is-ai]="item.kind === 'ai'" aria-hidden="true">
+                @if (item.kind === 'ai') {
+                  ✦
+                } @else {
+                  <app-icon name="play" />
+                }
+              </span>
+              <span class="item-text">
+                <span class="item-title">{{ item.title }}</span>
+                <span class="item-subtitle">{{ item.subtitle || '—' }}</span>
+                @if (item.progress !== null) {
+                  <mat-progress-bar
+                    mode="determinate"
+                    [value]="item.progress"
+                    [attr.aria-label]="'Progression de ' + item.title"
+                  />
+                }
+              </span>
+              <span class="item-meta">
+                <app-status-badge [label]="item.stateLabel" [tone]="item.tone" />
+                <span class="item-time"
+                  >{{ item.progress !== null ? item.progress + ' % · ' : '' }}{{ item.time }}</span
+                >
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+      @if (section.more && !search().trim()) {
+        <button matButton="text" type="button" class="more-button" (click)="nextPage(section.id)">
+          Voir la suite : {{ section.label.toLocaleLowerCase('fr') }}
         </button>
       }
-      <button matButton="text" type="button" (click)="clearActionSelection()">
-        Tout désélectionner
-      </button>
-    </div>
-  }
-
-  @for (section of sections(); track section.id) {
-    <h3 class="section-title">
-      {{ section.section }} <span>{{ section.total }}</span>
-    </h3>
-    <ul class="item-stack">
-      @for (item of section.items; track item.key) {
-        <li class="item-row" [class.is-selected]="selected()?.key === item.key">
-          @if (roleFilter() === 'operate' && item.execution && canCancelItem(item)) {
-            <mat-checkbox
-              class="item-select"
-              [checked]="selectedActionIds().has(item.execution.id)"
-              [disabled]="!canCancelItem(item)"
-              [aria-label]="'Sélectionner ' + item.title"
-              (change)="toggleActionSelection(item, $event.checked)"
-            />
-          }
-          <button type="button" class="item-main" (click)="open(item)">
-            <span class="item-icon" [class.is-ai]="item.kind === 'ai'" aria-hidden="true">
-              @if (item.kind === 'ai') {
-                ✦
-              } @else {
-                <app-icon name="play" />
-              }
-            </span>
-            <span class="item-text">
-              <span class="item-title">{{ item.title }}</span>
-              <span class="item-subtitle">{{ item.subtitle || '—' }}</span>
-              @if (item.progress !== null) {
-                <mat-progress-bar
-                  mode="determinate"
-                  [value]="item.progress"
-                  [attr.aria-label]="'Progression de ' + item.title"
-                />
-              }
-            </span>
-            <span class="item-meta">
-              <app-status-badge [label]="item.stateLabel" [tone]="item.tone" />
-              <span class="item-time"
-                >{{ item.progress !== null ? item.progress + ' % · ' : '' }}{{ item.time }}</span
-              >
-            </span>
-          </button>
-        </li>
-      }
-    </ul>
-    @if (section.more && !search().trim()) {
-      <button matButton="text" type="button" class="more-button" (click)="nextPage(section.id)">
-        Voir la suite : {{ section.label.toLocaleLowerCase('fr') }}
-      </button>
+    } @empty {
+      <div class="empty-state">
+        @if (emptyStateReady()) {
+          <h3>{{ emptyStateTitle() }}</h3>
+          <p>{{ emptyStateDescription() }}</p>
+        } @else {
+          <h3>
+            {{
+              trackingState().status === 'loading' ||
+              (roleFilter() === 'diagnose' &&
+                kindFilter() !== 'execution' &&
+                auth.isAdmin() &&
+                !aiState().loaded &&
+                !aiState().error)
+                ? 'Chargement du journal'
+                : 'Données indisponibles'
+            }}
+          </h3>
+          <p>
+            Les dernières données sont conservées. La mise à jour automatique reprendra dès que le
+            serveur répond.
+          </p>
+        }
+      </div>
     }
-  } @empty {
-    <div class="empty-state">
-      @if (emptyStateReady()) {
-        <h3>{{ emptyStateTitle() }}</h3>
-        <p>{{ emptyStateDescription() }}</p>
-      } @else {
-        <h3>
-          {{
-            trackingState().status === 'loading' ||
-            (roleFilter() === 'diagnose' &&
-              kindFilter() !== 'execution' &&
-              auth.isAdmin() &&
-              !aiState().loaded &&
-              !aiState().error)
-              ? 'Chargement du journal'
-              : 'Données indisponibles'
-          }}
-        </h3>
-        <p>
-          Les dernières données sont conservées. La mise à jour automatique reprendra dès que le
-          serveur répond.
-        </p>
-      }
-    </div>
-  }
-</section>
+  </section>
 
-<app-detail-drawer
-  [opened]="selected() !== null"
-  [modal]="true"
-  [title]="drawerTitle()"
-  [description]="drawerDescription()"
-  [content]="drawerContent()"
-  [footerActions]="drawerFooter()"
-  (closed)="close()"
-/>
+  <app-detail-drawer
+    [opened]="selected() !== null"
+    [modal]="true"
+    [title]="drawerTitle()"
+    [description]="drawerDescription()"
+    [content]="drawerContent()"
+    [footerActions]="drawerFooter()"
+    (closed)="close()"
+  />
+</div>
 
 <ng-template #detailContent>
   @if (selectedExecution(); as exec) {

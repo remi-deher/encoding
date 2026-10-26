@@ -105,61 +105,123 @@ $brand-palette: (
   ),
 );
 
-$app-theme: mat.define-theme(
-  (
-    color: (
-      theme-type: light,
-      primary: $brand-palette,
-      tertiary: mat.$azure-palette,
-    ),
-    density: (
-      scale: -1,
-    ),
-  )
-);
-
-$app-dark-theme: mat.define-theme(
-  (
-    color: (
-      theme-type: dark,
-      primary: $brand-palette,
-      tertiary: mat.$azure-palette,
-    ),
-    density: (
-      scale: -1,
-    ),
-  )
-);
-
-html {
-  @include mat.all-component-themes($app-theme);
-  color-scheme: light;
+// Les contrôles Material et les composants applicatifs partagent les mêmes rôles.
+@function app-theme($palette, $mode: light) {
+  @return mat.define-theme(
+    (
+      color: (
+        theme-type: $mode,
+        primary: $palette,
+        tertiary: mat.$azure-palette,
+        use-system-variables: true,
+      ),
+      typography: (
+        plain-family: (
+          Inter,
+          'Segoe UI',
+          system-ui,
+          sans-serif,
+        ),
+        brand-family: (
+          Inter,
+          'Segoe UI',
+          system-ui,
+          sans-serif,
+        ),
+      ),
+      density: (
+        scale: -1,
+      ),
+    )
+  );
 }
 
+$app-theme: app-theme($brand-palette);
+html {
+  @include mat.all-component-themes($app-theme);
+  @include mat.system-level-colors($app-theme);
+  color-scheme: light;
+  @include mat.button-overrides(
+    (
+      filled-container-shape: 999px,
+      tonal-container-shape: 999px,
+      outlined-container-shape: 999px,
+      text-container-shape: 999px,
+      outlined-outline-color: var(--border-strong),
+      outlined-label-text-color: var(--text-primary),
+    )
+  );
+}
+
+// Seuls les rôles système changent : les styles de composants ne sont pas dupliqués.
+@each $name,
+  $palette
+    in (
+      forest: $brand-palette,
+      ocean: mat.$azure-palette,
+      iris: mat.$violet-palette,
+      rose: mat.$rose-palette
+    )
+{
+  html[data-palette='#{$name}'] {
+    @include mat.system-level-colors(app-theme($palette));
+  }
+  html[data-palette='#{$name}'][data-theme='dark'] {
+    @include mat.system-level-colors(app-theme($palette, dark));
+  }
+}
 html[data-theme='dark'] {
-  @include mat.all-component-colors($app-dark-theme);
   color-scheme: dark;
+}
+html:not([data-palette])[data-theme='dark'] {
+  @include mat.system-level-colors(app-theme($brand-palette, dark));
 }
 
 :root {
-  --surface: #ffffff;
-  --surface-muted: #f0f4f2;
-  --surface-container-lowest: #ffffff;
-  --surface-container-low: #f5f8f6;
-  --surface-container: #ebf1ee;
-  --surface-container-high: #e1e9e5;
-  --surface-container-highest: #d6e1dc;
-  --page-background: #f4f7f5;
-  --border-subtle: #d0ded7;
-  --border-strong: #9fb5ab;
-  --text-primary: #0e1815;
-  --text-secondary: #273932;
-  --text-muted: #495e55;
-  --accent: #206c57;
-  --accent-strong: #145644;
-  --accent-soft: #d6eee4;
-  --tertiary: #1f5f9e;
-  --tertiary-soft: #e0eefb;
+  --surface: var(--mat-sys-surface);
+  --surface-muted: var(--mat-sys-surface-container-low);
+  --surface-container-lowest: var(--mat-sys-surface-container-lowest);
+  --surface-container-low: var(--mat-sys-surface-container-low);
+  --surface-container: var(--mat-sys-surface-container);
+  --surface-container-high: var(--mat-sys-surface-container-high);
+  --surface-container-highest: var(--mat-sys-surface-container-highest);
+  --page-background: var(--mat-sys-surface);
+  --border-subtle: var(--mat-sys-outline-variant);
+  --border-strong: var(--mat-sys-outline);
+  --text-primary: var(--mat-sys-on-surface);
+  --text-secondary: var(--mat-sys-on-surface-variant);
+  --text-muted: var(--mat-sys-on-surface-variant);
+  --accent: var(--mat-sys-primary);
+  --accent-strong: var(--mat-sys-primary);
+  --accent-soft: var(--mat-sys-primary-container);
+  --tertiary: var(--mat-sys-tertiary);
+  --tertiary-soft: var(--mat-sys-tertiary-container);
+  --danger: var(--mat-sys-error);
+  --danger-soft: var(--mat-sys-error-container);
+  --danger-strong: var(--mat-sys-error);
+  --danger-stronger: var(--mat-sys-error);
+  --on-danger: var(--mat-sys-on-error);
+  --sidebar-background: var(--mat-sys-surface-container-low);
+  --sidebar-surface: var(--mat-sys-surface-container);
+  --sidebar-border: var(--mat-sys-outline-variant);
+  --sidebar-hover: var(--mat-sys-surface-container-high);
+  --sidebar-active: var(--mat-sys-primary-container);
+  --sidebar-text: var(--mat-sys-on-surface-variant);
+  --sidebar-text-muted: var(--mat-sys-on-surface-variant);
+  --sidebar-text-strong: var(--mat-sys-on-surface);
+  --sidebar-accent: var(--mat-sys-on-primary-container);
+  --sidebar-mark-text: var(--mat-sys-on-primary);
+  --sidebar-avatar-background: var(--mat-sys-primary-container);
+  --sidebar-avatar-text: var(--mat-sys-on-primary-container);
+  --on-accent: var(--mat-sys-on-primary);
+  --tone-os-linux: #946000;
+  --tone-os-windows: #196799;
+  --font-page-title: 36px;
+  --content-max-width: 1360px;
+  --content-wide-width: 1680px;
+  --sidebar-width: 248px;
+  --rail-width: 88px;
+
   --success: #1f6e4a;
   /* Tons catégoriels neutres (ex. familles d'accélérateurs) : mêmes valeurs dans les deux thèmes, mélangés à la surface. */
   --tone-lime: #7ba832;
@@ -168,27 +230,9 @@ html[data-theme='dark'] {
   --success-soft: #e2f4ea;
   --warning: #855306;
   --warning-soft: #fbf2e1;
-  --danger: #a83838;
-  --danger-soft: #fbebeb;
-  --danger-strong: #b42318;
-  --danger-stronger: #8f1d14;
-  --on-danger: #ffffff;
 
   /* Surfaces persistantes du shell en mode clair */
-  --sidebar-background: #ffffff;
-  --sidebar-surface: #f3f7f5;
-  --sidebar-border: #dbe4e0;
-  --sidebar-hover: #edf4f0;
-  --sidebar-active: #d6eade;
-  --sidebar-text: #1a2a24;
-  --sidebar-text-muted: #4e635b;
-  --sidebar-text-strong: #0a1410;
-  --sidebar-accent: #135e46;
-  --sidebar-mark-text: #ffffff;
   --sidebar-status-halo: rgb(19 94 70 / 16%);
-  --sidebar-avatar-background: #d6eade;
-  --sidebar-avatar-text: #135e46;
-  --on-accent: #ffffff;
 
   /* Échelle d'espacement (grille de 4 px) */
   --space-1: 4px;
@@ -216,8 +260,8 @@ html[data-theme='dark'] {
   --font-title-lg: 20px;
   --font-headline: 24px;
   --font-display-sm: 28px;
-  --font-display-md: 34px;
-  --font-display-lg: 42px;
+  --font-display-md: 36px;
+  --font-display-lg: 44px;
 
   /* Physique du mouvement (Ressorts Material 3 Expressive) */
   --motion-spring-fast: cubic-bezier(0.42, 1.67, 0.21, 0.9);
@@ -244,8 +288,6 @@ html[data-theme='dark'] {
   --mat-button-tonal-container-shape: var(--radius-pill);
   --mat-button-outlined-container-shape: var(--radius-pill);
   --mat-button-text-container-shape: var(--radius-pill);
-  --mat-outlined-button-outline-color: var(--border-strong);
-  --mat-outlined-button-label-text-color: var(--text-primary);
 
   /* Champs de saisie, listes déroulantes et menus : coins arrondis Material 3 */
   --mat-form-field-outlined-container-shape: var(--radius-lg);
@@ -262,48 +304,15 @@ html[data-theme='dark'] {
 }
 
 :root[data-theme='dark'] {
+  --tone-os-linux: #f0bd67;
+  --tone-os-windows: #91c9f6;
   --elevation-3: var(--elevation-2), var(--elevation-1);
   --flow-video: color-mix(in srgb, var(--tone-purple) 70%, var(--text-primary));
-  --surface: #18201e;
-  --surface-muted: #212a27;
-  --surface-container-lowest: #0e1412;
-  --surface-container-low: #161d1b;
-  --surface-container: #1c2522;
-  --surface-container-high: #242f2b;
-  --surface-container-highest: #2e3b36;
-  --page-background: #111614;
-  --border-subtle: #2e3a35;
-  --border-strong: #44534c;
-  --text-primary: #e8efec;
-  --text-secondary: #b5c2bc;
-  --text-muted: #93a39b;
-  --accent: #7fc8b0;
-  --accent-strong: #9ed9c4;
-  --accent-soft: #213930;
-  --tertiary: #7ab8f5;
-  --tertiary-soft: #1d3247;
   --success: #6fcf9f;
   --success-soft: #1d3829;
   --warning: #e2b35e;
   --warning-soft: #3b301e;
-  --danger: #f0928f;
-  --danger-soft: #3e2423;
-  --danger-strong: #c5382b;
-  --danger-stronger: #a52a1e;
-  --sidebar-background: #0e1613;
-  --sidebar-surface: #18241f;
-  --sidebar-border: #27362f;
-  --sidebar-hover: #1d2d26;
-  --sidebar-active: #243b31;
-  --sidebar-text: #c4d2cb;
-  --sidebar-text-muted: #8ea198;
-  --sidebar-text-strong: #f0f7f3;
-  --sidebar-accent: #91dfbf;
-  --sidebar-mark-text: #10231b;
   --sidebar-status-halo: rgb(111 207 159 / 16%);
-  --sidebar-avatar-background: #294538;
-  --sidebar-avatar-text: #b7f2dd;
-  --on-accent: #12241d;
   --elevation-1: 0 2px 10px rgb(0 0 0 / 28%);
   --elevation-2: 0 12px 30px rgb(0 0 0 / 50%);
 }
@@ -334,7 +343,6 @@ html[data-theme='dark'] {
   }
 }
 
-.cdk-overlay-pane,
 .mat-mdc-dialog-panel {
   overflow: hidden;
   scrollbar-width: none;
@@ -480,7 +488,6 @@ html[data-theme='dark'] {
   }
 }
 
-.cdk-overlay-pane::-webkit-scrollbar,
 .mat-mdc-dialog-panel::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -543,29 +550,6 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
-}
-
-.detail-drawer-panel.mat-drawer {
-  position: fixed;
-  inset-block: 0;
-  inset-inline-end: 0;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: min(80vw, 1000px);
-  max-width: 100vw;
-  height: 100%;
-  max-height: 100%;
-  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
-  background: var(--surface);
-  box-shadow: -12px 0 36px rgb(0 0 0 / 25%);
-  z-index: 1000 !important;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.detail-drawer-panel_standard.mat-drawer {
-  width: min(560px, 100vw);
 }
 
 .detail-drawer-container.mat-drawer-container .mat-drawer-backdrop {
@@ -674,13 +658,5 @@ body.detail-drawer-open {
       page-transition-region
     ) {
     animation-duration: 1ms;
-  }
-}
-
-@media (max-width: 700px) {
-  .detail-drawer-panel.mat-drawer,
-  .detail-drawer-panel_standard.mat-drawer {
-    width: 100vw;
-    border-radius: 0;
   }
 }
