@@ -48,6 +48,7 @@ const ICONS = {
     'M9 18V6l11-2v12M6.5 15.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Zm11-2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z',
   subtitles:
     'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm2 6h4m2 0h4M7 15h2m3 0h5',
+  sell: 'M20 11.5 12.5 4H4v8.5L11.5 20 20 11.5ZM8 8h.01',
 } as const;
 export type IconName = keyof typeof ICONS;
 @Component({

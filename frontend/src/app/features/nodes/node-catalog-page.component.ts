@@ -1,6 +1,5 @@
 import { IconComponent } from '../../shared/ui/icon.component';
 import type { SummaryTile } from '../../shared/ui/summary-tiles.component';
-import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
 import {
   formatMemory,
   nodeAcceleratorBadges,
@@ -220,7 +219,6 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     DrawerActionButtonComponent,
     GuidedSetupComponent,
     MatMenuModule,
-    ContextBannerComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
     NodeGroupCardComponent,

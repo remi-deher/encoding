@@ -81,27 +81,51 @@
   }
   @if (pageTab() === 'cluster' && isAdmin()) {
     <div subnav-actions class="node-subnav-actions">
-      @if (!local.standalone() && clusterIdentity()) {
-        @if (enrollmentRows().length > 0) {
-          <button matButton="outlined" type="button" (click)="focusEnrollmentRequests()">
-            Demandes <span class="node-action-count">{{ enrollmentRows().length }}</span>
+      @if (local.standalone()) {
+        <button
+          matButton="outlined"
+          type="button"
+          [disabled]="local.busy() || local.identityUnavailable()"
+          (click)="local.openCreate()"
+        >
+          Créer un cluster
+        </button>
+        <button
+          matButton="filled"
+          type="button"
+          [disabled]="!local.canJoin()"
+          (click)="local.openJoin()"
+        >
+          Rejoindre un cluster
+        </button>
+      } @else {
+        @if (local.pending()) {
+          <button matButton="outlined" type="button" (click)="local.openJoin()">
+            Suivre la demande
           </button>
         }
-        <button matButton="outlined" type="button" [matMenuTriggerFor]="clusterActions">
-          Actions du cluster
-        </button>
-        <mat-menu #clusterActions="matMenu">
-          <button mat-menu-item [disabled]="!local.canJoin()" (click)="local.openJoin()">
-            Changer de cluster pour ce nœud
+        @if (clusterIdentity()) {
+          @if (enrollmentRows().length > 0) {
+            <button matButton="outlined" type="button" (click)="focusEnrollmentRequests()">
+              Demandes <span class="node-action-count">{{ enrollmentRows().length }}</span>
+            </button>
+          }
+          <button matButton="outlined" type="button" [matMenuTriggerFor]="clusterActions">
+            Actions du cluster
           </button>
-          <button
-            mat-menu-item
-            [disabled]="local.busy() || local.agentUnavailable() || !local.status()?.clusterId"
-            (click)="local.leave()"
-          >
-            {{ local.pending() ? 'Annuler la demande' : 'Quitter le cluster avec ce nœud' }}
-          </button>
-        </mat-menu>
+          <mat-menu #clusterActions="matMenu">
+            <button mat-menu-item [disabled]="!local.canJoin()" (click)="local.openJoin()">
+              Changer de cluster pour ce nœud
+            </button>
+            <button
+              mat-menu-item
+              [disabled]="local.busy() || local.agentUnavailable() || !local.status()?.clusterId"
+              (click)="local.leave()"
+            >
+              {{ local.pending() ? 'Annuler la demande' : 'Quitter le cluster avec ce nœud' }}
+            </button>
+          </mat-menu>
+        }
       }
     </div>
   }
@@ -113,62 +137,37 @@
       loadState() === 'ready' &&
       reconciliationBanner().isAlert
     ) {
-      <app-context-banner
-        label="Synchronisation des serveurs"
-        [title]="reconciliationBanner().title"
-        [description]="reconciliationBanner().description"
-      />
+      <div class="node-alert-banner node-alert-banner_warning" role="status">
+        <span class="node-alert-icon" aria-hidden="true">!</span>
+        <p>
+          <strong>{{ reconciliationBanner().title }}</strong>
+          {{ reconciliationBanner().description }}
+        </p>
+      </div>
     }
     @if (pageTab() === 'cluster' && local.pending()) {
-      <app-context-banner
-        label="Rattachement en cours"
-        [title]="'Demande envoyée à ' + local.targetName()"
-        description="En attente d’approbation. Le rattachement précédent est conservé jusqu’à la confirmation du nouveau cluster."
-      >
-        @if (isAdmin()) {
-          <button banner-actions matButton="filled" type="button" (click)="local.openJoin()">
-            Suivre la demande
-          </button>
-        }
-      </app-context-banner>
-    } @else if (pageTab() === 'cluster' && local.standalone()) {
-      <app-context-banner
-        label="Aucun cluster"
-        title="Ce nœud est autonome"
-        description="Créez un cluster pour accueillir d’autres nœuds, ou rejoignez un cluster existant."
-      >
-        @if (isAdmin()) {
-          <div banner-actions>
-            <button
-              matButton="outlined"
-              type="button"
-              [disabled]="local.busy() || local.identityUnavailable()"
-              (click)="local.openCreate()"
-            >
-              Créer un cluster
-            </button>
-            <button
-              matButton="filled"
-              type="button"
-              [disabled]="!local.canJoin()"
-              (click)="local.openJoin()"
-            >
-              Rejoindre un cluster
-            </button>
-          </div>
-        }
-      </app-context-banner>
+      <div class="node-alert-banner node-alert-banner_warning" role="status">
+        <span class="node-alert-icon" aria-hidden="true">!</span>
+        <p>
+          <strong>Rattachement en attente</strong> vers {{ local.targetName() }}. Le cluster
+          précédent reste actif jusque-là.
+        </p>
+      </div>
     }
     @if (pageTab() === 'cluster' && local.agentUnavailable() && !local.loading()) {
-      <app-context-banner
-        label="État du nœud"
-        [title]="
-          local.mode()?.worker === false
-            ? 'La fonction worker est désactivée'
-            : 'La fonction worker ne répond pas'
-        "
-        description="Les dernières informations disponibles restent affichées. Pour rejoindre un cluster, activez la fonction worker depuis Ce nœud ou rétablissez sa connexion. Le suivi du rattachement reste indisponible tant que l’agent ne répond pas."
-      />
+      <div class="node-alert-banner node-alert-banner_warning" role="status">
+        <span class="node-alert-icon" aria-hidden="true">!</span>
+        <p>
+          <strong>
+            {{
+              local.mode()?.worker === false
+                ? 'La fonction worker est désactivée'
+                : 'La fonction worker ne répond pas'
+            }}.
+          </strong>
+          Le suivi du rattachement est indisponible tant que l’agent ne répond pas.
+        </p>
+      </div>
     }
     @if (local.identityUnavailable() && !local.loading()) {
       <div class="node-alert-banner node-alert-banner_warning" role="alert">
@@ -253,7 +252,7 @@
       <div class="groups-grid">
         @if (filteredGroups().length === 0) {
           <div class="groups-empty">
-            <span class="empty-icon" aria-hidden="true">🏷️</span>
+            <span class="empty-icon"><app-icon name="sell" /></span>
             @if (groupSearchQuery().trim()) {
               <h3 class="empty-title">Aucun résultat</h3>
               <p class="empty-desc">Aucun groupe ne correspond à « {{ groupSearchQuery() }} ».</p>
@@ -314,11 +313,10 @@
     } @else {
       @if (isAdmin() && enrollmentRows().length) {
         <section id="node-enrollment-requests" class="node-enrollment-requests">
-          <app-context-banner
-            label="Approbations"
-            title="Demandes de rattachement"
-            description="Examinez chaque demande et comparez le code affiché sur le nœud demandeur avant de l’approuver."
-          />
+          <header class="node-enrollment-heading">
+            <h2>Demandes de rattachement</h2>
+            <p>Comparez le code affiché sur le nœud demandeur avant de l’approuver.</p>
+          </header>
           <app-data-table
             [columns]="enrollmentColumns"
             [rows]="enrollmentRows()"

@@ -32,7 +32,10 @@ import { ComponentConfigurationFormComponent } from '../../shared/ui/component-c
 import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { NotificationService } from '../../shared/services/notification.service';
-import { PageShellContextService } from '../../core/layout/page-shell-context';
+import {
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
 import {
   FlowComponentConfiguration,
   FlowComponentConfigurationSchema,
@@ -74,9 +77,8 @@ interface FlowTemplateRow extends DataTableRow {
       [items]="items()"
       [rowActions]="rowActions"
       filterLabel="Modèles de flow"
-      searchLabel="Rechercher un modèle"
-      [searchQuery]="query()"
-      (searchQueryChange)="query.set($event)"
+      searchLabel=""
+      [showToolbar]="false"
       resourceIcon="copy"
       listEmptyMessage="Aucun modèle. Depuis Flows, ouvrez le menu d’un flow publié puis choisissez Créer un modèle."
       openLabel="Ouvrir"
@@ -480,6 +482,7 @@ export class FlowTemplateLibraryPageComponent {
         searchPlaceholder: 'Rechercher dans les modèles de flow…',
         query: this.query,
         onSearchQueryChange: (query) => this.query.set(query),
+        searchResults: (query) => this.templateSearchResults(query),
       }),
     );
     void this.loadTemplates();
@@ -514,6 +517,27 @@ export class FlowTemplateLibraryPageComponent {
       relativeTo: this.route,
       queryParams: { template: String(row['id']) },
     });
+  }
+
+  private templateSearchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = query.trim().toLocaleLowerCase('fr-FR');
+    if (!normalized) return [];
+    return this.templates()
+      .filter((template) =>
+        [template.name, template.description, template.sourceFlowName]
+          .join(' ')
+          .toLocaleLowerCase('fr-FR')
+          .includes(normalized),
+      )
+      .slice(0, 8)
+      .map((template) => ({
+        id: `flow-template:${template.id}`,
+        label: template.name,
+        description: `${template.sourceFlowName} · ${template.nodeCount} composant(s)`,
+        group: 'Modèles de flow',
+        glyph: '◫',
+        run: () => this.openTemplate({ id: template.id }),
+      }));
   }
 
   protected onRowAction(event: { readonly actionId: string; readonly row: DataTableRow }): void {
