@@ -23,6 +23,7 @@ import {
   formatNodeLabel,
   NodeRole,
   NodeResponse,
+  NodeInventory,
   LibraryResponse,
   NodeToolCapability,
   NodeActivityResponse,
@@ -71,8 +72,11 @@ import {
 } from '../../shared/models/node-management';
 import { NodeOverviewCardComponent } from './node-overview-card.component';
 import type {
+  NodeOverviewHardware,
+  NodeOverviewPlatform,
   NodeOverviewLibrary,
   NodeOverviewRoleSwitch,
+  NodeOverviewTaskCapacity,
 } from './node-overview-card.component';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -174,6 +178,8 @@ interface MemberCard {
   readonly roleSwitches: readonly NodeOverviewRoleSwitch[];
   readonly admissionEnabled: boolean | null;
   readonly admissionDisabled: boolean;
+  readonly hardware: NodeOverviewHardware;
+  readonly taskCapacity: NodeOverviewTaskCapacity;
   readonly meta: string;
   readonly sections: readonly ResourceSheetSection[];
   readonly libraries: readonly NodeOverviewLibrary[];
@@ -291,6 +297,9 @@ export class NodeCatalogPageComponent {
   protected readonly localNode = computed(
     () => this.nodes().find((node) => node.id === this.local.status()?.nodeId) ?? null,
   );
+  protected readonly localOverviewHardware = computed(() =>
+    this.nodeOverviewHardware(this.localNode()?.inventory ?? this.local.status()?.inventory ?? null),
+  );
   protected readonly localName = computed(
     () =>
       this.localNode()?.displayName?.trim() ||
@@ -315,6 +324,32 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
+  protected readonly localTaskCapacity = computed(() => {
+    const node = this.localNode();
+    const status = this.local.status();
+    const roles = node?.desiredRoles ?? node?.roles ?? status?.roles ?? null;
+    const workerEnabled = roles?.includes('worker') ?? null;
+    const accepted = this.localActivity()?.active ?? null;
+    const maximum = node?.maxConcurrentTasks ?? status?.maxConcurrentTasks ?? null;
+    const remaining =
+      workerEnabled === true && accepted !== null && maximum !== null
+        ? Math.max(0, maximum - accepted)
+        : null;
+    let note = '';
+    if (workerEnabled === false) note = 'Fonction Worker désactivée.';
+    else if (workerEnabled === null) note = 'État du Worker indisponible.';
+    else if (accepted === null) note = 'Comptage des tâches indisponible.';
+    else if (maximum === null) note = 'Capacité non déclarée.';
+    else if (node && nodeLifecycle(node) === 'draining')
+      note = 'Admission suspendue : les places libres ne sont pas attribuées.';
+
+    return {
+      accepted,
+      remaining,
+      maximum: workerEnabled === true ? maximum : null,
+      note,
+    };
+  });
   protected readonly localSheet = computed(() =>
     localNodeSheet({
       status: this.local.status(),
@@ -325,6 +360,11 @@ export class NodeCatalogPageComponent {
       agentUnavailable: this.local.agentUnavailable(),
       activeTasks: this.localActivity()?.active ?? null,
     }),
+  );
+  protected readonly localOverviewSections = computed(() =>
+    this.localSheet().sections.filter(
+      (section) => section.id !== 'state' && section.id !== 'hardware',
+    ),
   );
   protected readonly localOverviewStatus = computed(() => {
     const node = this.localNode();
@@ -1328,7 +1368,7 @@ export class NodeCatalogPageComponent {
     this.filteredRawNodes().map((node) => this.toRecord(node)),
   );
 
-  /** Cartes des membres du cluster : une ressource par ligne, actions dans le menu (0049). */
+  /** Cartes de synthèse des membres du cluster, avec actions secondaires dans le menu. */
   protected readonly memberCards = computed<readonly MemberCard[]>(() =>
     this.filteredRawNodes().map((node) => {
       const lifecycle = nodeLifecycle(node);
@@ -1343,18 +1383,72 @@ export class NodeCatalogPageComponent {
         roleSwitches: this.memberRoleSwitches(node),
         admissionEnabled: this.admissionEnabledFor(node),
         admissionDisabled: this.admissionBusy().has(node.id),
-        meta: `Dernier signal : ${record.lastSignal}`,
+        hardware: this.nodeOverviewHardware(node.inventory ?? null),
+        taskCapacity: this.memberTaskCapacity(node),
+        meta: record.lastSignal,
         sections: memberNodeOverviewSections(
           node,
           this.activityKnown() && node.status === 'online'
             ? (this.activeTasks()[node.id] ?? 0)
             : null,
           this.clusterName(),
+        ).filter(
+          (section) => section.id !== 'state' && section.id !== 'hardware',
         ),
         libraries: this.nodeOverviewLibraries(node.id),
       };
     }),
   );
+  private nodeOverviewHardware(inventory: NodeInventory | null): NodeOverviewHardware {
+    const operatingSystem = inventory?.operatingSystem?.trim() ?? '';
+    const runtime = inventory?.runtimeEnvironment?.trim().toLowerCase() ?? '';
+    const os = operatingSystem.toLowerCase();
+    const platform: NodeOverviewPlatform =
+      runtime === 'docker'
+        ? 'docker'
+        : os.includes('windows')
+          ? 'windows'
+          : os.includes('linux')
+            ? 'linux'
+            : 'generic';
+    const platformLabel =
+      platform === 'docker'
+        ? 'Docker · conteneur'
+        : operatingSystem || 'Plateforme non déclarée';
+    const gpu = inventory?.gpus?.length
+      ? inventory.gpus.map((item) => item.name).join(' · ')
+      : inventory?.gpus
+        ? 'Aucun détecté'
+        : 'Non déclaré';
+
+    return {
+      cpu: inventory
+        ? inventory.processorModel?.trim() || `${inventory.processorCount} cœurs`
+        : 'Non déclaré',
+      memory: inventory ? formatMemory(inventory.memoryMb) : 'Non déclarée',
+      gpu,
+      platform,
+      platformLabel,
+    };
+  }
+  private memberTaskCapacity(node: NodeResponse): NodeOverviewTaskCapacity {
+    const workerEnabled = node.roles.includes('worker');
+    const accepted = this.activityKnown() ? (this.activeTasks()[node.id] ?? 0) : null;
+    const maximum = workerEnabled ? node.maxConcurrentTasks : null;
+    const remaining =
+      workerEnabled && accepted !== null && maximum !== null
+        ? Math.max(0, maximum - accepted)
+        : null;
+    let note = '';
+    if (!workerEnabled) note = 'Fonction Worker désactivée.';
+    else if (accepted === null) note = 'Comptage des tâches indisponible.';
+    else if (nodeLifecycle(node) === 'draining')
+      note = 'Admission suspendue : les places libres ne sont pas attribuées.';
+    else if (nodeLifecycle(node) !== 'online')
+      note = 'Nœud indisponible pour recevoir des tâches.';
+
+    return { accepted, remaining, maximum, note };
+  }
   protected memberRoleSwitches(node: NodeResponse): readonly NodeOverviewRoleSwitch[] {
     if (!this.isAdmin()) return [];
     const requested = node.desiredRoles ?? node.roles;
