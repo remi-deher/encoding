@@ -46,7 +46,22 @@ internal static partial class Harness
                 var (id, lease, _) = await EnqueueAsync(flow, await File.ReadAllBytesAsync(source));
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(40));
                 using (var client = Client(a)) await Runner("extract-a", out _).RunAsync(lease, client, deadline.Token);
-                var received = await runtime.ClaimAsync(b, deadline.Token) ?? throw new InvalidOperationException("The extraction must checkpoint before relay.");
+                async Task<RuntimeLease?> ClaimAfterRelayAsync(Guid worker)
+                {
+                    for (var attempt = 0; attempt < 100; attempt++)
+                    {
+                        var claim = await runtime.ClaimAsync(worker, deadline.Token);
+                        if (claim is not null) return claim;
+                        await Task.Delay(TimeSpan.FromMilliseconds(100), deadline.Token);
+                    }
+                    return null;
+                }
+                var received = await ClaimAfterRelayAsync(b);
+                if (received is null)
+                {
+                    var execution = await executions.GetAsync(id, deadline.Token);
+                    throw new InvalidOperationException($"The extraction must checkpoint before relay. State: {execution?.State}; detail: {execution?.Detail}");
+                }
                 if (missingProducer)
                 {
                     using var missingClient = Client(b);
@@ -60,7 +75,7 @@ internal static partial class Harness
                 var produced = reference.Resolve(received.Checkpoint!.Context.Variables);
                 Check(received.Checkpoint.NextNodeId == "consume", "Resume at the consumer without repeating extraction.");
                 using (var client = Client(b)) await Runner("consume-b", out _).RunAsync(received, client, deadline.Token);
-                var returned = await runtime.ClaimAsync(a, deadline.Token);
+                var returned = await ClaimAfterRelayAsync(a);
                 if (returned is null)
                 {
                     var execution = await executions.GetAsync(id, deadline.Token);
