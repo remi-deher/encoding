@@ -1,6 +1,6 @@
 ---
 domain: runtime
-updated: 2026-10-24
+updated: 2026-10-27
 legacy_adr: [0005, 0009, 0015, 0016, 0018, 0020, 0021, 0028, 0030, 0033, 0054, 0058, 0059, 0064, 0066, 0075]
 code:
   - backend/src/Encoding.Api/Executions/
@@ -123,3 +123,8 @@ Une sonde d’accès effectif précède les traitements nécessitant une publica
 `probe-check-integrity` active la politique de l’[ADR 0022](../adr/0022-controle-media-explicite-et-rattachement.md). Un résultat modifié exige un contrôle réussi pour son empreinte ; le serveur vérifie un checkpoint durable du bloc de contrôle. Une modification après contrôle invalide la preuve. Les reprises et relais conservent cette preuve et le nœud d’accès source. Les anciens flows gardent le décodage intégral obligatoire ; les nouveaux flows guidés audio/vidéo comportent un contrôle rapide explicite. Le GPU obligatoire est testé sur le fichier exact et ne revient pas silencieusement au CPU.
 
 Les renouvellements de bail acceptent des commandes en cours bornées par invocation/identité ; ils ne réécrivent pas une étape achevée. Les logs FFmpeg exposent la progression, la commande et les horodatages. `ExecutionResponse.failure` distingue les causes reconnues ; `publicationConfirmed=true` exige un chemin durablement confirmé, `null` signifie qu’aucune confirmation durable n’est disponible sur ce serveur. Les doublons en quarantaine gardent leur historique et leur compteur séparé. La mise en file consulte la propriété réconciliée avant de créer une nouvelle demande ; les courses antérieures à la convergence gardent leur départage existant.
+
+### Coordination et quarantaine (ADR 0023)
+Un checkpoint signé, admis, de la bonne époque et de la chaîne courante est conservé comme preuve passive même en quarantaine ; son inbox est acquittée avec `quarantined_checkpoint_retained`. Aucun travail n'est importé. Un événement périmé ou d'autorité incompatible est rejeté explicitement ; une dépendance manquante reste bloquante sans expiration, avec échéance persistante et délai exponentiel plafonné à 60 s.
+
+Les activations/reprises vérifiées empêchées par la quarantaine sont suspendues avec leur preuve intégrale. Si le mécanisme existant de convergence modifie ultérieurement cet état, elles reviennent dans l'inbox et subissent tous les contrôles habituels ; aucune quarantaine n'est levée par ce correctif. La barrière de préparation reste inchangée. Les statuts existants de tâches et de réconciliation exposent `coordination` : attentes, suspensions, refus et checkpoints conservés, sans corps d'événement. Voir [ADR 0023](../adr/0023-coordination-et-quarantaine.md) et la [récupération normale des événements existants](../../operations/cluster-task-recovery.md).

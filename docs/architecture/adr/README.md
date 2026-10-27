@@ -38,3 +38,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0020](0020-gabarit-partage-de-sous-navigation.md) | Gabarit partagé de sous-navigation | implemented | ui |
 | [0021](0021-activation-cluster-plugins-outils.md) | Activation cluster des plugins et outils média | implemented | plugins |
 | [0022](0022-controle-media-explicite-et-rattachement.md) | Contrôle média explicite et prérequis de rattachement | implemented | runtime, cluster |
+| [0023](0023-coordination-et-quarantaine.md) | Coordination des tâches en quarantaine sans blocage global | implemented | runtime, replication-storage |
