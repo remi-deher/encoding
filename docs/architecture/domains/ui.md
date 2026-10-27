@@ -125,3 +125,5 @@ La page `/updates`, présente dans la navigation Administration et accessible au
 Le mode « Assistant vidéo » de la création ouvre `/flows/guided` avec le formulaire déclaratif commun et une protection contre la perte de saisie. Général, vidéo, pistes, résultat puis récapitulatif : la génération backend est validée avant l'enregistrement d'un brouillon et l'ouverture de l'éditeur. Une erreur conserve les choix. Les modèles et la création avancée restent accessibles.
 
 Les formulaires guidés communs utilisent un stepper vertical sur écran étroit hors tiroir ; les tiroirs conservent leur avancement dans le bandeau et leur pied d’actions.
+
+Les gabarits de bibliothèques transmettent explicitement les templates des actions au catalogue de ressources (contenu, pied et en-tête). Le catalogue retire le contenu et le pied du tiroir lorsque la fiche et les actions sont fermées, afin de détruire les formulaires inactifs.
