@@ -52,6 +52,23 @@ public sealed class RuntimeCommandCapture : IDisposable
         lock (sync) return records.ToArray();
     }
 
+    public IReadOnlyList<RuntimeStepCommand> ForHeartbeat()
+    {
+        lock (sync)
+        {
+            var result = new List<RuntimeStepCommand>();
+            var bytes = 0;
+            foreach (var record in records.AsEnumerable().Reverse().Take(64))
+            {
+                var size = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(record).Length;
+                if (bytes + size > 450000) break;
+                bytes += size;
+                result.Add(record);
+            }
+            return result;
+        }
+    }
+
     public void MarkPersisted(string nodeId, Guid invocationId)
     {
         lock (sync) records.RemoveAll(item => item.NodeId == nodeId && item.InvocationId == invocationId);
@@ -59,15 +76,19 @@ public sealed class RuntimeCommandCapture : IDisposable
 
     public static void Record(string executable, IReadOnlyList<string> arguments, string standardOutput,
         string standardError, int? exitCode, DateTimeOffset startedAt, DateTimeOffset? finishedAt, bool truncated,
-        bool protocolOutput)
+        bool protocolOutput, Guid? commandId = null, decimal? progressPercent = null)
     {
         var step = CurrentStep.Value;
         if (step is null || Current.Value != step.Capture) return;
         var command = FormatCommand(executable, arguments);
-        var log = new RuntimeCommandLog(Guid.NewGuid(), command,
+        var log = new RuntimeCommandLog(commandId ?? Guid.NewGuid(), command,
             protocolOutput ? string.Empty : Redact(standardOutput), Redact(standardError), exitCode,
-            startedAt, finishedAt, truncated);
-        lock (step.Capture.sync) step.Capture.records.Add(new(step.NodeId, step.InvocationId, log));
+            startedAt, finishedAt, truncated, progressPercent);
+        lock (step.Capture.sync)
+        {
+            step.Capture.records.RemoveAll(item => item.Command.Id == log.Id);
+            step.Capture.records.Add(new(step.NodeId, step.InvocationId, log));
+        }
     }
 
     public static string FormatCommand(string executable, IReadOnlyList<string> arguments)

@@ -421,6 +421,15 @@ internal static partial class Harness
                     .Append(new NodeToolCapability(RuntimeSourceObservation.Capability,"1.0.0",["general"],[])),Json));
                 await capable.ExecuteNonQueryAsync();
             }
+            if (MediaIntegrityPolicy.IsExplicit(flow))
+            {
+                await using var latest = db.CreateCommand("UPDATE cluster_nodes SET capabilities=@caps WHERE id IN (@a,@b,@c)");
+                latest.Parameters.AddWithValue("a",a); latest.Parameters.AddWithValue("b",b); latest.Parameters.AddWithValue("c",c);
+                latest.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(Capabilities(true)
+                    .Select(cap => cap.ToolId == "plugin/probe" ? cap with { Version = "1.1.0" } : cap)
+                    .Append(new NodeToolCapability(MediaIntegrityPolicy.Capability,"1.0.0",["general"],[])),Json));
+                await latest.ExecuteNonQueryAsync();
+            }
             Check(validator.Validate(flow).IsValid,JsonSerializer.Serialize(validator.Validate(flow),Json));
             Check(await runtime.EnqueueAsync(new(id,library,"source.mkv",flow.Id,flow.Version),flow,CancellationToken.None),"Enqueue fixture.");
             var lease=await runtime.ClaimAsync(a,CancellationToken.None)??throw new InvalidOperationException("The initial worker must claim.");

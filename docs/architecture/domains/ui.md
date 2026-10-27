@@ -127,3 +127,5 @@ Le mode « Assistant vidéo » de la création ouvre `/flows/guided` avec le for
 Les formulaires guidés communs utilisent un stepper vertical sur écran étroit hors tiroir ; les tiroirs conservent leur avancement dans le bandeau et leur pied d’actions.
 
 Les gabarits de bibliothèques transmettent explicitement les templates des actions au catalogue de ressources (contenu, pied et en-tête). Le catalogue retire le contenu et le pied du tiroir lorsque la fiche et les actions sont fermées, afin de détruire les formulaires inactifs.
+
+Le bandeau du cluster présente les projections bloquées (table, cause sûre, date et action attendue) et les prérequis manquants d’attribution, dont le rattrapage sortant non confirmé d’un pair. Une présence réseau ou zéro projection en attente ne suffit pas à annoncer l’attribution disponible.

@@ -30,12 +30,13 @@ public sealed partial class ClusterEntityReconciliation(
     private static readonly HashSet<string> BooleanColumns = new(StringComparer.Ordinal)
     {
         "singleton", "idempotent", "is_active", "draining", "quarantined", "can_read", "can_write", "is_enabled",
-        "watch_enabled", "schedule_enabled", "enabled", "has_more"
+        "watch_enabled", "schedule_enabled", "enabled", "has_more", "approved"
     };
     private static readonly EntityTable[] Tables =
     [
         new("cluster_nodes", ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "last_seen_at", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"], ["id"], ["capabilities", "labels", "inventory"], ["roles", "desired_roles"], ["node_token_hash"], ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"]),
         new("node_enrollment_requests", ["node_id", "pairing_key_hash", "node_token_hash", "peer_id", "peer_public_key", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "expires_at", "inventory", "display_name"], ["node_id"], ["capabilities", "inventory"], ["roles"], ["pairing_key_hash", "node_token_hash"]),
+        new("node_peer_reconciliation_urls", ["node_id", "peer_id", "url", "approved"], ["node_id"]),
         new("cluster_peer_admissions", ["cluster_id", "peer_id", "node_id", "public_key", "approved_by_peer_id", "wrapped_data_key", "key_fingerprint", "issued_at", "revoked_at", "signature"], ["cluster_id", "peer_id"], immutable: false, detectDeletes: false),
         new("node_groups", ["id", "name", "description", "mode", "criteria", "labels", "created_at", "updated_at"], ["id"], ["criteria", "labels"]),
         new("node_directory_browse_requests", ["id", "node_id", "path", "state", "entries", "has_more", "error", "created_at", "updated_at", "expires_at", "claim_until"], ["id"], ["entries"]),
@@ -58,7 +59,7 @@ public sealed partial class ClusterEntityReconciliation(
         new("flow_backup_jobs", ["flow_id", "version"], ["flow_id", "version"], immutable: true, detectDeletes: false),
         new("flow_drafts", ["flow_id", "revision", "definition", "updated_at"], ["flow_id"], ["definition"]),
         // Historical draft definitions are cluster data; status/check timestamps remain local.
-        new("flow_draft_backups", ["flow_id", "revision", "definition"], ["flow_id", "revision"], ["definition"], detectDeletes: false),
+        new("flow_draft_backups", ["flow_id", "revision", "definition"], ["flow_id", "revision"], ["definition"], immutable: true, detectDeletes: false),
         new("flow_script_versions", ["script_id", "version", "name", "language", "description", "code", "created_at"], ["script_id", "version"], immutable: true),
         new("encoding_profile_versions", ["profile_id", "version", "name", "description", "targets", "created_at"], ["profile_id", "version"], ["targets"], immutable: true),
         new("flow_resources", ["id", "kind", "name", "description", "created_at", "updated_at"], ["id"]),
@@ -421,7 +422,7 @@ public sealed partial class ClusterEntityReconciliation(
     private async Task<IReadOnlyList<PendingChange>> ReadPendingAsync(CancellationToken ct)
     {
         var result = new List<PendingChange>();
-        await using var command = dataSource.CreateCommand($"SELECT l.event_id,l.cluster_id,l.origin_id,l.sequence,l.event_type,l.payload,l.occurred_at FROM cluster_sync_pending_projections p JOIN cluster_change_log l ON l.event_id=p.event_id ORDER BY l.occurred_at,l.origin_id,l.sequence LIMIT {ClusterReconciliationRepository.MaximumBatchSize * 8}");
+        await using var command = dataSource.CreateCommand($"SELECT l.event_id,l.cluster_id,l.origin_id,l.sequence,l.event_type,l.payload,l.occurred_at FROM cluster_sync_pending_projections p JOIN cluster_change_log l ON l.event_id=p.event_id WHERE NOT EXISTS(SELECT 1 FROM cluster_projection_diagnostics d WHERE d.event_id=p.event_id AND d.cause='immutable_snapshot_conflict') ORDER BY l.occurred_at,l.origin_id,l.sequence LIMIT {ClusterReconciliationRepository.MaximumBatchSize * 8}");
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
@@ -484,6 +485,26 @@ public sealed partial class ClusterEntityReconciliation(
         await using var transaction = await connection.BeginTransactionAsync(ct);
         await using (var sequenceLock = Sql.Command("SELECT origin_id FROM cluster_sync_identity WHERE singleton = true FOR UPDATE", connection, transaction))
             await sequenceLock.ExecuteScalarAsync(ct);
+        if (entityType == "flow_draft_backups" && row is not null)
+        {
+            await using var existing = Sql.Command("SELECT definition FROM flow_draft_backups WHERE " + KeyPredicate(GetTable(entityType)), connection, transaction);
+            existing.Parameters.AddWithValue("key", key);
+            var definition = await existing.ExecuteScalarAsync(ct);
+            if (definition is string text)
+            {
+                if (!JsonNode.DeepEquals(JsonNode.Parse(text), row["definition"]))
+                {
+                    await transaction.RollbackAsync(ct);
+                    await RecordProjectionFailureAsync(pending.Change.EventId, entityType, "immutable_snapshot_conflict", ct);
+                    return false;
+                }
+                // Keep the local representation fingerprint: a different JSON property order must
+                // not be recaptured as a local edit and echoed back through the mesh.
+                var stored = (JsonObject)row.DeepClone();
+                stored["definition"] = JsonNode.Parse(text);
+                fingerprint = Fingerprint(stored, GetTable(entityType));
+            }
+        }
         var current = await ReadEntityStateAsync(connection, transaction, entityType, key, ct);
         if (current is { } currentState && CompareVersion(pending.Change.OccurredAt, pending.Change.OriginId, pending.Change.Sequence,
                 currentState.OccurredAt, currentState.OriginId, currentState.Sequence) <= 0)
@@ -525,7 +546,15 @@ public sealed partial class ClusterEntityReconciliation(
         }
         catch (DbException exception)
         {
-            logger.LogDebug(exception, "Projection différée pour l'événement {EventId} ({EntityType}).", pending.Change.EventId, entityType);
+            await transaction.RollbackAsync(ct);
+            var cause = exception is Microsoft.Data.Sqlite.SqliteException sqlite
+                ? sqlite.SqliteExtendedErrorCode switch {
+                    787 => "dependency_missing",
+                    2067 when entityType == "users" => "username_conflict",
+                    2067 or 1555 or 1811 or 275 => "constraint_conflict",
+                    _ => "storage_unavailable"
+                } : "storage_unavailable";
+            await RecordProjectionFailureAsync(pending.Change.EventId, entityType, cause, ct);
             return false;
         }
 

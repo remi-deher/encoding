@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "probe",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Sondes & Analyse média",
   "supportedHostContractVersions": [
     1
@@ -65,7 +65,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
       "category": "metadata"
     },
@@ -127,7 +129,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
       "category": "metadata"
     },
@@ -197,7 +201,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
       "category": "metadata"
     },
@@ -268,7 +274,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
       "category": "metadata"
     },
@@ -329,7 +337,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
       "category": "metadata"
     },
@@ -399,7 +409,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
       "category": "metadata"
     },
@@ -470,7 +482,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
       "category": "metadata"
     },
@@ -511,7 +525,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": true,
       "category": "reporting"
     },
@@ -738,8 +754,103 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ],
       "producesFiles": false,
+      "category": "validation"
+    },
+    {
+      "id": "probe-check-integrity",
+      "version": "1.0.0",
+      "name": "Rechercher les erreurs média",
+      "description": "Rapide : structure, pistes, durée et passages représentatifs ; aucune garantie entre les passages. Approfondi : décodage intégral vidéo/audio. Le mode GPU exige un décodeur vérifié sur ce média, sans secours CPU silencieux.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "valid",
+          "label": "Conforme",
+          "description": "Contrôle réussi pour cette empreinte."
+        },
+        {
+          "id": "invalid",
+          "label": "Erreurs détectées",
+          "description": "Le décodage a détecté des erreurs."
+        },
+        {
+          "id": "error",
+          "label": "Contrôle impossible",
+          "description": "Configuration, outil, accès ou accélération indisponible."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "mode",
+            "type": "select",
+            "label": "Profondeur du contrôle",
+            "defaultValue": "quick",
+            "options": [
+              {
+                "value": "quick",
+                "label": "Rapide — passages représentatifs"
+              },
+              {
+                "value": "deep",
+                "label": "Approfondi — intégral"
+              }
+            ]
+          },
+          {
+            "id": "acceleration",
+            "type": "select",
+            "label": "Décodage approfondi",
+            "defaultValue": "auto",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Automatique — GPU vérifié puis CPU"
+              },
+              {
+                "value": "cpu",
+                "label": "CPU"
+              },
+              {
+                "value": "gpu",
+                "label": "GPU obligatoire — échec si indisponible"
+              }
+            ],
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "deep"
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        },
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        },
+        {
+          "toolId": "media-integrity-policy/v1",
+          "minimumVersion": "1.0.0",
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "minimumRuntimePluginVersion": "1.1.0",
       "category": "validation"
     }
   ]

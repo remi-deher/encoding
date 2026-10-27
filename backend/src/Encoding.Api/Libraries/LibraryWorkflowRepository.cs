@@ -214,7 +214,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         foreach(var file in files)
         {
             var execution=actionId is { } confirmedAction ? ConfirmedExecutionId(confirmedAction,file.Id) : Guid.NewGuid();
-            if(!await RuntimeRepository.EnqueueInTransactionAsync(new(execution,library,file.Path,flow.Id,flow.Version),flow,c,tx,ct))continue;
+            if(!await RuntimeRepository.EnqueueInTransactionAsync(new(execution,library,file.Path,flow.Id,flow.Version),flow,c,tx,ct,automatic ? "surveillance" : skipReceipted ? "trigger" : "manual"))continue;
             queued++;assignments.Add(execution);
             await using var receipt=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) VALUES(@library,@file,@flow,@version,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
             receipt.Parameters.AddWithValue("library",library);receipt.Parameters.AddWithValue("file",file.Id);receipt.Parameters.AddWithValue("flow",flow.Id);receipt.Parameters.AddWithValue("version",flow.Version);

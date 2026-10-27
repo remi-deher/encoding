@@ -7,6 +7,7 @@ namespace Encoding.NodeAgent.Runtime;
 
 public sealed class PluginLaunch
 {
+    public bool Enabled { get; set; } = true;
     public string Id { get; set; }="";
     public string Version { get; set; }="";
     public string Executable { get; set; }="";
@@ -27,7 +28,10 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
         {
             var declared=configuration.GetSection("Runtime:Plugins").Get<PluginLaunch[]>()??[];
             var downloaded=CustomPluginCatalog.Scan(CustomPluginCatalog.DirectoryFor(configuration)).Where(plugin=>declared.All(item=>item.Id!=plugin.Id || item.Version!=plugin.Version));
-            return declared.Concat(downloaded).ToList();
+            var bundled = BundledPluginCatalog.Scan(configuration)
+                .Where(plugin => declared.All(item => item.Id != plugin.Id));
+            return declared.Concat(downloaded).Concat(bundled)
+                .Where(plugin => plugin.Enabled).DistinctBy(plugin => (plugin.Id, plugin.Version)).ToList();
         }
     }
 

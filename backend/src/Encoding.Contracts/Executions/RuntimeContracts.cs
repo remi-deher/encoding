@@ -7,8 +7,8 @@ public sealed record EnqueueMediaRequest(Guid Id, Guid LibraryId, string MediaPa
 public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, long Epoch, DateTimeOffset ExpiresAt,
     Guid SourceNodeId, string? SourceRoot, string MediaPath, string? SourceSha256, FlowDefinition Flow, RuntimeCheckpoint? Checkpoint, string EntryNodeId,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
-    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false);
-public sealed record RuntimeFence(long Epoch);
+    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false, bool VerifyPublicationAccess=false, bool VerifyReplacementAccess=false);
+public sealed record RuntimeFence(long Epoch, IReadOnlyList<RuntimeStepCommand>? Commands = null);
 public sealed record RuntimeAiSubtitleItem(string Id, string Text);
 public sealed record RuntimeAiSubtitleTranslationRequest(long Epoch, Guid InvocationId, string FlowNodeId,
     int BatchIndex, IReadOnlyList<RuntimeAiSubtitleItem> Items);
@@ -22,7 +22,7 @@ public sealed record RuntimeLeaseStatus(bool CancelRequested, int Revision, Date
 public sealed record RuntimeSourceState(string? SourceSha256, IReadOnlyDictionary<string,string>? Inputs = null);
 public sealed record RuntimeTransfer(Guid ExecutionId, long Epoch, string Root, string MediaPath, string? SourceSha256,
     string? ResultSha256, string? ResultExtension, bool Publish, IReadOnlyList<string>? InputPaths = null, string MediaType = "video", bool CanWrite = true, int? ReplacementGraceHours = null,
-    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, RuntimeSourceObservation? Observation = null);
+    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, RuntimeSourceObservation? Observation = null, bool VerifyPublicationAccess = false, bool VerifyReplacementAccess = false);
 /// <summary>Garde de publication à consulter avant un remplacement de source (architecture 0059) : composant de plugin à invoquer sur le nœud d'accès.</summary>
 public sealed record RuntimePublicationGuard(string PluginId, string PluginVersion, string ComponentId, string ComponentVersion, int ConfigurationSchemaVersion,
     IReadOnlyDictionary<string,JsonElement> Configuration, IReadOnlyDictionary<string,JsonElement> PluginConfiguration, int MaxWaitMinutes,
@@ -45,11 +45,11 @@ public sealed record RuntimePlanStep(string ComponentId, IReadOnlyDictionary<str
 public sealed record RuntimeCheckpoint(string NodeId, Guid InvocationId, string? OutputId, string? NextNodeId, RuntimeContext Context, string? TerminalResult,
     RuntimeHandoffSelector? Handoff = null, RuntimeWait? Wait = null);
 public sealed record RuntimeCommandLog(Guid Id, string Command, string StandardOutput, string StandardError, int? ExitCode,
-    DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, bool Truncated);
+    DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, bool Truncated, decimal? ProgressPercent = null);
 public sealed record RuntimeStepCommand(string NodeId, Guid InvocationId, RuntimeCommandLog Command);
 public sealed record ExecutionPipelineStepResponse(string NodeId, string NodeName, Guid InvocationId,
     string ComponentKind, string Status, DateTimeOffset StartedAt, DateTimeOffset? CompletedAt,
-    string? OutputId, string? OutputLabel, string? NextNodeId, IReadOnlyList<RuntimeCommandLog> Commands);
+    string? OutputId, string? OutputLabel, string? NextNodeId, IReadOnlyList<RuntimeCommandLog> Commands, RuntimeStepDiagnostic? Diagnostic = null);
 public sealed record StartRuntimeStep(long Epoch, string NodeId);
 public sealed record StartedRuntimeStep(Guid InvocationId, RuntimeCheckpoint? Completed);
 public sealed record CompleteRuntimeStep(long Epoch, Guid EventId, int ExpectedRevision, RuntimeCheckpoint Checkpoint,
@@ -65,3 +65,5 @@ public sealed record ConfirmRuntimePublication(long Epoch, Guid EventId, int Exp
 /// <summary>Demande l'état courant d'exécutions connues du nœud, pour décider de la suppression de leurs dossiers de travail.</summary>
 public sealed record RuntimeExecutionStatesRequest(IReadOnlyList<Guid> Ids);
 public sealed record RuntimeExecutionState(Guid Id, string State);
+
+public sealed record RuntimeStepDiagnostic(string Code, string Message);

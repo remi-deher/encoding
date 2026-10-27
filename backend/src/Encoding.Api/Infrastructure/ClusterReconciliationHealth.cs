@@ -6,7 +6,7 @@ public sealed record ClusterReconciliationPeerHealth(
     bool Discovered,
     DateTimeOffset? LastAttemptAt,
     DateTimeOffset? LastSuccessAt,
-    string? LastError);
+    string? LastError, Guid? AuthenticatedPeerId = null, bool CatchUpConfirmed = false);
 
 public sealed record ClusterReconciliationHealthStatus(
     bool Enabled,
@@ -111,6 +111,8 @@ public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
         }
     }
 
+    public void ExcludeEndpoint(string url) { lock (gate) peers.Remove(url); }
+
     public void BeginAttempt(string url)
     {
         lock (gate) GetOrAdd(url).LastAttemptAt = DateTimeOffset.UtcNow;
@@ -144,7 +146,9 @@ public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
             return new(enabled, disabledReason, discoveryAvailable, discoveryError,
                 peers.OrderBy(peer => peer.Key, StringComparer.OrdinalIgnoreCase)
                     .Select(entry => new ClusterReconciliationPeerHealth(entry.Key, entry.Value.Configured,
-                        entry.Value.Discovered, entry.Value.LastAttemptAt, entry.Value.LastSuccessAt, entry.Value.LastError))
+                        entry.Value.Discovered, entry.Value.LastAttemptAt, entry.Value.LastSuccessAt, entry.Value.LastError,
+                        authenticated.FirstOrDefault(pair => pair.Value.Url.Equals(entry.Key, StringComparison.OrdinalIgnoreCase)).Key is var peer && peer != Guid.Empty ? peer : null,
+                        enabled && caughtUp.Any(pair => pair.Value.Url.Equals(entry.Key, StringComparison.OrdinalIgnoreCase) && clock.GetElapsedTime(pair.Value.At) <= TimeSpan.FromSeconds(45))))
                     .ToArray());
     }
 

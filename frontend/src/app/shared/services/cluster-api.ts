@@ -8,6 +8,8 @@ import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models
 import { ClusterIdentity } from '../models/local-node';
 
 export interface ClusterReconciliationPeerHealth {
+  readonly authenticatedPeerId?: string | null;
+  readonly catchUpConfirmed?: boolean;
   readonly url: string;
   readonly configured: boolean;
   readonly discovered: boolean;
@@ -16,7 +18,19 @@ export interface ClusterReconciliationPeerHealth {
   readonly lastError: string | null;
 }
 
+export interface ClusterProjectionDiagnostic {
+  readonly eventId: string;
+  readonly table: string;
+  readonly cause: string;
+  readonly firstFailedAt: string;
+  readonly lastFailedAt: string;
+  readonly attempts: number;
+  readonly action: string;
+}
+
 export interface ClusterReconciliationHealthStatus {
+  readonly projections?: readonly ClusterProjectionDiagnostic[];
+  readonly attributionBlockers?: readonly string[];
   readonly enabled: boolean;
   readonly disabledReason: string | null;
   readonly discoveryAvailable: boolean;

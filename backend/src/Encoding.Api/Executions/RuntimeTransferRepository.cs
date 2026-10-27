@@ -4,14 +4,15 @@ using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionStreamBroadcaster? broadcaster=null,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null)
+public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionStreamBroadcaster? broadcaster=null,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null, Encoding.Api.Flows.FlowComponentRegistry? components=null)
 {
     public async Task<IReadOnlyList<RuntimeTransfer>> ListAsync(Guid node,CancellationToken ct)
     {
         var deferPolicy=sourceWrites is not null && await sourceWrites.IsClusteredAsync(ct);
         await using var cmd=dataSource.CreateCommand("""
           SELECT w.execution_id,w.lease_epoch,a.local_path,w.media_path,w.source_sha,w.result_sha,w.result_extension,w.publication_requested,e.flow_definition::text,a.can_write,w.replacement_grace_hours,w.library_id,
-            (SELECT checkpoint::text FROM execution_steps WHERE execution_id=w.execution_id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1)
+            (SELECT checkpoint::text FROM execution_steps WHERE execution_id=w.execution_id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1),
+            w.media_policy<>'beside' AND EXISTS(SELECT 1 FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled)
           FROM execution_work w JOIN executions e ON e.id=w.execution_id
           JOIN library_node_accesses a ON a.library_id=w.library_id AND a.node_id=w.source_node_id
           WHERE w.source_node_id=@node AND w.lease_until>clock_timestamp() AND e.state='running'
@@ -20,10 +21,24 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
           ORDER BY e.queued_at LIMIT 20
           """);
         cmd.Parameters.AddWithValue("node",node); await using var r=await cmd.ExecuteReaderAsync(ct); var result=new List<RuntimeTransfer>();
-        while(await r.ReadAsync(ct)) result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetString(2),r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5),r.IsDBNull(6)?null:r.GetString(6),r.GetBoolean(7),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Nodes
-            .Where(n=>n.Configuration.TryGetValue("sourceFile",out var f)&&f.ValueKind==System.Text.Json.JsonValueKind.String&&!string.IsNullOrWhiteSpace(f.GetString()))
-            .Where(n=>!n.Configuration["sourceFile"].GetString()!.StartsWith(Encoding.Contracts.Flows.FlowArtifactReference.Prefix, StringComparison.Ordinal))
-            .Select(n=>RuntimeRepository.NormalizePath(n.Configuration["sourceFile"].GetString())).Distinct().ToArray(),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.MediaType,r.GetBoolean(9),deferPolicy || r.IsDBNull(10)?null:r.GetInt32(10),r.GetGuid(11),Observation:r.IsDBNull(12)?null:System.Text.Json.JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(12),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))?.Context.DirectSource));
+        var json = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        while (await r.ReadAsync(ct))
+        {
+            var flow = System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8), json)!;
+            var inputs = flow.Nodes
+                .Where(n => n.Configuration.TryGetValue("sourceFile", out var file)
+                    && file.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrWhiteSpace(file.GetString()))
+                .Where(n => !n.Configuration["sourceFile"].GetString()!.StartsWith(Encoding.Contracts.Flows.FlowArtifactReference.Prefix, StringComparison.Ordinal))
+                .Select(n => RuntimeRepository.NormalizePath(n.Configuration["sourceFile"].GetString())).Distinct().ToArray();
+            var observation = r.IsDBNull(12) ? null : System.Text.Json.JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(12), json)?.Context.DirectSource;
+            result.Add(new(r.GetGuid(0), r.GetInt64(1), r.GetString(2), r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5),
+                r.IsDBNull(6) ? null : r.GetString(6), r.GetBoolean(7), inputs, flow.MediaType,
+                r.GetBoolean(9), deferPolicy || r.IsDBNull(10) ? null : r.GetInt32(10), r.GetGuid(11),
+                Observation: observation,
+                VerifyPublicationAccess: components is not null && flow.Nodes.Any(n => components.Resolve(n.Component)?.RequiresWriteAccess == true),
+                VerifyReplacementAccess: r.GetBoolean(13)));
+        }
         return result;
     }
     public async Task<bool> ConfirmAsync(Guid id,Guid source,ConfirmRuntimePublication request,CancellationToken ct)
@@ -84,28 +99,32 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         var requested=r.GetBoolean(2);
         return r.IsDBNull(0)?new(false,null,r.IsDBNull(1)?null:r.GetString(1),requested):new(true,r.GetString(0),r.IsDBNull(1)?null:r.GetString(1),requested);
     }
+    internal static async Task<bool> HasIntegrityProofAsync(Guid id, string sha, DbConnection c, DbTransaction tx, CancellationToken ct)
+    {
+        await using var readFlow = Sql.Command("SELECT flow_definition FROM executions WHERE id=@id", c, tx);
+        readFlow.Parameters.AddWithValue("id", id);
+        var json = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        var flow = System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>((string)(await readFlow.ExecuteScalarAsync(ct))!, json)!;
+        if (!Encoding.Contracts.Flows.MediaIntegrityPolicy.IsExplicit(flow)) return true;
+        var checks = flow.Nodes.Where(node => node.Component.PluginId == "probe" && node.Component.ComponentId == Encoding.Contracts.Flows.MediaIntegrityPolicy.Component).Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
+        await using var read = Sql.Command("SELECT node_id,checkpoint FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL", c, tx);
+        read.Parameters.AddWithValue("id", id);
+        await using var reader = await read.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            if (!checks.Contains(reader.GetString(0)) || reader.IsDBNull(1)) continue;
+            var checkpoint = System.Text.Json.JsonSerializer.Deserialize<RuntimeCheckpoint>(reader.GetString(1), json);
+            if (checkpoint is { OutputId: "valid" } && checkpoint.Context.CurrentSha256 == sha) return true;
+        }
+        return false;
+    }
+
     public async Task<bool> FinishAsync(Guid id,Guid worker,FinishRuntimeExecution request,CancellationToken ct,bool sourceFailure=false)
     {
         if(request.State is not("succeeded" or "failed" or "cancelled" or "deferred") || request.Detail is null || request.Detail.Length>4000) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,worker,request.Epoch,c,tx,ct,sourceFailure)) return false;
-        if(request.Commands is { Count: > 0 } commands)
-        {
-            if(commands.Count>64 || commands.Any(item=>string.IsNullOrWhiteSpace(item.NodeId) || item.NodeId.Length>128
-                || item.InvocationId==Guid.Empty || !RuntimeRepository.ValidCommandLog(item.Command))
-                || commands.Select(item=>item.Command.Id).Distinct().Count()!=commands.Count) return false;
-            var json=new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
-            if(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(commands,json).Length>524288) return false;
-            foreach(var group in commands.GroupBy(item=>(item.NodeId,item.InvocationId)))
-            {
-                var logs=System.Text.Json.JsonSerializer.Serialize(group.Select(item=>item.Command),json);
-                await using var append=Sql.Command("UPDATE execution_steps SET command_logs=command_logs || @logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation",c,tx);
-                append.Parameters.AddWithValue("id",id); append.Parameters.AddWithValue("node",group.Key.NodeId);
-                append.Parameters.AddWithValue("invocation",group.Key.InvocationId);
-                append.Parameters.AddWithValue("logs",SqlKind.Json,logs);
-                if(await append.ExecuteNonQueryAsync(ct)!=1) return false;
-            }
-        }
+        if (!await RuntimeCommandJournal.StoreAsync(id, request.Commands, c, tx, ct)) return false;
         if(request.State=="cancelled")
         {
             await using var cancellation=Sql.Command("SELECT state='cancelling' FROM executions WHERE id=@id",c,tx); cancellation.Parameters.AddWithValue("id",id);
@@ -143,6 +162,7 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         if(request.State=="succeeded" && request.ResultSha256 is { } sha)
         {
             if(!RuntimeArtifactStore.ValidDigest(sha) || request.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(request.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
+            if (!await HasIntegrityProofAsync(id, sha, c, tx, ct)) return false;
             // Un résultat déjà publié par un bloc du flow ne peut pas être remplacé par un second.
             await using(var published=Sql.Command("SELECT published_path IS NOT NULL FROM execution_work WHERE execution_id=@id",c,tx)) { published.Parameters.AddWithValue("id",id); if(await published.ScalarBoolAsync(ct)) return false; }
             await using var set=Sql.Command("""

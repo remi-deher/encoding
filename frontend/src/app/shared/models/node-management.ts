@@ -686,6 +686,39 @@ export function reconciliationBannerPresentation(
       isAlert: true,
     };
   }
+  if (status?.projections?.length) {
+    const oldest = status.projections[0];
+    const causes: Record<string, string> = {
+      immutable_snapshot_conflict: 'Instantané immuable divergent',
+      username_conflict: 'Collision de nom de compte',
+      dependency_missing: 'Dépendance manquante',
+      constraint_conflict: 'Conflit de données',
+      storage_unavailable: 'Stockage indisponible',
+    };
+    return {
+      title: 'Projections du cluster bloquées',
+      description: `${status.projections.length} événement(s) en échec. ${causes[oldest.cause] ?? 'Projection impossible'} dans ${oldest.table}, depuis ${oldest.firstFailedAt}. ${oldest.action}`,
+      isAlert: true,
+    };
+  }
+  if (status?.attributionBlockers?.length) {
+    const reasons = status.attributionBlockers.map((code) => {
+      if (code.startsWith('peer_catch_up_unconfirmed:')) {
+        return `Rattrapage sortant non confirmé pour le pair ${code.split(':')[1]}`;
+      }
+      return (
+        (
+          {
+            pending_entity_projections: 'Projections des données en attente',
+            pending_ownership_events: 'Événements de propriété en attente',
+            pending_coordination_events: 'Événements de coordination en attente',
+            local_peer_neutralized: 'Serveur local neutralisé',
+          } as Record<string, string>
+        )[code] ?? 'Prérequis du cluster non satisfait'
+      );
+    });
+    return { title: 'Attribution suspendue', description: reasons.join('. '), isAlert: true };
+  }
   if (tasks?.isolated) {
     return {
       title: 'Serveur isolé — travail possédé conservé',

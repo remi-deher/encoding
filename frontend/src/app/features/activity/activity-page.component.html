@@ -217,6 +217,7 @@
           <div class="detail-tab">
             <app-execution-pipeline-logs
               [executionId]="execution.id"
+              [phase]="execution.currentPhase ?? null"
               [steps]="pipelineState().steps"
               [feedback]="pipelineState().message"
             />

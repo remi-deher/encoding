@@ -19,10 +19,12 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
             LEFT JOIN executions e ON e.id=COALESCE(
                 (SELECT e2.id FROM execution_work w2 JOIN executions e2 ON e2.id=w2.execution_id
                  WHERE w2.library_id=m.library_id AND w2.media_key=upper(m.relative_path)
+                   AND NOT EXISTS(SELECT 1 FROM task_ownership conflict WHERE conflict.execution_id=e2.id AND conflict.state='quarantined')
                    AND e2.flow_name=v.definition->>'name' AND e2.flow_version=a.flow_version
                  ORDER BY e2.updated_at DESC,e2.id DESC LIMIT 1),
                 (SELECT e2.id FROM task_ownership o2 JOIN executions e2 ON e2.id=o2.execution_id
                  WHERE o2.library_id=m.library_id AND o2.media_key=upper(m.relative_path)
+                   AND NOT EXISTS(SELECT 1 FROM task_ownership conflict WHERE conflict.execution_id=e2.id AND conflict.state='quarantined')
                    AND e2.flow_name=v.definition->>'name' AND e2.flow_version=a.flow_version
                  ORDER BY e2.updated_at DESC,e2.id DESC LIMIT 1),
                 (SELECT r.execution_id FROM library_processing_receipts r

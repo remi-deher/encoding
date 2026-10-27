@@ -306,7 +306,7 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         var result = new List<string>();
         try
         {
-            await using var command = dataSource.CreateCommand("SELECT peer_url FROM cluster_sync_peer_endpoints");
+            await using var command = dataSource.CreateCommand("SELECT peer_url FROM cluster_sync_peer_endpoints UNION SELECT u.url FROM node_peer_reconciliation_urls u JOIN cluster_peer_admissions a ON a.node_id=u.node_id AND a.peer_id=u.peer_id JOIN cluster_identity i ON i.id=a.cluster_id WHERE a.revoked_at IS NULL AND u.approved=1");
             await using var reader = await command.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct)) result.Add(reader.GetString(0));
         }

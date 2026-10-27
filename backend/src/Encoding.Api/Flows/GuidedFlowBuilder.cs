@@ -52,9 +52,13 @@ public static class GuidedFlowBuilder
         Link(previous, "success", "container");
         if (request.Audio == "adapt") Link("audio", "unchanged", "container");
         Add("execute", "base", FfmpegBuilderPolicy.Execute, new { });
+        Add("integrity", "probe", MediaIntegrityPolicy.Component, new { mode = "quick", acceleration = "auto" });
+        Add("integrity-failed", "base", "base-complete-flow", new { result = "failed", message = "Le contrôle média a détecté des erreurs." });
         Add("publish", "base", "base-publish-result", new { });
         Link("container", "success", "execute");
-        Link("execute", "success", "publish");
+        Link("execute", "success", "integrity");
+        Link("integrity", "valid", "publish");
+        Link("integrity", "invalid", "integrity-failed");
         Link("execute", "skipped", "publish");
         return new(1, request.Id, 1, request.Name.Trim(), "video", nodes, connections);
     }

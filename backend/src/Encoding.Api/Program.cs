@@ -174,6 +174,7 @@ builder.Services.AddSingleton<ClusterIdentityRepository>();
 builder.Services.AddSingleton<ClusterPeerIdentityStore>();
 builder.Services.AddSingleton<ClusterDataKeyStore>();
 builder.Services.AddSingleton<ClusterPeerAdmissionRepository>();
+builder.Services.AddSingleton<ClusterJoinCollisionRepository>();
 builder.Services.AddSingleton<ClusterReconciliationRepository>();
 builder.Services.AddSingleton<ClusterEntityReconciliation>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
