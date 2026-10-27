@@ -66,8 +66,10 @@ public sealed class TaskOwnershipTests
     {
         await using var local=await Fixture.CreateAsync();await using var peer=await Fixture.CreateAsync();await local.AdmitAsync(peer);
         var id=await local.AddAsync(assign:false);Assert.False(await local.Ownership.PrepareClaimsAsync(default));Assert.Null(await local.Ownership.GetAsync(id,default));
+        Assert.Contains("peer_catch_up_unconfirmed:" + peer.Identity.PeerId.ToString("D"), await local.Ownership.ReadinessBlockersAsync(default));
         local.Health.Enable();local.Health.ConfirmCatchUp("http://peer/",peer.Identity.PeerId,true);
         Assert.True(await local.Ownership.PrepareClaimsAsync(default));Assert.Equal(local.Identity.PeerId,(await local.Ownership.GetAsync(id,default))!.OwnerPeerId);
+        Assert.Empty(await local.Ownership.ReadinessBlockersAsync(default));
         // An established owner keeps its local queue during a later partition.
         local.Health.Fail("http://peer/","partition");Assert.True(await local.Ownership.PrepareClaimsAsync(default));
         await local.Ownership.InitializeAsync(default);Assert.False(await local.Ownership.PrepareClaimsAsync(default));

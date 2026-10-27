@@ -323,6 +323,15 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             }
             var pluginSettings=item.Settings is {} savedSettings?pluginConfigurations.ReadSnapshot(savedSettings)
                 :await pluginConfigurations.ResolveEffectiveAsync(item.Flow.Id,item.Flow.Nodes.Select(node=>node.Component.PluginId).Where(id=>id!="base"),c,tx,ct);
+            if (PluginConfigurationPrerequisites.FindMissing(item.Flow, components.Plugins, pluginSettings).FirstOrDefault() is { } missing)
+            {
+                await ExecutionRepository.RecordInTransactionAsync(item.Id,
+                    new(Guid.NewGuid(), item.Revision, "failed", worker, null,
+                        $"{missing.Code} : bloc {missing.NodeId}, plugin {missing.PluginId}, paramètre requis {missing.FieldId}."), c, tx, ct);
+                await ReleaseAsync(item.Id, c, tx, ct);
+                await tx.CommitAsync(ct);
+                return new(null);
+            }
             pluginSettings=components.ForWorker(pluginSettings);
             var segmentEntry=item.Checkpoint?.NextNodeId??(item.Checkpoint is null?item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id:null);
             if(segmentEntry is not null && item.Probe is null)
@@ -395,7 +404,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 await prepare.ExecuteNonQueryAsync(ct);
             }
             if(ownership is not null) await ownership.SaveCheckpointAsync(item.Id,c,tx,ct);
-            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,SourceWriteGuardsSupported:sourceWrites is not null));
+            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,SourceWriteGuardsSupported:sourceWrites is not null,VerifyPublicationAccess:needsWrite));
         }
         return new(null, candidates.Count == CandidatePageSize
             ? new(candidates[^1].QueuedAt, candidates[^1].Id) : null);

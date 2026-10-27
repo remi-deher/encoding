@@ -62,3 +62,5 @@ Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `b
 
 ## Analyse pendant la composition vidéo
 Depuis `video` 1.3.0, la composition FFmpeg réutilise une seule analyse de son entrée pour sélection, resize et politique vidéo ; un échec d'analyse vidéo bloque au lieu d'être ignoré. Les composants gardent `compatiblePluginVersions` pour 1.2.0 et les versions précédemment acceptées. Les nouveaux flows attendent un worker annonçant le contrat installé ; aucune migration des flows historiques.
+
+Les intégrations officielles présentes dans l’image sont découvertes depuis leurs manifestes sous `/opt/encoding/plugins`, sans déclaration Compose obligatoire. Désactivation globale : `Runtime:BundledPlugins:Enabled=false` ; individuelle : `Runtime:BundledPlugins:<id>:Enabled=false`. Les déclarations explicites `Runtime:Plugins` priment et acceptent `Enabled=false`. Le handshake sous Landlock reste requis avant annonce d’une capacité. L’attribution vérifie les champs obligatoires de la configuration effective des plugins du flow avant traitement, sans diffuser leurs valeurs dans l’erreur.

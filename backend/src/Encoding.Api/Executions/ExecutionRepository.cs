@@ -128,7 +128,8 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
             flow=JsonSerializer.Deserialize<FlowDefinition>(reader.GetString(0),Json)!;
             executionState=reader.GetString(1);
         }
-        var flowNodes=flow.Nodes.ToDictionary(node=>node.Id,StringComparer.Ordinal);
+        // A partial replicated flow must not make durable step history unreadable.
+        var flowNodes=(flow?.Nodes ?? []).ToDictionary(node=>node.Id,StringComparer.Ordinal);
         await using var cmd=dataSource.CreateCommand("""
           SELECT s.node_id,s.invocation_id,s.started_at,s.completed_at,s.checkpoint::text,s.command_logs::text
           FROM execution_steps s WHERE s.execution_id=@id ORDER BY s.started_at,s.node_id

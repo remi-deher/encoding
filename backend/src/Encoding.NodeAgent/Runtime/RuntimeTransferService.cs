@@ -66,6 +66,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
         try
         {
             var original=SafeMediaPaths.Resolve(transfer.Root,transfer.MediaPath);
+            if (transfer.CanWrite && (transfer.Publish || transfer.VerifyPublicationAccess)) await LibraryAccessVerifier.VerifyPublicationAsync(transfer.Root, ct);
             using var mediaLock=transfer.CanWrite?SafeMediaPaths.Lock(original,Path.Combine(options.DataDirectory,"media-locks")):null;
             if(!transfer.Publish)
             {
@@ -144,7 +145,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
             try
             {
                 var status=await client.ExecutionAsync(transfer.ExecutionId,ct);
-                await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/source-failure",new FinishRuntimeExecution(transfer.Epoch,Guid.NewGuid(),status.Revision,"failed","Lecture ou publication du média impossible ; source conservée.",null,null),ct);
+                await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/source-failure",new FinishRuntimeExecution(transfer.Epoch,Guid.NewGuid(),status.Revision,"failed",exception is LibraryAccessException ? exception.Message : transfer.Publish ? "Échec de publication du résultat ; confirmation de publication non obtenue." : "Échec de préparation ou de transfert de la source ; traitement interrompu.",null,null),ct);
             }
             catch(Exception) { }
         }

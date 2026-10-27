@@ -21,6 +21,42 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);await BindIdentityAsync(c,tx,ct);
         await using var reset=Sql.Command("UPDATE task_server_identity SET ready=0",c,tx);await reset.ExecuteNonQueryAsync(ct);await tx.CommitAsync(ct);
     }
+    public async Task<IReadOnlyList<string>> ReadinessBlockersAsync(CancellationToken ct)
+    {
+        var result = new List<string>();
+        await using var c = await db.OpenConnectionAsync(ct);
+        await using var tx = await c.BeginTransactionAsync(System.Data.IsolationLevel.Snapshot, ct);
+        foreach (var (table, code) in new[] {
+            ("cluster_sync_pending_projections", "pending_entity_projections"),
+            ("task_ownership_inbox", "pending_ownership_events"),
+            ("task_coordination_inbox", "pending_coordination_events") })
+        {
+            await using var pending = Sql.Command($"SELECT EXISTS(SELECT 1 FROM {table})", c, tx);
+            if (await pending.ScalarBoolAsync(ct)) result.Add(code);
+        }
+        await using (var stopped = Sql.Command("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@local AND released_at IS NULL)", c, tx))
+        {
+            stopped.Parameters.AddWithValue("local", identity.PeerId);
+            if (await stopped.ScalarBoolAsync(ct)) result.Add("local_peer_neutralized");
+        }
+        bool ready;
+        await using (var state = Sql.Command("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=1)", c, tx))
+            ready = await state.ScalarBoolAsync(ct);
+        if (!ready)
+        await using (var peers = Sql.Command("SELECT a.peer_id FROM cluster_peer_admissions a JOIN cluster_identity i ON i.id=a.cluster_id LEFT JOIN cluster_nodes n ON n.id=a.node_id WHERE a.revoked_at IS NULL AND a.peer_id<>@local AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=a.peer_id AND stopped.released_at IS NULL) AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))", c, tx))
+        {
+            peers.Parameters.AddWithValue("local", identity.PeerId);
+            await using var reader = await peers.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                var peer = reader.GetGuid(0);
+                if (health is null || !health.HasFreshCatchUp(peer, TimeSpan.FromSeconds(45)))
+                    result.Add("peer_catch_up_unconfirmed:" + peer.ToString("D"));
+            }
+        }
+        return result;
+    }
+
     internal async Task<bool> PrepareClaimsAsync(CancellationToken ct)
     {
         await ProjectAsync(ct);

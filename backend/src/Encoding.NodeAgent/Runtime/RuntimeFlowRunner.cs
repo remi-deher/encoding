@@ -46,6 +46,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             var extension=Path.GetExtension(lease.MediaPath); if(string.IsNullOrWhiteSpace(extension)) extension=".mkv";
             var original=directRead?SafeMediaPaths.Resolve(lease.SourceRoot!,lease.MediaPath):Path.Combine(directory,"source"+extension);
+            if (lease.VerifyPublicationAccess && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null)
+                await LibraryAccessVerifier.VerifyPublicationAsync(lease.SourceRoot, job.Token);
             var observed=directRead?MediaFileStamp.Read(original):null;
             RuntimeContext context=lease.Checkpoint?.Context??new(sourceSha??"",extension,new Dictionary<string,JsonElement>(),null,null,[],
                 DirectSource:observed is null?null:new(observed.Bytes,observed.LastWriteUtcTicks));
@@ -789,7 +791,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         catch(Exception exception)
         {
             logger.LogWarning("Exécution {ExecutionId} interrompue : {Type}",lease.ExecutionId,exception.GetType().Name);
-            if(!lost) await FailureAsync("failed",exception is MediaToolException or FlowArtifactReferenceException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
+            if(!lost) await FailureAsync("failed",exception is MediaToolException or FlowArtifactReferenceException or LibraryAccessException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
         }
         finally { job.Cancel(); await renewal; }
 

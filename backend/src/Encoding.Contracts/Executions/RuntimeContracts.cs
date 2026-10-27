@@ -7,7 +7,7 @@ public sealed record EnqueueMediaRequest(Guid Id, Guid LibraryId, string MediaPa
 public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, long Epoch, DateTimeOffset ExpiresAt,
     Guid SourceNodeId, string? SourceRoot, string MediaPath, string? SourceSha256, FlowDefinition Flow, RuntimeCheckpoint? Checkpoint, string EntryNodeId,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
-    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false);
+    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false, bool VerifyPublicationAccess=false);
 public sealed record RuntimeFence(long Epoch);
 public sealed record RuntimeAiSubtitleItem(string Id, string Text);
 public sealed record RuntimeAiSubtitleTranslationRequest(long Epoch, Guid InvocationId, string FlowNodeId,
@@ -22,7 +22,7 @@ public sealed record RuntimeLeaseStatus(bool CancelRequested, int Revision, Date
 public sealed record RuntimeSourceState(string? SourceSha256, IReadOnlyDictionary<string,string>? Inputs = null);
 public sealed record RuntimeTransfer(Guid ExecutionId, long Epoch, string Root, string MediaPath, string? SourceSha256,
     string? ResultSha256, string? ResultExtension, bool Publish, IReadOnlyList<string>? InputPaths = null, string MediaType = "video", bool CanWrite = true, int? ReplacementGraceHours = null,
-    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, RuntimeSourceObservation? Observation = null);
+    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, RuntimeSourceObservation? Observation = null, bool VerifyPublicationAccess = false);
 /// <summary>Garde de publication à consulter avant un remplacement de source (architecture 0059) : composant de plugin à invoquer sur le nœud d'accès.</summary>
 public sealed record RuntimePublicationGuard(string PluginId, string PluginVersion, string ComponentId, string ComponentVersion, int ConfigurationSchemaVersion,
     IReadOnlyDictionary<string,JsonElement> Configuration, IReadOnlyDictionary<string,JsonElement> PluginConfiguration, int MaxWaitMinutes,

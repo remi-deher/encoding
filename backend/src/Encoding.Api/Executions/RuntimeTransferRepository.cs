@@ -4,7 +4,7 @@ using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionStreamBroadcaster? broadcaster=null,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null)
+public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionStreamBroadcaster? broadcaster=null,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null, Encoding.Api.Flows.FlowComponentRegistry? components=null)
 {
     public async Task<IReadOnlyList<RuntimeTransfer>> ListAsync(Guid node,CancellationToken ct)
     {
@@ -20,10 +20,23 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
           ORDER BY e.queued_at LIMIT 20
           """);
         cmd.Parameters.AddWithValue("node",node); await using var r=await cmd.ExecuteReaderAsync(ct); var result=new List<RuntimeTransfer>();
-        while(await r.ReadAsync(ct)) result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetString(2),r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5),r.IsDBNull(6)?null:r.GetString(6),r.GetBoolean(7),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Nodes
-            .Where(n=>n.Configuration.TryGetValue("sourceFile",out var f)&&f.ValueKind==System.Text.Json.JsonValueKind.String&&!string.IsNullOrWhiteSpace(f.GetString()))
-            .Where(n=>!n.Configuration["sourceFile"].GetString()!.StartsWith(Encoding.Contracts.Flows.FlowArtifactReference.Prefix, StringComparison.Ordinal))
-            .Select(n=>RuntimeRepository.NormalizePath(n.Configuration["sourceFile"].GetString())).Distinct().ToArray(),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.MediaType,r.GetBoolean(9),deferPolicy || r.IsDBNull(10)?null:r.GetInt32(10),r.GetGuid(11),Observation:r.IsDBNull(12)?null:System.Text.Json.JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(12),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))?.Context.DirectSource));
+        var json = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        while (await r.ReadAsync(ct))
+        {
+            var flow = System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8), json)!;
+            var inputs = flow.Nodes
+                .Where(n => n.Configuration.TryGetValue("sourceFile", out var file)
+                    && file.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrWhiteSpace(file.GetString()))
+                .Where(n => !n.Configuration["sourceFile"].GetString()!.StartsWith(Encoding.Contracts.Flows.FlowArtifactReference.Prefix, StringComparison.Ordinal))
+                .Select(n => RuntimeRepository.NormalizePath(n.Configuration["sourceFile"].GetString())).Distinct().ToArray();
+            var observation = r.IsDBNull(12) ? null : System.Text.Json.JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(12), json)?.Context.DirectSource;
+            result.Add(new(r.GetGuid(0), r.GetInt64(1), r.GetString(2), r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5),
+                r.IsDBNull(6) ? null : r.GetString(6), r.GetBoolean(7), inputs, flow.MediaType,
+                r.GetBoolean(9), deferPolicy || r.IsDBNull(10) ? null : r.GetInt32(10), r.GetGuid(11),
+                Observation: observation,
+                VerifyPublicationAccess: components is not null && flow.Nodes.Any(n => components.Resolve(n.Component)?.RequiresWriteAccess == true)));
+        }
         return result;
     }
     public async Task<bool> ConfirmAsync(Guid id,Guid source,ConfirmRuntimePublication request,CancellationToken ct)
