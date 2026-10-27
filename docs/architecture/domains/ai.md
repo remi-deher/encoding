@@ -1,6 +1,6 @@
 ---
 domain: ai
-updated: 2026-10-26
+updated: 2026-10-27
 legacy_adr: [0062, 0065, 0071, 0072, 0074, 0077]
 code:
   - backend/src/Encoding.Api/Tools/
@@ -39,6 +39,7 @@ tags: [ia, codex, claude, ollama, session, checkpoint, assistant, générateur d
 ## Assistant et générateur de flows
 - `FlowCatalogPromptBuilder` injecte un catalogue compact (ids, sorties, champs) filtré par type de média ; boucle **générer → valider (`FlowDefinitionValidator`) → auto-réparer** bornée à 2 tentatives, sinon 422 avec motifs. `POST /api/v1/flows/ai/{generate|refactor|explain}`. **Ne publie ni ne persiste rien** : un brouillon validé à relire.
 - Interface : panneau d'assistant unique (widget et menus d'étape), différences de nœuds/connexions, simulation, **Appliquer / Rejeter** ; une proposition obsolète est refusée ([ui.md](ui.md)).
+- Recherche des conversations : `GET /api/v1/tools/ai/assistant/conversations/search?q=…` accepte les requêtes de 2 à 120 caractères, parcourt les 100 conversations les plus récentes du propriétaire authentifié, leurs titres et tours, puis renvoie au plus huit correspondances avec un extrait. La recherche globale ouvre la conversation et, pour une correspondance dans un message, défile jusqu’au tour correspondant.
 - Pour que l'IA se branche correctement, les plugins décrivent sorties et champs ([plugins.md](plugins.md)) ; MCP : [auth-ops.md](auth-ops.md).
 
 ## Invariants

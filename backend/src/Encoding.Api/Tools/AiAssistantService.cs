@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -449,6 +450,85 @@ public sealed class AiAssistantService(
         for (var index = 0; index < page.Length; index++)
             page[index] = page[index] with { CoordinatorId = await cluster.CoordinatorAsync(page[index].Id, ct) };
         return page;
+    }
+
+    public async Task<IReadOnlyList<AiAssistantConversationSearchResult>> SearchAsync(
+        string? query,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        var originalQuery = query?.Trim() ?? string.Empty;
+        var normalizedQuery = NormalizeSearchText(originalQuery);
+        if (normalizedQuery.Length is < 2 or > 120) return [];
+
+        var ownerId = OwnerId(user);
+        var records = (await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix + ownerId + "/", ct))
+            .OrderByDescending(record => record.Conversation.UpdatedAt)
+            .Take(100)
+            .ToArray();
+        var results = new List<AiAssistantConversationSearchResult>(8);
+
+        foreach (var record in records)
+        {
+            ct.ThrowIfCancellationRequested();
+            var conversation = record.Conversation;
+            var sourceLabel = conversation.Source.Label;
+            if (ContainsSearchText(conversation.Title, normalizedQuery)
+                || ContainsSearchText(sourceLabel, normalizedQuery)
+                || ContainsSearchText(conversation.Provider, normalizedQuery)
+                || (conversation.AdditionalSources ?? []).Any(source => ContainsSearchText(source.Label, normalizedQuery)))
+            {
+                results.Add(new(conversation.Id, conversation.Title, conversation.Provider,
+                    sourceLabel, $"Conversation · {sourceLabel} · {conversation.Provider}",
+                    null, null, conversation.UpdatedAt));
+            }
+            else if (await cluster.GetSessionAsync(conversation.Id, ct) is { } session)
+            {
+                for (var turnIndex = 0; turnIndex < session.Turns.Count; turnIndex++)
+                {
+                    var turn = session.Turns[turnIndex];
+                    var userPrompt = record.UserPrompts?.GetValueOrDefault(turn.RequestId) ?? turn.UserPrompt;
+                    var promptMatch = ContainsSearchText(userPrompt, normalizedQuery);
+                    var answerMatch = ContainsSearchText(turn.Content, normalizedQuery);
+                    if (!promptMatch && !answerMatch) continue;
+
+                    var matchedText = promptMatch ? userPrompt : turn.Content;
+                    results.Add(new(conversation.Id, conversation.Title, conversation.Provider,
+                        sourceLabel, SearchSnippet(matchedText, originalQuery), turnIndex,
+                        promptMatch ? "user" : "assistant", conversation.UpdatedAt));
+                    break;
+                }
+            }
+
+            if (results.Count == 8) break;
+        }
+
+        return results;
+    }
+
+    private static bool ContainsSearchText(string? value, string normalizedQuery) =>
+        value is not null && NormalizeSearchText(value).Contains(normalizedQuery, StringComparison.Ordinal);
+
+    private static string NormalizeSearchText(string value)
+    {
+        var decomposed = value.Normalize(NormalizationForm.FormD);
+        var normalized = new StringBuilder(decomposed.Length);
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                normalized.Append(char.ToLowerInvariant(character));
+        }
+        return normalized.ToString().Normalize(NormalizationForm.FormC);
+    }
+
+    private static string SearchSnippet(string value, string query)
+    {
+        var index = NormalizeSearchText(value).IndexOf(NormalizeSearchText(query), StringComparison.Ordinal);
+        if (index < 0) index = 0;
+        var start = Math.Max(0, index - 48);
+        var length = Math.Min(140, value.Length - start);
+        var snippet = value.Substring(start, length).Trim();
+        return $"{(start > 0 ? "…" : string.Empty)}{snippet}{(start + length < value.Length ? "…" : string.Empty)}";
     }
 
     public async Task<bool> DeleteConversationAsync(string id, ClaimsPrincipal user, CancellationToken ct)

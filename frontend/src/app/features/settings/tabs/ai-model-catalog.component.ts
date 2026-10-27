@@ -11,6 +11,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { AuthService } from '../../../core/auth/auth.service';
+import { PageShellContextService } from '../../../core/layout/page-shell-context';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { AiClusterModelCatalog, AiDiscoveredModel } from '../../../shared/models/ai-tools';
@@ -77,7 +78,7 @@ interface ProviderGroup {
             variant="filled"
             label="Rechercher un modèle"
             [value]="query()"
-            (valueChange)="query.set($event)"
+            (valueChange)="updateQuery($event)"
           />
           <mat-button-toggle-group
             aria-label="Filtrer les modèles"
@@ -265,7 +266,15 @@ export class AiModelCatalogComponent implements OnDestroy {
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly query = signal('');
+  private readonly pageShell = inject(PageShellContextService);
+  private readonly localQuery = signal('');
+  protected readonly query = computed(
+    () => this.pageShell.current()?.query?.() ?? this.localQuery(),
+  );
+  protected updateQuery(value: string): void {
+    this.localQuery.set(value);
+    this.pageShell.current()?.onSearchQueryChange?.(value);
+  }
   protected readonly filter = signal<ModelFilter>('all');
   protected readonly collapsed = signal<ReadonlySet<string>>(new Set());
   protected readonly effortLabel = aiEffortLabel;

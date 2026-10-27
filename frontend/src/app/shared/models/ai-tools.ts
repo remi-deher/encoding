@@ -223,6 +223,17 @@ export interface AiAssistantConversationDetail {
   readonly pendingTurn?: AiAssistantPendingTurn | null;
 }
 
+export interface AiAssistantConversationSearchResult {
+  readonly conversationId: string;
+  readonly title: string;
+  readonly provider: string;
+  readonly sourceLabel: string;
+  readonly snippet: string;
+  readonly turnIndex: number | null;
+  readonly messageRole: 'user' | 'assistant' | null;
+  readonly updatedAt: string;
+}
+
 export interface AiAssistantPendingTurn {
   readonly requestId: string;
   readonly userPrompt: string;

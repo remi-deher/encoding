@@ -1,6 +1,6 @@
 ---
 domain: cluster
-updated: 2026-10-24
+updated: 2026-10-27
 legacy_adr: [0001, 0002, 0017, 0034, 0036, 0037, 0038, 0039, 0040, 0041, 0044, 0045, 0046, 0047, 0048, 0050, 0051, 0052, 0053, 0066]
 code:
   - backend/src/Encoding.Api/Nodes/
@@ -55,7 +55,7 @@ Un cluster est un ensemble de nœuds sans coordinateur permanent. Une installati
 - Encodage matériel : pilotes VA-API Intel/AMD dans l'image, NVIDIA via NVIDIA Container Toolkit (`docker-compose.gpu.yml`, optionnel). Un encodeur n'est « utilisable » que si une mire synthétique 64×64 réussit (`ToolCapabilityProbe`). `GpuDeviceSelector` : `ENCODING_GPU_DEVICE`, sinon premier `renderD*`. Un seul périphérique de rendu par nœud.
 
 ### Interface (page Nœuds)
-La page **Nœuds** comporte trois sous-vues : **Ce nœud**, **Cluster** et **Groupes de nœuds**. Les vues Ce nœud et Cluster partagent `NodeOverviewCardComponent` : une carte par nœud, quatre blocs imbriqués (état et activité, matériel déclaré, capacités de traitement, identité et appartenance), puis les bibliothèques avec leur chemin et leur mode d'accès. Les demandes de rattachement restent en tableau et les actions groupées Vidanger/Reprendre/Supprimer appellent l'API unitaire. L'inventaire facultatif annonce aussi l'environnement d'exécution (`docker`, `podman`, `container`, `native`), sans invalider les agents antérieurs qui ne le transmettent pas. L'assistant de rattachement utilise `GuidedSetup` (stepper CDK). Détails visuels dans [ui.md](ui.md).
+La page **Nœuds** comporte trois sous-vues : **Ce nœud**, **Cluster** et **Groupes de nœuds**. Les vues Ce nœud et Cluster partagent `NodeOverviewCardComponent` : une carte par nœud, quatre blocs imbriqués (état et activité, matériel déclaré, capacités de traitement, identité et appartenance), puis les bibliothèques avec leur chemin et leur mode d'accès. Les rôles worker/serveur et l'admission de nouveaux traitements se règlent avec des commutateurs sur les cartes et dans la fiche du nœud ; la confirmation d'un changement de rôle rappelle les effets et les contrôles métier. Les demandes de rattachement restent en tableau et les actions groupées appellent l'API unitaire. L'inventaire facultatif annonce aussi l'environnement d'exécution (`docker`, `podman`, `container`, `native`), sans invalider les agents antérieurs qui ne le transmettent pas. L'assistant de rattachement utilise `GuidedSetup` (stepper CDK). Détails visuels dans [ui.md](ui.md).
 
 ## Invariants
 1. Aucun serveur permanent ; chaque serveur actif sert la gestion depuis sa copie locale, la convergence est éventuelle.

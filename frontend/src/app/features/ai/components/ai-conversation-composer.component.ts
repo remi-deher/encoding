@@ -3,8 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { IconComponent } from '../../../shared/ui/icon.component';
-import { MatInputModule } from '@angular/material/input';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { AiAssistantModelOption } from '../../../shared/models/ai-tools';
 import { AiModelSelectorComponent } from './ai-model-selector.component';
 
@@ -19,18 +17,31 @@ export const AI_ASSISTANT_FILE_ACCEPT =
     MatButtonModule,
     MatMenuModule,
     IconComponent,
-    MatInputModule,
-    MatFormFieldModule,
     AiModelSelectorComponent,
   ],
   template: `
     <form class="composer" (ngSubmit)="send.emit()">
-      <mat-form-field class="prompt-field" appearance="outline" subscriptSizing="dynamic">
+      <div class="prompt-area">
+        @if (attachmentName()) {
+          <div class="file-attachment">
+            <span aria-hidden="true">📎</span>
+            <span class="file-name">{{ attachmentName() }}</span>
+            <button
+              mat-icon-button
+              type="button"
+              aria-label="Retirer le fichier joint"
+              [disabled]="locked()"
+              (click)="clearAttachment()"
+            >
+              ×
+            </button>
+          </div>
+        }
         <textarea
-          matInput
+          class="prompt-input"
           name="prompt"
           aria-label="Votre question"
-          placeholder="Votre question"
+          placeholder="Envoyer un message à l’Assistant"
           rows="2"
           maxlength="4000"
           [ngModel]="text()"
@@ -38,33 +49,22 @@ export const AI_ASSISTANT_FILE_ACCEPT =
           [disabled]="locked()"
           (keydown)="onKeydown($event)"
         ></textarea>
-      </mat-form-field>
-      @if (attachmentName()) {
-        <div class="file-attachment">
-          <span aria-hidden="true">📎</span>
-          <span class="file-name">{{ attachmentName() }}</span>
+      </div>
+      <div class="composer-tools">
+        <div class="composer-attachments">
           <button
             mat-icon-button
             type="button"
-            aria-label="Retirer le fichier joint"
+            class="attach-button"
+            aria-label="Joindre un fichier ou une ressource"
+            title="Joindre un fichier ou une ressource"
             [disabled]="locked()"
-            (click)="clearAttachment()"
+            [matMenuTriggerFor]="attachMenu"
           >
-            ×
+            <app-icon name="add" />
           </button>
+          <span class="composer-hint">Ajouter un fichier ou une ressource</span>
         </div>
-      }
-      <div class="composer-tools">
-        <button
-          mat-icon-button
-          type="button"
-          aria-label="Joindre un fichier ou une ressource"
-          title="Joindre"
-          [disabled]="locked()"
-          [matMenuTriggerFor]="attachMenu"
-        >
-          <app-icon name="add" />
-        </button>
         <mat-menu #attachMenu="matMenu">
           <button mat-menu-item type="button" (click)="fileInput.click()">
             <app-icon name="attach" />
@@ -152,9 +152,27 @@ export const AI_ASSISTANT_FILE_ACCEPT =
       container-type: inline-size;
     }
     .composer {
-      padding: var(--space-2);
-      background: var(--surface-container-low);
+      display: grid;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--outline-variant);
       border-radius: var(--radius-xl);
+      background: var(--surface-container);
+      box-shadow: var(--elevation-1);
+      transition:
+        border-color 160ms var(--motion-emphasized),
+        box-shadow 160ms var(--motion-emphasized),
+        background-color 160ms var(--motion-emphasized);
+    }
+    .composer:focus-within {
+      border-color: var(--accent-strong);
+      background: var(--surface-container-high);
+      box-shadow: 0 0 0 1px var(--accent-strong), var(--elevation-1);
+    }
+    .prompt-area {
+      display: grid;
+      gap: var(--space-1);
+      min-width: 0;
     }
     .visually-hidden {
       position: absolute;
@@ -173,7 +191,7 @@ export const AI_ASSISTANT_FILE_ACCEPT =
       gap: var(--space-2);
       width: fit-content;
       max-width: 100%;
-      margin: 0 0 var(--space-2) var(--space-2);
+      margin: 0;
       padding: 0 var(--space-2);
       border-radius: var(--radius-md);
       background: var(--surface-container-highest);
@@ -187,56 +205,88 @@ export const AI_ASSISTANT_FILE_ACCEPT =
     .file-attachment button {
       flex: 0 0 auto;
     }
-    .prompt-field {
+    .prompt-input {
+      display: block;
       width: 100%;
-    }
-    textarea {
+      box-sizing: border-box;
+      min-height: var(--touch-target);
+      max-height: calc(var(--space-6) + var(--space-6));
+      padding: var(--space-2) 0;
+      border: 0;
       resize: none;
-      min-height: 3rem;
-      max-height: 8rem;
+      overflow-y: auto;
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      line-height: 1.5;
+      outline: none;
+    }
+    .prompt-input::placeholder {
+      color: var(--text-muted);
+      opacity: 1;
+    }
+    .prompt-input:disabled {
+      opacity: 0.7;
     }
     .composer-tools {
       display: flex;
       align-items: center;
-      flex-wrap: wrap;
-      gap: var(--space-1);
+      min-width: 0;
+      gap: var(--space-2);
+    }
+    .composer-attachments {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .attach-button {
+      width: var(--touch-target);
+      height: var(--touch-target);
+      border-radius: var(--radius-pill);
+      background: var(--surface-container-highest);
+    }
+    .composer-hint {
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: var(--font-label);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     app-ai-model-selector {
-      flex: 1 1 16rem;
-      order: 1;
-    }
-    .composer-tools > button:first-child {
-      order: 2;
-    }
-    .composer-tools > button:not(:first-child):not(.send-button) {
-      order: 3;
+      flex: 0 1 auto;
+      min-width: 0;
+      margin-left: auto;
     }
     .send-button {
-      flex: 0 0 40px;
-      margin-left: auto;
+      flex: 0 0 var(--touch-target);
+      width: var(--touch-target);
+      height: var(--touch-target);
+      margin-left: 0;
+      background: var(--accent-strong);
+      color: var(--on-accent, #fff);
     }
     @container (max-width: 420px) {
       .composer-tools {
         display: grid;
-        grid-template-columns: 40px minmax(0, 1fr) 40px;
+        grid-template-columns: minmax(0, 1fr) var(--touch-target);
+        gap: var(--space-1);
       }
       app-ai-model-selector {
-        grid-column: 1/-1;
+        grid-column: 1 / -1;
         grid-row: 1;
+        margin: 0 0 var(--space-1);
       }
-      .composer-tools > button:first-child {
-        grid-column: 1;
-        grid-row: 2;
-      }
-      .composer-tools > button:not(:first-child):not(.send-button) {
+      .composer-attachments { grid-column: 1; grid-row: 2; }
+      .send-button {
         grid-column: 2;
         grid-row: 2;
-        justify-self: end;
       }
-      .send-button {
-        grid-column: 3;
-        grid-row: 2;
-      }
+      .composer-hint { display: none; }
+      .composer { padding: var(--space-2) var(--space-3); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .composer { transition: none; }
     }
   `,
 })

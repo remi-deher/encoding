@@ -1,12 +1,13 @@
 :host {
   position: sticky;
   top: calc(var(--shell-header-sticky-offset, 84px) + var(--space-2));
-  z-index: 4;
+  z-index: 10;
   display: block;
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
   margin-bottom: var(--space-4);
+  background: transparent;
 }
 
 .subnav-template {
@@ -16,17 +17,8 @@
   width: 100%;
   min-width: 0;
   padding-block: var(--space-1);
-  border-radius: var(--radius-xl);
   background: transparent;
   pointer-events: none;
-  transition:
-    background-color 160ms var(--motion-spring-standard),
-    box-shadow 160ms var(--motion-spring-standard);
-}
-
-:host(.is-stuck) .subnav-template {
-  background: var(--page-background);
-  box-shadow: var(--elevation-1);
 }
 
 .subnav-template-info,
@@ -85,11 +77,5 @@
   .subnav-template-actions {
     grid-column: 2;
     grid-row: 2;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .subnav-template {
-    transition: none;
   }
 }

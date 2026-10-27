@@ -40,10 +40,10 @@ import { aiEffortLabel, aiModelKey, aiTypeLabel } from './ai-model-selection';
           <circle cx="15" cy="7" r="2" />
           <circle cx="9" cy="17" r="2" />
         </svg>
-        <span>Modèle</span>
         <span class="model-current">{{
           selected()?.label ?? unavailableModel() ?? 'Indisponible'
         }}</span>
+        <span class="model-effort">{{ selectedEffortLabel() }}</span>
         <svg
           class="model-chevron"
           [class.is-open]="settingsOpen()"
@@ -194,6 +194,16 @@ import { aiEffortLabel, aiModelKey, aiTypeLabel } from './ai-model-selection';
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--text-secondary);
+    }
+    .model-effort {
+      flex: 0 0 auto;
+      color: var(--text-muted);
+      font-size: var(--font-label);
+      white-space: nowrap;
+    }
+    @container (max-width: 420px) {
+      .model-button { width: 100%; }
+      .model-current { flex: 1 1 auto; text-align: left; }
     }
     .model-chevron {
       flex: 0 0 auto;

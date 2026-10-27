@@ -19,6 +19,9 @@ public static class AiAssistantEndpoints
         group.MapGet("/conversations", async (HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.ListAsync(http.User, ct))));
 
+        group.MapGet("/conversations/search", async (string? q, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.SearchAsync(q, http.User, ct))));
+
         group.MapGet("/activity", async (HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.ActivityAsync(http.User, ct))));
 

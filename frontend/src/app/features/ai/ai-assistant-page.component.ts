@@ -1,13 +1,14 @@
 import { IconComponent } from '../../shared/ui/icon.component';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { map, Observable } from 'rxjs';
+import { map, Observable, Subscription } from 'rxjs';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
 import {
   AI_ASSISTANT_FILE_ACCEPT,
   AiConversationComposerComponent,
 } from './components/ai-conversation-composer.component';
+import { AiConversationHistoryComponent } from './components/ai-conversation-history.component';
 import { aiEffortLabel, aiModelKey } from './components/ai-model-selection';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
@@ -35,6 +36,7 @@ import { MatDialog } from '@angular/material/dialog';
 import {
   AiNodeAvailability,
   AiAssistantConversation,
+  AiAssistantConversationSearchResult,
   AiAssistantConversationDetail,
   AiAssistantActionProposal,
   AiAssistantSource,
@@ -60,6 +62,10 @@ import { FlowValidation } from '../../shared/services/flow-validation';
 import { AuthService } from '../../core/auth/auth.service';
 import { createUuid } from '../../shared/utils/uuid';
 import { AssistantWorkspaceTemplateComponent } from '../../shared/templates/assistant-workspace-template.component';
+import {
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
 
 type AssistantResourceType = 'flow' | 'execution' | 'node' | 'library';
 interface AssistantResourceOption {
@@ -81,6 +87,7 @@ interface AssistantResourceOption {
     MatProgressSpinnerModule,
     MatSelectModule,
     AiConversationComposerComponent,
+    AiConversationHistoryComponent,
     AssistantWorkspaceTemplateComponent,
     MatChipsModule,
     MatMenuModule,
@@ -108,6 +115,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   protected readonly compact = toSignal(
     inject(BreakpointObserver)
       .observe('(max-width: 760px)')
@@ -151,6 +159,8 @@ export class AiAssistantPageComponent implements OnDestroy {
   });
   private readonly followTail = signal(true);
   private readonly messageThread = viewChild<ElementRef<HTMLElement>>('messageThread');
+  protected readonly searchTarget = signal<{ turnIndex: number; role: 'user' | 'assistant' } | null>(null);
+  protected readonly highlightedTurn = signal<{ turnIndex: number; role: 'user' | 'assistant' } | null>(null);
   protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly flows = signal<readonly FlowSummary[]>([]);
@@ -158,7 +168,28 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly nodes = signal<readonly NodeResponse[]>([]);
   protected readonly libraries = signal<readonly LibraryResponse[]>([]);
   protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
-  private readonly aiNodes = signal<readonly AiNodeAvailability[]>([]);
+  protected readonly searchQuery = signal('');
+  protected readonly searchingConversations = signal(false);
+  private readonly assistantSearchResults = signal<readonly AiAssistantConversationSearchResult[]>([]);
+  private readonly assistantSearchResultsQuery = signal('');
+  protected readonly filteredConversations = computed(() => {
+    const query = this.normalizeSearchText(this.searchQuery());
+    if (query.length > 120) return [];
+    const resultIds = new Set(
+      this.assistantSearchResultsQuery() === query
+        ? this.assistantSearchResults().map((result) => result.conversationId)
+        : [],
+    );
+    return this.conversations().filter(
+      (conversation) =>
+        !query ||
+        resultIds.has(conversation.id) ||
+        [conversation.title, conversation.provider, conversation.source.label].some((value) =>
+          this.normalizeSearchText(value).includes(query),
+        ),
+    );
+  });
+  protected readonly aiNodes = signal<readonly AiNodeAvailability[]>([]);
   protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
   readonly conversationId = computed(() => this.detail()?.conversation.id ?? null);
   protected readonly assistantOptions = signal<AiAssistantOptions | null>(null);
@@ -254,14 +285,31 @@ export class AiAssistantPageComponent implements OnDestroy {
   private requestSelection: AiTurnModelSelection | null = null;
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
   private optionsPollTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchRequest: Subscription | null = null;
 
   ngOnDestroy(): void {
     if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
     this.stopProgressPolling();
     if (this.optionsPollTimer !== null) clearTimeout(this.optionsPollTimer);
+    if (this.searchTimer !== null) clearTimeout(this.searchTimer);
+    this.searchRequest?.unsubscribe();
   }
 
   constructor() {
+    afterNextRender(() => {
+      // Le même composant vit aussi dans l’assistant flottant : seul l’écran de route
+      // possède le contexte de recherche global.
+      if (this.panelMode()) return;
+      this.destroyRef.onDestroy(
+        this.pageShellContext.register({
+          searchPlaceholder: 'Rechercher dans les conversations IA…',
+          query: this.searchQuery,
+          onSearchQueryChange: (query) => this.updateSearchQuery(query),
+          searchResults: (query) => this.conversationSearchResults(query),
+        }),
+      );
+    });
     this.loadFlows();
     this.loadExecutions();
     this.loadNodes();
@@ -284,9 +332,100 @@ export class AiAssistantPageComponent implements OnDestroy {
       this.detail();
       this.pendingPrompt();
       this.sending();
+      const target = this.searchTarget();
       const thread = this.messageThread()?.nativeElement;
+      if (thread && target) {
+        requestAnimationFrame(() => {
+          const message = thread.querySelector<HTMLElement>(
+            `[data-turn-index="${target.turnIndex}"][data-message-role="${target.role}"]`,
+          );
+          message?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          this.highlightedTurn.set(target);
+          this.followTail.set(false);
+          this.searchTarget.set(null);
+        });
+        return;
+      }
       if (thread && this.followTail()) thread.scrollTop = thread.scrollHeight;
     });
+  }
+
+  private conversationSearchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = this.normalizeSearchText(query);
+    if (normalized.length < 2 || normalized.length > 120) return [];
+    const knownMatches = this.conversations()
+      .filter((conversation) =>
+        [conversation.title, conversation.provider, conversation.source.label].some((value) =>
+          this.normalizeSearchText(value).includes(normalized),
+        ),
+      )
+      .slice(0, 8);
+    const results: PageShellSearchResult[] = knownMatches.map((conversation) => ({
+      id: `assistant-conversation:${conversation.id}:conversation`,
+      label: conversation.title,
+      description: `${conversation.provider} · ${conversation.source.label}`,
+      group: 'Conversations IA',
+      glyph: '✦',
+      run: () => this.openConversation(conversation.id),
+    }));
+    const resultIds = new Set(knownMatches.map((conversation) => conversation.id));
+    if (this.assistantSearchResultsQuery() !== normalized) return results;
+    for (const result of this.assistantSearchResults()) {
+      if (resultIds.has(result.conversationId)) continue;
+      results.push({
+        id: `assistant-conversation:${result.conversationId}:${result.turnIndex ?? 'conversation'}`,
+        label: result.title,
+        description: result.snippet,
+        group: 'Conversations IA',
+        glyph: result.turnIndex === null ? '✦' : '❞',
+        run: () =>
+          this.openConversation(
+            result.conversationId,
+            true,
+            result.turnIndex !== null && result.messageRole
+              ? { turnIndex: result.turnIndex, role: result.messageRole }
+              : null,
+          ),
+      });
+    }
+    return results.slice(0, 8);
+  }
+
+  private updateSearchQuery(query: string): void {
+    this.searchQuery.set(query);
+    const normalized = this.normalizeSearchText(query);
+    this.assistantSearchResults.set([]);
+    this.assistantSearchResultsQuery.set(normalized);
+    this.searchingConversations.set(normalized.length >= 2 && normalized.length <= 120);
+    if (this.searchTimer !== null) clearTimeout(this.searchTimer);
+    this.searchRequest?.unsubscribe();
+    this.searchRequest = null;
+    if (normalized.length < 2 || normalized.length > 120) return;
+
+    this.searchTimer = window.setTimeout(() => {
+      this.searchRequest = this.aiTools.searchAssistantConversations(query.trim()).subscribe({
+        next: (results) => {
+          if (this.normalizeSearchText(this.searchQuery()) === normalized) {
+            this.assistantSearchResults.set(results);
+            this.searchingConversations.set(false);
+          }
+        },
+        error: () => {
+          if (this.normalizeSearchText(this.searchQuery()) === normalized) {
+            this.assistantSearchResults.set([]);
+            this.searchingConversations.set(false);
+          }
+        },
+      });
+    }, 240);
+  }
+
+  private normalizeSearchText(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('fr-FR')
+      .trim();
   }
 
   protected onThreadScroll(): void {
@@ -308,6 +447,8 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.closePreview();
     this.historyOpen.set(false);
     this.followTail.set(true);
+    this.searchTarget.set(null);
+    this.highlightedTurn.set(null);
     this.detail.set(null);
     this.selectedResource.set(null);
     this.errorMessage.set(null);
@@ -698,20 +839,28 @@ export class AiAssistantPageComponent implements OnDestroy {
     return execution != null && ['queued', 'running'].includes(execution.state);
   }
 
-  protected openConversation(id: string, updateUrl = true): void {
+  protected openConversation(
+    id: string,
+    updateUrl = true,
+    target: { turnIndex: number; role: 'user' | 'assistant' } | null = null,
+  ): void {
+    if (this.loadingDetail()) return;
     this.closePreview();
     this.selectedResource.set(null);
     this.removeAttachment();
     this.pendingActionProposal.set(null);
     this.historyOpen.set(false);
     this.followTail.set(true);
-    if (this.loadingDetail()) return;
+    this.searchTarget.set(null);
+    this.highlightedTurn.set(null);
     if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
     this.loadingDetail.set(true);
     this.errorMessage.set(null);
     this.aiTools.getAssistantConversation(id).subscribe({
       next: (detail) => {
         this.detail.set(detail);
+        this.searchTarget.set(target);
+        this.highlightedTurn.set(target);
         this.selectedModelKey.set(this.modelOptionKey(detail.conversation));
         this.selectedReasoningEffort.set(detail.conversation.reasoningEffort ?? null);
         this.requestSelection = null;
@@ -769,40 +918,6 @@ export class AiAssistantPageComponent implements OnDestroy {
       .subscribe((confirmed: boolean) => {
         if (confirmed) this.deleteConversation(conversation);
       });
-  }
-
-  protected readonly renaming = signal<string | null>(null);
-  protected readonly renameDraft = signal('');
-
-  protected startRename(conversation: AiAssistantConversation): void {
-    this.renameDraft.set(conversation.title);
-    this.renaming.set(conversation.id);
-  }
-
-  protected cancelRename(): void {
-    this.renaming.set(null);
-  }
-
-  protected saveRename(): void {
-    const id = this.renaming();
-    if (!id) return;
-    this.renaming.set(null);
-    const title = this.renameDraft().trim();
-    const current = this.detail()?.conversation;
-    if (!title || !current || current.id !== id || title === current.title) return;
-    this.errorMessage.set(null);
-    this.aiTools.renameAssistantConversation(id, title).subscribe({
-      next: (conversation) => {
-        this.detail.update((detail) =>
-          detail && detail.conversation.id === id ? { ...detail, conversation } : detail,
-        );
-        this.conversations.update((items) =>
-          items.map((item) => (item.id === id ? { ...item, ...conversation } : item)),
-        );
-      },
-      error: (error: HttpErrorResponse) =>
-        this.errorMessage.set(this.errorText(error, 'Impossible de renommer cette conversation.')),
-    });
   }
 
   private deleteConversation(conversation: AiAssistantConversation): void {

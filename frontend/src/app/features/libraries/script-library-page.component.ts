@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -27,6 +28,7 @@ import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import { FlowScripts } from '../../shared/services/flow-scripts';
+import { PageShellContextService } from '../../core/layout/page-shell-context';
 import {
   FlowScriptDetails,
   FlowScriptDraft,
@@ -336,6 +338,8 @@ export class ScriptLibraryPageComponent {
   );
   private readonly versionCodes = signal<Readonly<Record<number, FlowScriptVersion>>>({});
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   protected readonly filteredScripts = computed(() => {
     const query = this.query().trim().toLocaleLowerCase();
     return query
@@ -364,6 +368,13 @@ export class ScriptLibraryPageComponent {
   });
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans les scripts…',
+        query: this.query,
+        onSearchQueryChange: (query) => this.query.set(query),
+      }),
+    );
     effect(() => {
       if (this.busy()) this.form.disable({ emitEvent: false });
       else this.form.enable({ emitEvent: false });

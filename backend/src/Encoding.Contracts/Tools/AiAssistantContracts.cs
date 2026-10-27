@@ -66,6 +66,16 @@ public sealed record AiAssistantConversationDetail(
     IReadOnlyList<AiAssistantTurn> Turns,
     AiAssistantPendingTurn? PendingTurn = null);
 
+public sealed record AiAssistantConversationSearchResult(
+    string ConversationId,
+    string Title,
+    string Provider,
+    string SourceLabel,
+    string Snippet,
+    int? TurnIndex,
+    string? MessageRole,
+    DateTimeOffset UpdatedAt);
+
 public sealed record AiAssistantPendingTurn(Guid RequestId, string UserPrompt, bool IsRunning);
 
 public sealed record AiAssistantMessageRequest(

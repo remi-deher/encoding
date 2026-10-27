@@ -580,6 +580,7 @@ export class PluginCatalogPageComponent {
     this.destroyRef.onDestroy(
       this.pageShellContext.register({
         searchPlaceholder: 'Rechercher dans Plugins & outils…',
+        query: this.searchQuery,
         onSearchQueryChange: (query) => this.searchQuery.set(query),
         searchResults: (query) => this.extensionSearchResults(query),
         actions: [

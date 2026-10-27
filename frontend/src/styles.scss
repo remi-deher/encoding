@@ -356,6 +356,10 @@ html:not([data-palette])[data-theme='dark'] {
   max-height: calc(100dvh - 24px) !important;
 }
 
+.compact-confirmation-dialog-panel {
+  width: min(400px, calc(100vw - 24px)) !important;
+}
+
 /* Gabarit de modale : bandeau sémantique (neutre, danger, information), corps, actions en pilules. */
 .app-dialog {
   --dialog-tone: var(--accent-soft);

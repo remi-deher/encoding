@@ -2,9 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import { NodeMode, NodeModeDialogData, NodeModeStatus } from '../models/node-mode';
+import { NodeMode, NodeModeStatus } from '../models/node-mode';
 import { ConfirmationDialogComponent } from '../ui/confirmation-dialog.component';
-import { NodeModeDialogComponent } from '../ui/node-mode-dialog.component';
 import { NotificationService } from './notification.service';
 
 /**
@@ -17,56 +16,21 @@ export class NodeModeController {
   private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
 
-  /** Retourne le mode appliqué, ou null si l'utilisateur annule ou si l'opération échoue (déjà notifiée). */
-  async change(endpoint: string): Promise<NodeModeStatus | null> {
-    let status: NodeModeStatus;
-    try {
-      status = await firstValueFrom(this.http.get<NodeModeStatus>(endpoint));
-    } catch {
-      this.notifications.show('Impossible de lire le mode de ce nœud.');
-      return null;
-    }
-    const mode = await firstValueFrom(
-      this.dialog
-        .open<NodeModeDialogComponent, NodeModeStatus, NodeMode>(NodeModeDialogComponent, {
-          data: status,
-        })
-        .afterClosed(),
-    );
-    if (!mode) return null;
-    if (status.server && !mode.server && !(await this.confirmServerStop())) return null;
-    try {
-      const applied = await firstValueFrom(this.http.put<NodeModeStatus>(endpoint, mode));
-      this.notifications.show(
-        'Mode appliqué. Les fonctions retirées s’arrêtent dans quelques secondes.',
-      );
-      return applied;
-    } catch (error) {
-      this.notifications.show(this.errorMessage(error));
-      return null;
-    }
-  }
-
-  /**
-   * Demande le mode d'un autre nœud du cluster. Le serveur l'enregistre et le nœud l'applique à son prochain signal :
-   * retourne true si la demande est acceptée, false si l'utilisateur annule ou si elle est refusée (déjà notifié).
-   */
-  async request(
+  /** Modifie directement une fonction à la suite d'un switch dans la fiche du nœud. */
+  async requestRole(
     nodeId: string,
     nodeName: string,
     current: NodeMode,
+    role: 'server' | 'worker',
+    enabled: boolean,
     online: boolean,
   ): Promise<boolean> {
-    const data: NodeModeDialogData = { ...current, managed: true, remoteNodeName: nodeName };
-    const mode = await firstValueFrom(
-      this.dialog
-        .open<NodeModeDialogComponent, NodeModeDialogData, NodeMode>(NodeModeDialogComponent, {
-          data,
-        })
-        .afterClosed(),
-    );
-    if (!mode) return false;
-    if (current.server && !mode.server && !(await this.confirmServerStop(nodeName))) return false;
+    const mode: NodeMode = { ...current, [role]: enabled };
+    if (!mode.server && !mode.worker) {
+      this.notifications.show('Le nœud doit garder au moins une fonction : serveur ou worker.');
+      return false;
+    }
+    if (!enabled && !(await this.confirmRoleDeactivation(role, nodeName))) return false;
     try {
       await firstValueFrom(this.http.put(`/api/v1/nodes/${nodeId}/mode`, mode));
       this.notifications.show(
@@ -94,17 +58,21 @@ export class NodeModeController {
     }
   }
 
-  confirmServerStop(nodeName?: string): Promise<boolean> {
+  confirmRoleDeactivation(role: 'server' | 'worker', nodeName?: string): Promise<boolean> {
+    const subject = nodeName ? ` de « ${nodeName} »` : ' de ce nœud';
+    const server = role === 'server';
     return firstValueFrom(
       this.dialog
         .open<ConfirmationDialogComponent, unknown, boolean>(ConfirmationDialogComponent, {
           data: {
-            title: nodeName
-              ? `Arrêter le serveur de « ${nodeName} » ?`
-              : 'Arrêter le serveur de ce nœud ?',
-            message:
-              'L’interface et l’API de ce nœud s’arrêtent. Les workers rattachés à ce serveur le retrouvent s’il revient ou passent par un autre serveur du cluster.',
-            confirmLabel: 'Arrêter le serveur',
+            compact: true,
+            variant: 'danger',
+            eyebrow: 'Désactivation',
+            title: `Désactiver la fonction ${server ? 'serveur' : 'worker'}${subject} ?`,
+            message: server
+              ? 'L’interface et l’API de ce nœud s’arrêteront. Les workers pourront le retrouver s’il revient ou utiliser un autre serveur du cluster.'
+              : 'Ce nœud ne recevra plus de nouvelles tâches de traitement après l’application du changement.',
+            confirmLabel: `Désactiver ${server ? 'serveur' : 'worker'}`,
           },
         })
         .afterClosed(),

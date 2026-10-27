@@ -209,7 +209,9 @@ button.assistant-launcher {
   height: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  overflow: hidden;
+  // Clip page overflow without creating a second scroll container. The page region
+  // owns vertical scrolling so shared sticky subnavs follow it consistently.
+  overflow: clip;
 }
 .application-sidebar {
   width: var(--shell-sidebar-expanded-width);
@@ -352,7 +354,7 @@ button.assistant-launcher {
 .application-header {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 20;
   box-sizing: border-box;
   width: 100%;
   max-width: var(--content-wide-width);

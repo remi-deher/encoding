@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -18,6 +19,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { FlowResourceDetails, FlowResourceSummary } from '../../shared/models/flow-resources';
 import { FlowResources } from '../../shared/services/flow-resources';
+import { PageShellContextService } from '../../core/layout/page-shell-context';
 import { NotificationService } from '../../shared/services/notification.service';
 import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
@@ -215,6 +217,8 @@ export class ResourceLibraryPageComponent {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   private readonly notifications = inject(NotificationService);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
@@ -304,6 +308,13 @@ export class ResourceLibraryPageComponent {
   );
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans les ressources…',
+        query: this.query,
+        onSearchQueryChange: (query) => this.query.set(query),
+      }),
+    );
     void this.load();
     // La fiche est portée par l'URL (?resource=<id>), comme pour les modèles de flow.
     effect(() => {

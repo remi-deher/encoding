@@ -1,15 +1,3 @@
-.catalog-navigation-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.catalog-navigation-wrapper:empty {
-  display: none;
-}
-
 .catalog-summary {
   display: grid;
   gap: var(--space-4);

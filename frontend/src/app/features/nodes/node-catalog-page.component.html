@@ -44,10 +44,15 @@
   [drawerModal]="true"
   (detailClosed)="pageTab() === 'groups' ? closeGroupDetail() : onDetailClosed()"
   (actionClosed)="pageTab() === 'groups' ? closeGroupForm() : closeCreateNode()"
-  [showToolbar]="pageTab() === 'cluster' && !local.standalone() && clusterIdentity() !== null"
+  [showToolbar]="
+    pageTab() === 'cluster' &&
+    !local.standalone() &&
+    clusterIdentity() !== null &&
+    filtersOpen()
+  "
   filterLabel="Membres du cluster actuel"
-  [searchLayout]="pageTab() === 'cluster' ? 'centered-sheet' : 'end'"
-  searchLabel="Rechercher un nœud par nom ou identifiant"
+  searchLayout="end"
+  searchLabel=""
   [searchQuery]="nodeSearchQuery()"
   (searchQueryChange)="nodeSearchQuery.set($event)"
   [filterCount]="activeFilters().length"
@@ -74,28 +79,30 @@
       }
     </div>
   }
-  @if (pageTab() === 'cluster' && isAdmin() && !local.standalone() && clusterIdentity()) {
+  @if (pageTab() === 'cluster' && isAdmin()) {
     <div subnav-actions class="node-subnav-actions">
-      @if (enrollmentRows().length > 0) {
-        <button matButton="outlined" type="button" (click)="focusEnrollmentRequests()">
-          Demandes <span class="node-action-count">{{ enrollmentRows().length }}</span>
+      @if (!local.standalone() && clusterIdentity()) {
+        @if (enrollmentRows().length > 0) {
+          <button matButton="outlined" type="button" (click)="focusEnrollmentRequests()">
+            Demandes <span class="node-action-count">{{ enrollmentRows().length }}</span>
+          </button>
+        }
+        <button matButton="outlined" type="button" [matMenuTriggerFor]="clusterActions">
+          Actions du cluster
         </button>
+        <mat-menu #clusterActions="matMenu">
+          <button mat-menu-item [disabled]="!local.canJoin()" (click)="local.openJoin()">
+            Changer de cluster pour ce nœud
+          </button>
+          <button
+            mat-menu-item
+            [disabled]="local.busy() || local.agentUnavailable() || !local.status()?.clusterId"
+            (click)="local.leave()"
+          >
+            {{ local.pending() ? 'Annuler la demande' : 'Quitter le cluster avec ce nœud' }}
+          </button>
+        </mat-menu>
       }
-      <button matButton="outlined" type="button" [matMenuTriggerFor]="clusterActions">
-        Actions du cluster
-      </button>
-      <mat-menu #clusterActions="matMenu">
-        <button mat-menu-item [disabled]="!local.canJoin()" (click)="local.openJoin()">
-          Changer de cluster pour ce nœud
-        </button>
-        <button
-          mat-menu-item
-          [disabled]="local.busy() || local.agentUnavailable() || !local.status()?.clusterId"
-          (click)="local.leave()"
-        >
-          {{ local.pending() ? 'Annuler la demande' : 'Quitter le cluster avec ce nœud' }}
-        </button>
-      </mat-menu>
     </div>
   }
   <ng-container catalogue-summary>
@@ -285,12 +292,18 @@
         [statusTone]="localOverviewStatus().tone"
         [nodeId]="localNode()?.id ?? 'local-node'"
         [roles]="localOverviewRoles()"
+        [roleSwitches]="localRoleSwitches()"
+        [roleControlNote]="localRoleControlNote()"
+        [admissionEnabled]="localAdmissionEnabled()"
+        [admissionDisabled]="localAdmissionDisabled()"
         [meta]="localOverviewMeta()"
         [notices]="localSheet().notices"
         [sections]="localSheet().sections"
         [libraries]="localOverviewLibraries()"
         [libraryAccessState]="libraryAccessState()"
         (actionSelected)="onLocalSheetAction($event)"
+        (roleToggle)="local.setRole($event.role, $event.enabled)"
+        (admissionChange)="setLocalAdmission($event)"
       />
     } @else if (local.standalone()) {
       <app-detail-card-grid
@@ -360,6 +373,9 @@
               [statusTone]="card.statusTone"
               [nodeId]="card.id"
               [roles]="card.roles"
+              [roleSwitches]="card.roleSwitches"
+              [admissionEnabled]="card.admissionEnabled"
+              [admissionDisabled]="card.admissionDisabled"
               [meta]="card.meta"
               [sections]="card.sections"
               [libraries]="card.libraries"
@@ -371,6 +387,8 @@
               [openable]="true"
               (selectedChange)="toggleMember(card.id, $event)"
               (actionSelected)="onMemberCardAction(card.id, $event)"
+              (roleToggle)="setMemberRole(card.id, $event.role, $event.enabled)"
+              (admissionChange)="setMemberAdmission(card.id, $event)"
               (open)="openNodeCard(card.id)"
             />
           }
@@ -381,13 +399,43 @@
     }
   </div>
   <ng-template #detailHeaderActions>
-    @if (isAdmin() && selectedNode()) {
-      <app-drawer-action-button
-        label="Nom et étiquettes"
-        variant="outlined"
-        (activated)="editSelectedNodeIdentity()"
-      />
-      <app-drawer-action-button label="Changer le mode" (activated)="changeSelectedNodeMode()" />
+    @if (isAdmin()) {
+      @if (rawNode(); as node) {
+        @if (admissionEnabledFor(node) !== null) {
+          <mat-slide-toggle
+            [checked]="admissionEnabledFor(node) ?? false"
+            [disabled]="admissionDisabledFor(node)"
+            [aria-label]="
+              (admissionEnabledFor(node) ? 'Suspendre' : 'Réactiver') +
+              ' les nouvelles tâches sur ' + node.name
+            "
+            (change)="setSelectedNodeAdmission($event.checked)"
+          >
+            Nouvelles tâches
+          </mat-slide-toggle>
+        }
+        @for (control of memberRoleSwitches(node); track control.role) {
+          <mat-slide-toggle
+            [checked]="control.checked"
+            [disabled]="control.disabled ?? false"
+            [aria-label]="
+              (control.checked ? 'Désactiver' : 'Activer') +
+              ' la fonction ' + control.label + ' de ' + node.name
+            "
+            (change)="setMemberRole(node.id, control.role, $event.checked)"
+          >
+            {{ control.label }}
+          </mat-slide-toggle>
+          @if (control.pending) {
+            <span class="node-mode-pending">En attente</span>
+          }
+        }
+        <app-drawer-action-button
+          label="Nom et étiquettes"
+          variant="outlined"
+          (activated)="editSelectedNodeIdentity()"
+        />
+      }
     }
   </ng-template>
   <ng-template #detailContent catalogue-detail>
@@ -538,25 +586,15 @@
             @if (lifecycleText(); as text) {
               <p class="node-tab-note" role="status">{{ text }}</p>
             }
-            <div class="node-tab-actions">
-              @if (rawNode()?.lifecycle === 'quarantined') {
+            @if (rawNode()?.lifecycle === 'quarantined') {
+              <div class="node-tab-actions">
                 <app-drawer-action-button
                   label="Lever la quarantaine"
                   [disabled]="lifecycleBusy()"
                   (activated)="clearQuarantine()"
                 />
-              } @else {
-                <app-drawer-action-button
-                  [label]="
-                    rawNode()?.lifecycle === 'draining'
-                      ? 'Reprendre le travail'
-                      : 'Vidanger le nœud'
-                  "
-                  [disabled]="lifecycleBusy()"
-                  (activated)="toggleDraining()"
-                />
-              }
-            </div>
+              </div>
+            }
             <p class="node-tab-note">
               Retirer le nœud révoque son identité et refuse ses baux actifs, sans supprimer
               l’historique. Il ne peut pas être réactivé par un simple signal de présence.

@@ -55,7 +55,11 @@ export class AppShellComponent {
   protected readonly globalSearch = viewChild(GlobalSearchBarComponent);
   protected readonly hasSearchControls = computed(() => {
     const context = this.pageShellContext.current();
-    return (context?.actions?.length ?? 0) > 0 || context?.filter !== undefined;
+    return (
+      (context?.actions?.some((action) => !action.visibleWhen || action.visibleWhen()) ?? false) ||
+      (context?.filter !== undefined &&
+        (!context.filter.visibleWhen || context.filter.visibleWhen()))
+    );
   });
 
   private readonly navigationEnd = toSignal(
