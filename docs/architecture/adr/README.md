@@ -39,4 +39,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0021](0021-activation-cluster-plugins-outils.md) | Activation cluster des plugins et outils média | implemented | plugins |
 | [0022](0022-controle-media-explicite-et-rattachement.md) | Contrôle média explicite et prérequis de rattachement | implemented | runtime, cluster |
 | [0023](0023-coordination-et-quarantaine.md) | Coordination des tâches en quarantaine sans blocage global | implemented | runtime, replication-storage |
-| [0024](0024-planificateur-de-placement-des-flows.md) | Planificateur de placement des flows de bout en bout et minimisation des transferts | proposed | runtime |
+| [0024](0024-planificateur-de-placement-des-flows.md) | Planificateur de placement des flows de bout en bout et minimisation des transferts | implemented | runtime |

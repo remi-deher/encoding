@@ -11,8 +11,9 @@ using Encoding.Contracts.Nodes;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null)
+public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null,FlowPlacementPlanner? placementPlanner=null)
 {
+    private readonly FlowPlacementPlanner planner = placementPlanner ?? new FlowPlacementPlanner(components);
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     /// <summary>États des exécutions demandées ; les identifiants inconnus de ce serveur sont absents du résultat.</summary>
     public async Task<IReadOnlyList<RuntimeExecutionState>> StatesAsync(IReadOnlyCollection<Guid> ids,CancellationToken ct)
@@ -190,6 +191,89 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     private sealed record ClaimCursor(DateTimeOffset QueuedAt, Guid Id);
     private sealed record ClaimPage(RuntimeLease? Lease, ClaimCursor? Next = null);
 
+    internal async Task<IReadOnlyList<NodePlacementCandidate>> LoadPlacementCandidatesAsync(
+        Guid libraryId,
+        DbConnection c,
+        DbTransaction tx,
+        CancellationToken ct)
+    {
+        const string sql = """
+          SELECT n.id, n.name, n.roles,
+            COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=n.id), n.max_concurrent_tasks) AS max_tasks,
+            (SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.worker_node_id=n.id AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')) AS active_tasks,
+            n.capabilities::text,
+            n.inventory::text,
+            n.last_seen_at >= clock_timestamp() - @offline AS is_online,
+            n.accepts_work,
+            a.mode, a.local_path, a.can_read, a.can_write,
+            (SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=n.id AND p.schedule_enabled) AS sched_tz,
+            (SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=n.id AND p.schedule_enabled) AS sched_slots,
+            n.labels::text,
+            EXISTS(
+              SELECT 1 FROM library_node_accesses da JOIN cluster_nodes dn ON dn.id=da.node_id
+              WHERE da.library_id=@library AND da.mode='direct' AND da.is_enabled AND da.can_read
+                AND da.local_path IS NOT NULL
+                AND dn.deleted_at IS NULL AND dn.last_seen_at>clock_timestamp()-@offline
+                AND dn.accepts_work AND 'worker'=ANY(dn.roles)
+            ) AS has_valid_transfer_source
+          FROM cluster_nodes n
+          LEFT JOIN library_node_accesses a ON a.node_id=n.id AND a.library_id=@library AND a.is_enabled
+          WHERE n.deleted_at IS NULL
+          """;
+        await using var cmd = Sql.Command(sql, c, tx);
+        cmd.Parameters.AddWithValue("offline", presence.OfflineAfter);
+        cmd.Parameters.AddWithValue("library", libraryId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var list = new List<NodePlacementCandidate>();
+        while (await reader.ReadAsync(ct))
+        {
+            var id = reader.GetGuid(0);
+            var name = reader.IsDBNull(1) ? null : reader.GetString(1);
+            var roles = reader.GetStringArray(2);
+            var isWorker = roles.Contains("worker", StringComparer.OrdinalIgnoreCase);
+            var maxTasks = Convert.ToInt32(reader.GetValue(3));
+            var activeTasks = Convert.ToInt32(reader.GetValue(4));
+            var caps = JsonSerializer.Deserialize<NodeToolCapability[]>(reader.GetString(5), Json) ?? [];
+            var inv = reader.IsDBNull(6) ? null : JsonSerializer.Deserialize<NodeInventory>(reader.GetString(6), Json);
+            var isOnline = reader.GetBoolean(7);
+            var acceptsWork = reader.GetBoolean(8);
+            var mode = reader.IsDBNull(9) ? null : reader.GetString(9);
+            var localPath = reader.IsDBNull(10) ? null : reader.GetString(10);
+            var canRead = !reader.IsDBNull(11) && reader.GetBoolean(11);
+            var canWrite = !reader.IsDBNull(12) && reader.GetBoolean(12);
+            var schedTz = reader.IsDBNull(13) ? null : reader.GetString(13);
+            var schedSlots = reader.IsDBNull(14) ? null : reader.GetString(14);
+            var labelsJson = reader.IsDBNull(15) ? null : reader.GetString(15);
+            var hasValidTransferSource = reader.GetBoolean(16);
+
+            LibraryNodeAccessInfo? access = null;
+            if (mode is not null)
+            {
+                access = new LibraryNodeAccessInfo(
+                    libraryId,
+                    mode,
+                    true,
+                    canRead,
+                    canWrite,
+                    mode == "direct" ? localPath : null,
+                    null);
+            }
+
+            var identity = await nodeGroups.GetNodeIdentityAsync(id, ct);
+
+            list.Add(new NodePlacementCandidate(
+                NodeId: id,
+                Name: name,
+                IsWorker: isWorker,
+                IsOnline: isOnline && acceptsWork,
+                Capabilities: caps,
+                Inventory: inv,
+                Identity: identity,
+                Access: access));
+        }
+        return list;
+    }
+
     private async Task<ClaimPage> ClaimAvailableAsync(Guid worker, ClaimCursor? after, CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
@@ -207,13 +291,13 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         var nodeIdentity=await nodeGroups.GetNodeIdentityAsync(worker,ct);
         if(nodeIdentity is null) return new(null);
         var candidates=new List<(Guid Id,Guid Library,string Path,string Key,FlowDefinition Flow,int Attempt,int Revision,long Epoch,
-            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe,DateTimeOffset QueuedAt)>();
+            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe,DateTimeOffset QueuedAt,FlowPlacementPlan? PlacementPlan,JsonElement? BeforeMetadata)>();
         var cursorPredicate = after is null ? "" : "AND (e.queued_at,e.id) > (@after_time,@after_id)";
         await using(var read=Sql.Command($"""
           SELECT e.id,w.library_id,w.media_path,w.media_key,e.flow_definition::text,e.attempt,e.revision,w.lease_epoch,
             (SELECT checkpoint::text FROM execution_steps WHERE execution_id=e.id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1),
             w.handoff_selector::text,w.previous_worker_node_id,w.source_node_id,w.plugin_configuration_snapshot,
-            CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END,e.queued_at
+            CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END,e.queued_at,w.placement_plan::text,w.before_metadata::text
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
           WHERE (e.state='queued' OR e.state='running' AND w.worker_node_id IS NULL)
           AND {TaskOwnershipRepository.ActiveSql("e.id")}
@@ -241,16 +325,75 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 r.IsDBNull(8)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(8),Json),
                 r.IsDBNull(9)?null:JsonSerializer.Deserialize<RuntimeHandoffSelector>(r.GetString(9),Json),
                 r.IsDBNull(10)?null:r.GetGuid(10),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:(byte[])r[12],
-                r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!),r.GetFieldValue<DateTimeOffset>(14)));
+                r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!),r.GetFieldValue<DateTimeOffset>(14),r.IsDBNull(15)?null:JsonSerializer.Deserialize<FlowPlacementPlan>(r.GetString(15),Json),r.IsDBNull(16)?null:JsonSerializer.Deserialize<JsonElement>(r.GetString(16),Json)));
         }
         foreach(var item in candidates)
         {
+            FlowPlacementPlan? plan = item.PlacementPlan;
             if(item.Probe is {} wanted)
             {
                 if(!eligibility.CanProbe(item.Flow,capabilities,wanted.BlockNodeId,item.Checkpoint is not null)) continue;
             }
-            else if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value,nodeIdentity))) continue;
-            if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,inventory)) continue;
+            else
+            {
+                // plan initialized above
+                if(plan is null)
+                {
+                    var nodeCandidates = await LoadPlacementCandidatesAsync(item.Library, c, tx, ct);
+                    plan = planner.Plan(item.Flow, item.BeforeMetadata, nodeCandidates, DateTimeOffset.UtcNow);
+                    await using var savePlanCmd = Sql.Command("UPDATE execution_work SET placement_plan=@plan WHERE execution_id=@id", c, tx);
+                    savePlanCmd.Parameters.AddWithValue("id", item.Id);
+                    savePlanCmd.Parameters.AddWithValue("plan", SqlKind.Json, JsonSerializer.Serialize(plan, Json));
+                    await savePlanCmd.ExecuteNonQueryAsync(ct);
+                }
+
+                if(plan.Strategy == FlowPlacementPlan.StrategyImpossible)
+                {
+                    await ExecutionRepository.RecordInTransactionAsync(item.Id,
+                        new(Guid.NewGuid(), item.Revision, "failed", worker, null,
+                            $"Placement impossible : {plan.Reason}"), c, tx, ct);
+                    await ReleaseAsync(item.Id, c, tx, ct);
+                    await tx.CommitAsync(ct);
+                    return new(null);
+                }
+
+                var directUnifiedStayOnWorker = plan.Strategy == FlowPlacementPlan.StrategyDirectUnified
+                    && item.Selector?.Mode == "eligible"
+                    && plan.AssignedNodeId == worker;
+
+                if(!directUnifiedStayOnWorker && item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value,nodeIdentity)))
+                    continue;
+
+                if(item.Selector is null)
+                {
+                    if(plan.Strategy is FlowPlacementPlan.StrategyDirectUnified or FlowPlacementPlan.StrategyTransferWorker)
+                    {
+                        if(plan.AssignedNodeId.HasValue && plan.AssignedNodeId.Value != worker) continue;
+                    }
+                    else if(plan.Strategy == FlowPlacementPlan.StrategyTranscodeRelay)
+                    {
+                        if(item.Checkpoint is null)
+                        {
+                            if(plan.AccessNodeId.HasValue && plan.AccessNodeId.Value != worker) continue;
+                        }
+                        else
+                        {
+                            var segment = RuntimeHandoffPolicy.Segment(item.Flow, item.Checkpoint.NextNodeId ?? "");
+                            var needsGpu = segment.Any(n =>
+                                n.Component.ComponentId is "video-transcode" or "nodes-require-capability"
+                                && (n.Configuration.TryGetValue("encoder", out var enc) && (enc.GetString()?.Contains("nvenc") == true || enc.GetString()?.Contains("qsv") == true || enc.GetString()?.Contains("vaapi") == true)
+                                    || n.Configuration.TryGetValue("requiredCapability", out var req) && req.GetString()?.Contains("gpu") == true));
+                            var target = needsGpu ? plan.TranscodeNodeId : plan.AccessNodeId;
+                            if(target.HasValue && target.Value != worker) continue;
+                        }
+                    }
+                }
+            }
+            var planValidatesWorker = plan is not null
+                && (plan.Strategy == FlowPlacementPlan.StrategyDirectUnified && plan.AssignedNodeId == worker
+                    || plan.Strategy == FlowPlacementPlan.StrategyTransferWorker && plan.AssignedNodeId == worker);
+
+            if(item.Probe is null && !planValidatesWorker && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,inventory)) continue;
             var sourceEditResume=false;
             await using(var waiting=Sql.Command("SELECT EXISTS(SELECT 1 FROM runtime_source_write_waits WHERE execution_id=@id)",c,tx))
             {
@@ -647,6 +790,20 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             metadata.Parameters.AddWithValue("before",SqlKind.Json,(object?)cp.Context.BeforeMetadata?.GetRawText()??DBNull.Value);
             metadata.Parameters.AddWithValue("after",SqlKind.Json,(object?)cp.Context.CurrentMetadata?.GetRawText()??DBNull.Value);
             await metadata.ExecuteNonQueryAsync(ct);
+        }
+        if(cp.Context.BeforeMetadata is { } bm)
+        {
+            await using var libCmd = Sql.Command("SELECT library_id FROM execution_work WHERE execution_id=@id", c, tx);
+            libCmd.Parameters.AddWithValue("id", id);
+            if(await libCmd.ExecuteScalarAsync(ct) is Guid libId)
+            {
+                var nodeCandidates = await LoadPlacementCandidatesAsync(libId, c, tx, ct);
+                var refinedPlan = planner.Plan(flow, bm, nodeCandidates, DateTimeOffset.UtcNow);
+                await using var savePlanCmd = Sql.Command("UPDATE execution_work SET placement_plan=@plan WHERE execution_id=@id", c, tx);
+                savePlanCmd.Parameters.AddWithValue("id", id);
+                savePlanCmd.Parameters.AddWithValue("plan", SqlKind.Json, JsonSerializer.Serialize(refinedPlan, Json));
+                await savePlanCmd.ExecuteNonQueryAsync(ct);
+            }
         }
         var detail=handoff is null?$"Étape terminée : {node.Name??component.Name}.":handoff.Mode=="node"
             ?$"Relais en attente vers le nœud {handoff.TargetNodeId:D}.":"Relais en attente d'un autre worker éligible.";

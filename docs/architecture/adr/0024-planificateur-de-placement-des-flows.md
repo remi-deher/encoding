@@ -1,10 +1,10 @@
 ---
 id: 0024
 title: Planificateur de placement des flows de bout en bout et minimisation des transferts
-status: proposed
+status: implemented
 domain: runtime
 date: 2026-10-27
-decided_by: à décider (brouillon soumis à la validation de Rémi)
+decided_by: Rémi Deher
 supersedes: []
 superseded_by: []
 tags: [placement, planificateur, claim, handoff, transferts, webdav, gpu, acces-direct]

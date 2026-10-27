@@ -1,7 +1,7 @@
 ---
 domain: runtime
 updated: 2026-10-27
-legacy_adr: [0005, 0009, 0015, 0016, 0018, 0020, 0021, 0028, 0030, 0033, 0054, 0058, 0059, 0064, 0066, 0075]
+legacy_adr: [0005, 0009, 0015, 0016, 0018, 0020, 0021, 0024, 0028, 0030, 0033, 0054, 0058, 0059, 0064, 0066, 0075]
 code:
   - backend/src/Encoding.Api/Executions/
   - backend/src/Encoding.Api/Libraries/
@@ -41,6 +41,19 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 - `nodes-handoff` en mode worker : cède la suite à un autre worker à un checkpoint durable, sous nouveau bail, même exécution, **même réservation** ; cible absente/occupée/incompatible = attente (jamais repli sur le précédent) ; fichiers identifiés par SHA-256 ; le nœud d'accès de la bibliothèque reste fixé à la première attribution. Relais vers soi-même = pas de transfert. Un worker n'ayant pas la version de plugin requise ne reçoit pas le flow.
 - `base-wait` : attente durable (`timer`, `nodeState`, `workload`, `block` = condition d'un plugin) sans occuper de worker ni de plafond ; le média reste réservé ; reprise à l'étape suivante avec le contexte inchangé ; `timeout` non relié = échec explicite ; `ExecutionWaitService` (chaque serveur, 5 s) décide par mise à jour conditionnelle (une seule décision). Politique média pendant l'attente : `keep` / `beside` / `overwrite` (ce dernier passe toujours par la garde de la bibliothèque).
 - `base-disk-lock` / `base-disk-unlock` : verrou nommé par disque (table locale `disk_locks`, prise `INSERT … ON CONFLICT … WHERE`, **fenced** par bail+époque, suit le bail, libéré à la fin, à la récupération, à l'attente, au relais). `busy` n'attend jamais ; le flow le relie à `base-defer-processing` ou `base-wait`. Exclusion garantie **dans une seule base locale** seulement.
+
+## Planification de placement des flows (ADR 0024)
+- **Objectif et principe** (ADR [0024](../adr/0024-planificateur-de-placement-des-flows.md)) : éliminer le ping-pong de transferts inter-nœuds (A → B → A → B transférant 500 Mo à 1,5 Go par saut pour un remux ou un transcode partiel). Le serveur planifie le placement de bout en bout dès la mise en file en analysant statiquement l'ensemble des branches du flow, puis affine le plan dès que les métadonnées de la source (`before_metadata`) sont capturées après le premier `probe`.
+- **Élagage conditionnel** : `FlowPlacementPlanner` inspecte les blocs de conditions (`MediaConditionEvaluator`) avec les flux connus. Si le média est déjà dans le codec attendu (ex. vidéo déjà HEVC), la branche lourde de transcode vidéo est élaguée de l'analyse des capacités requises. Le nœud direct CPU peut ainsi traiter directement le flow sans imposer de relais matériel.
+- **Stratégies de placement** :
+  - `direct_unified` : le nœud d'accès direct dispose de tous les outils/encodeurs requis par les branches actives. L'intégralité du flow est exécutée sur ce nœud ; les blocs `nodes-handoff` en mode éligible n'émettent pas de transfert vers un autre worker (`stayOnWorker`), neutralisant les allers-retours inutiles.
+  - `transcode_relay` : si un encodage lourd (ex. GPU NVENC/QSV) est strictement nécessaire et non supporté par le nœud direct, le plan orchestre un regroupement : phase 1 (remux/analyse) sur le nœud d'accès direct, un seul envoi vers le worker d'encodage, puis retour unique au nœud d'accès direct pour l'assemblage final, le contrôle et la publication.
+  - `transfer_worker` : aucun nœud à accès direct n'est capable, mais un worker en mode transfert couvre le flow ; un transfert initial est réalisé vers ce worker qui exécute la tâche.
+  - `impossible` : aucune combinaison de nœuds dans le cluster ne peut satisfaire les besoins du flow (outils, versions de plugins, polices ou encodeurs manquants). La tâche passe directement en échec explicite (`StrategyImpossible`) sans consommer de bail, sans tourner en boucle dans la file et en désignant explicitement les capacités manquantes.
+- **Persistance et cycle de vie** :
+  - Le plan calculé est stocké dans la colonne locale `placement_plan` de `execution_work` (migration additive 0062).
+  - À la capture des métadonnées `before_metadata` dans `StepOutcomeAsync`, le planificateur recalcule le plan avec les informations réelles du conteneur/codecs et met à jour `placement_plan`.
+  - Lors de l'attribution (`ClaimAvailableAsync`), le répartiteur vérifie la cohérence du nœud avec le plan désigné. Pour une tâche unifiée sur nœud direct, les vérifications globales de segment n'évaluent pas les branches mortes élaguées par le planificateur (`planValidatesWorker`).
 
 ## Découverte et surveillance des bibliothèques
 - Demande de découverte durable et idempotente, prise par un nœud en **accès direct en lecture** (ou un serveur sans capacité de traitement), bail 60 s/15 s vérifié à la remise ; ignore les liens symboliques et dossiers `.encoding*` ; filtre les extensions selon le flow ; limite 10 000 fichiers (dépassement = échec, jamais d'inventaire tronqué) ; un succès remplace l'inventaire de façon atomique.
