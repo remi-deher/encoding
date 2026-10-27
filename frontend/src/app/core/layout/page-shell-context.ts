@@ -1,4 +1,4 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, Signal, computed, signal } from '@angular/core';
 import { IconName } from '../../shared/ui/icon.component';
 
 export interface PageShellAction {
@@ -23,6 +23,7 @@ export interface PageShellSearchResult {
 export interface PageShellFilterAction {
   readonly label?: string;
   readonly activeCount?: () => number;
+  readonly visibleWhen?: () => boolean;
   readonly toggle: () => void;
 }
 
@@ -32,6 +33,8 @@ export interface PageShellFilterAction {
  */
 export interface PageShellContext {
   readonly searchPlaceholder?: string;
+  /** Expose la même valeur à la barre du shell et au filtre de recherche propre à la page. */
+  readonly query?: Signal<string>;
   /** Keeps the shell input and the current page's own filter in sync. */
   readonly onSearchQueryChange?: (query: string) => void;
   readonly searchResults?: (query: string) => readonly PageShellSearchResult[];

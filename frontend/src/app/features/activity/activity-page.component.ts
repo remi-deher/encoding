@@ -462,6 +462,7 @@ export class ActivityPageComponent {
     this.destroyRef.onDestroy(
       this.pageShellContext.register({
         searchPlaceholder: 'Rechercher dans Activité…',
+        query: this.search,
         onSearchQueryChange: (query) => this.search.set(query),
         searchResults: (query) => this.searchResults(query),
         filter: {

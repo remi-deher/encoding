@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import {
   ResourceSheetNotice,
   ResourceSheetSection,
@@ -19,10 +20,24 @@ export interface NodeOverviewLibrary {
   readonly accessLabel: string;
 }
 
+export interface NodeOverviewRoleSwitch {
+  readonly role: 'server' | 'worker';
+  readonly label: string;
+  readonly checked: boolean;
+  readonly pending?: boolean;
+  readonly disabled?: boolean;
+}
+
 @Component({
   selector: 'app-node-overview-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatCheckboxModule, MatMenuModule, StatusBadgeComponent],
+  imports: [
+    MatButtonModule,
+    MatCheckboxModule,
+    MatMenuModule,
+    MatSlideToggleModule,
+    StatusBadgeComponent,
+  ],
   template: `
     <article
       class="node-overview-card"
@@ -53,22 +68,63 @@ export interface NodeOverviewLibrary {
           </svg>
         </span>
         <div class="node-overview-identity">
-          @if (openable()) {
-            <button class="node-overview-title" type="button" (click)="open.emit()">
-              {{ title() }}
-            </button>
-          } @else {
-            <h2 class="node-overview-title-static">{{ title() }}</h2>
-          }
+          <div class="node-overview-title-line">
+            @if (openable()) {
+              <button class="node-overview-title" type="button" (click)="open.emit()">
+                {{ title() }}
+              </button>
+            } @else {
+              <h2 class="node-overview-title-static">{{ title() }}</h2>
+            }
+            @if (admissionEnabled() !== null) {
+              <mat-slide-toggle
+                class="node-overview-admission-toggle"
+                [checked]="admissionEnabled() ?? false"
+                [disabled]="admissionDisabled()"
+                [aria-label]="
+                  (admissionEnabled() ? 'Suspendre' : 'Réactiver') +
+                  ' les nouvelles tâches sur ' + title()
+                "
+                (change)="admissionChange.emit($event.checked)"
+              >
+                Nouvelles tâches
+              </mat-slide-toggle>
+            }
+          </div>
           @if (subtitle()) {
             <p class="node-overview-subtitle">{{ subtitle() }}</p>
           }
           <div class="node-overview-badges">
             <app-status-badge [label]="statusLabel()" [tone]="statusTone()" />
-            @for (role of roles(); track role) {
-              <span class="node-overview-role">{{ role }}</span>
+            @if (!roleSwitches().length) {
+              @for (role of roles(); track role) {
+                <span class="node-overview-role">{{ role }}</span>
+              }
             }
           </div>
+          @if (roleSwitches().length) {
+            <div class="node-overview-role-switches" role="group" aria-label="Fonctions du nœud">
+              @for (control of roleSwitches(); track control.role) {
+                <mat-slide-toggle
+                  [checked]="control.checked"
+                  [disabled]="control.disabled ?? false"
+                  [aria-label]="
+                    (control.checked ? 'Désactiver' : 'Activer') +
+                    ' la fonction ' + control.label + ' de ' + title()
+                  "
+                  (change)="roleToggle.emit({ role: control.role, enabled: $event.checked })"
+                >
+                  {{ control.label }}
+                </mat-slide-toggle>
+                @if (control.pending) {
+                  <span class="node-overview-role-pending">En attente</span>
+                }
+              }
+            </div>
+          }
+          @if (roleControlNote()) {
+            <p class="node-overview-role-note">{{ roleControlNote() }}</p>
+          }
         </div>
         @if (meta()) {
           <span class="node-overview-meta">{{ meta() }}</span>
@@ -233,6 +289,10 @@ export class NodeOverviewCardComponent {
   readonly statusTone = input<StatusTone>('neutral');
   readonly nodeId = input('node-overview');
   readonly roles = input<readonly string[]>([]);
+  readonly roleSwitches = input<readonly NodeOverviewRoleSwitch[]>([]);
+  readonly roleControlNote = input('');
+  readonly admissionEnabled = input<boolean | null>(null);
+  readonly admissionDisabled = input(false);
   readonly meta = input('');
   readonly notices = input<readonly ResourceSheetNotice[]>([]);
   readonly sections = input<readonly ResourceSheetSection[]>([]);
@@ -247,4 +307,6 @@ export class NodeOverviewCardComponent {
   readonly open = output<void>();
   readonly selectedChange = output<boolean>();
   readonly actionSelected = output<string>();
+  readonly roleToggle = output<{ readonly role: 'server' | 'worker'; readonly enabled: boolean }>();
+  readonly admissionChange = output<boolean>();
 }

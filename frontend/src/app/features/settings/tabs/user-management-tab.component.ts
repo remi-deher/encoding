@@ -29,6 +29,7 @@ import {
 } from '../../../shared/ui/settings/setting-row.component';
 import { ConfirmationDialogComponent } from '../../../shared/ui/confirmation-dialog.component';
 import { RecordFormComponent, RecordFormData } from '../../../shared/ui/record-form.component';
+import { PageShellContextService } from '../../../core/layout/page-shell-context';
 
 interface UserRow {
   readonly id: string;
@@ -122,11 +123,15 @@ export class UserManagementTabComponent {
   private readonly dialog = inject(MatDialog);
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationService);
+  private readonly pageShell = inject(PageShellContextService);
 
   readonly usersUpdated = output<readonly UserAccount[]>();
   protected readonly users = signal<readonly UserAccount[]>([]);
   protected readonly state = signal<'ready' | 'loading' | 'error'>('loading');
-  protected readonly query = signal('');
+  protected readonly localQuery = signal('');
+  protected readonly query = computed(
+    () => this.pageShell.current()?.query?.() ?? this.localQuery(),
+  );
   protected readonly busy = signal(false);
 
   protected readonly rows = computed<readonly UserRow[]>(() =>

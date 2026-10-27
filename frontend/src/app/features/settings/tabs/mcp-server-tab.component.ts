@@ -30,6 +30,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { SearchFieldComponent } from '../../../shared/ui/search-field.component';
 import { ApiTokenResponse, CreatedApiTokenResponse } from '../../../shared/models/api-token';
 import { ApiTokenService } from '../../../shared/services/api-token.service';
+import { PageShellContextService } from '../../../core/layout/page-shell-context';
 
 type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 
@@ -113,7 +114,7 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
             variant="filled"
             label="Filtrer les outils"
             [value]="searchQuery()"
-            (valueChange)="searchQuery.set($event)"
+            (valueChange)="updateSearchQuery($event)"
           />
           @for (tool of filteredTools(); track tool.name) {
             <article class="tool">
@@ -354,7 +355,11 @@ export class McpServerTabComponent {
   }
 
   protected readonly selectedClient = signal<ClientPlatform>('claude');
-  protected readonly searchQuery = signal('');
+  private readonly pageShell = inject(PageShellContextService);
+  private readonly localSearchQuery = signal('');
+  protected readonly searchQuery = computed(
+    () => this.pageShell.current()?.query?.() ?? this.localSearchQuery(),
+  );
   protected readonly tools = signal<readonly McpToolDefinition[]>([]);
 
   protected readonly filteredTools = computed(() => {
@@ -364,6 +369,11 @@ export class McpServerTabComponent {
       (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
     );
   });
+
+  protected updateSearchQuery(query: string): void {
+    this.localSearchQuery.set(query);
+    this.pageShell.current()?.onSearchQueryChange?.(query);
+  }
 
   private readonly availableCreatedToken = computed(() => {
     const recent = this.createdToken();

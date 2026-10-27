@@ -216,7 +216,6 @@ export interface LocalNodeSheetInput {
   /** Tâches actives observées ; `null` tant que la source n'a pas répondu. */
   readonly activeTasks: number | null;
   readonly now?: number;
-  readonly isAdmin?: boolean;
 }
 
 /**
@@ -318,24 +317,10 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
         {
           label: 'Serveur',
           badges: roleBadges('server'),
-          action: input.isAdmin
-            ? {
-                id: 'toggle-server',
-                label: roles?.server ? 'Désactiver' : 'Activer',
-                disabled: agentUnavailable,
-              }
-            : undefined,
         },
         {
           label: 'Worker',
           badges: roleBadges('worker'),
-          action: input.isAdmin
-            ? {
-                id: 'toggle-worker',
-                label: roles?.worker ? 'Désactiver' : 'Activer',
-                disabled: agentUnavailable,
-              }
-            : undefined,
         },
       ],
       metrics: [

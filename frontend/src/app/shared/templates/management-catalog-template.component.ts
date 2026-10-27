@@ -35,6 +35,7 @@ export interface CatalogEmptyState {
   ],
   template: `
     <app-detail-drawer
+      mainScroll="parent"
       [opened]="actionOpen() || (detailOpen() && detailLayout() === 'drawer')"
       [size]="drawerSize()"
       [headerDensity]="drawerHeaderDensity()"
@@ -66,13 +67,11 @@ export interface CatalogEmptyState {
             [actions]="pageActionsTemplate()"
             [visuallyHidden]="titleVisuallyHidden()"
           />
-          <div class="catalog-navigation-wrapper">
-            @if (catalogueNavigationTemplate(); as navigation) {
-              <ng-container [ngTemplateOutlet]="navigation" />
-            } @else {
-              <ng-content select="[catalogue-navigation]" />
-            }
-          </div>
+          @if (catalogueNavigationTemplate(); as navigation) {
+            <ng-container [ngTemplateOutlet]="navigation" />
+          } @else {
+            <ng-content select="[catalogue-navigation]" />
+          }
           <div class="catalog-summary">
             @if (catalogueSummaryTemplate(); as summary) {
               <ng-container [ngTemplateOutlet]="summary" />

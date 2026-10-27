@@ -10,6 +10,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CategoryTabOption } from '../../shared/ui/category-tabs.component';
 import { PlatformAdminTemplateComponent } from '../../shared/templates/platform-admin-template.component';
+import { PageShellContextService } from '../../core/layout/page-shell-context';
 import { ConfigurationSectionComponent } from '../../shared/ui/configuration-section.component';
 import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
 import { UserAccount } from '../../shared/models/auth';
@@ -113,6 +114,8 @@ export class SettingsPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
+  protected readonly pageSearchQuery = signal('');
   protected readonly activeMainTab = signal<SettingsMainTab>('interface');
   protected readonly users = signal<readonly UserAccount[]>([]);
   protected readonly tokens = signal<readonly ApiTokenResponse[]>([]);
@@ -134,6 +137,13 @@ export class SettingsPageComponent {
     { value: 'operations', label: 'Exploitation' },
   ];
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans Paramètres…',
+        query: this.pageSearchQuery,
+        onSearchQueryChange: (query) => this.pageSearchQuery.set(query),
+      }),
+    );
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const domain = settingsDomain(params.get('tab'));
       if (domain !== this.activeMainTab()) this.editor.reset();

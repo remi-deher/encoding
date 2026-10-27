@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -31,6 +32,7 @@ import { ComponentConfigurationFormComponent } from '../../shared/ui/component-c
 import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { NotificationService } from '../../shared/services/notification.service';
+import { PageShellContextService } from '../../core/layout/page-shell-context';
 import {
   FlowComponentConfiguration,
   FlowComponentConfigurationSchema,
@@ -257,6 +259,8 @@ interface FlowTemplateRow extends DataTableRow {
 export class FlowTemplateLibraryPageComponent {
   protected readonly auth = inject(AuthService);
   private readonly api = inject(FlowTemplates);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   private readonly flowValidation = inject(FlowValidation);
   private readonly notifications = inject(NotificationService);
   private readonly router = inject(Router);
@@ -471,6 +475,13 @@ export class FlowTemplateLibraryPageComponent {
   private readonly setupRequestHandled = signal<string | null>(null);
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans les modèles de flow…',
+        query: this.query,
+        onSearchQueryChange: (query) => this.query.set(query),
+      }),
+    );
     void this.loadTemplates();
     // La fiche est portée par l'URL (?template=<id>) : le menu latéral et le bouton précédent
     // du navigateur ramènent à la liste.

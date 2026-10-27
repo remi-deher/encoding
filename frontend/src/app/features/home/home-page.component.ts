@@ -46,7 +46,10 @@ import { FlowTemplates } from '../../shared/services/flow-templates';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { OverviewExecutionComponent } from './components/overview-execution.component';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
-import { PageShellContextService } from '../../core/layout/page-shell-context';
+import {
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
 import {
   AiAssistantActivity,
   AiAssistantConversation,
@@ -165,6 +168,7 @@ export class HomePageComponent {
   private readonly aiTools = inject(AiToolsService);
   private readonly pageShellContext = inject(PageShellContextService);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly searchQuery = signal('');
   protected readonly aiOptions = signal<AiAssistantOptions | null>(null);
   protected readonly aiActivity = signal<readonly AiAssistantActivity[]>([]);
   protected readonly aiConversations = signal<readonly AiAssistantConversation[]>([]);
@@ -215,12 +219,30 @@ export class HomePageComponent {
       tone: this.aiFailedCount() > 0 ? ('attention' as const) : ('default' as const),
     },
   ]);
-  protected readonly recentAiActivity = computed(() =>
-    [...this.aiActivity()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
-  );
-  protected readonly recentAiConversations = computed(() =>
-    [...this.aiConversations()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
-  );
+  protected readonly recentAiActivity = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return [...this.aiActivity()]
+      .filter((item) =>
+        !query ||
+        [item.provider, item.operation, item.progressDetail, item.status].some((value) =>
+          (value ?? '').toLocaleLowerCase('fr-FR').includes(query),
+        ),
+      )
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 5);
+  });
+  protected readonly recentAiConversations = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return [...this.aiConversations()]
+      .filter((item) =>
+        !query ||
+        [item.title, item.provider, item.source.label].some((value) =>
+          value.toLocaleLowerCase('fr-FR').includes(query),
+        ),
+      )
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 5);
+  });
   protected readonly executionState = toSignal(this.executionTracking.state$, {
     initialValue: INITIAL_EXECUTION_TRACKING,
   });
@@ -228,8 +250,24 @@ export class HomePageComponent {
   protected readonly homeExecutionState = toSignal(this.homeExecutions.state$, {
     initialValue: INITIAL_HOME_EXECUTIONS,
   });
-  protected readonly activePreview = computed(() => this.homeExecutionState().active);
-  protected readonly publications = computed(() => this.homeExecutionState().publications);
+  protected readonly activePreview = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return this.homeExecutionState().active.filter((item) =>
+      !query ||
+      [item.media, item.library, item.flow, item.node ?? '', item.detail].some((value) =>
+        value.toLocaleLowerCase('fr-FR').includes(query),
+      ),
+    );
+  });
+  protected readonly publications = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return this.homeExecutionState().publications.filter((item) =>
+      !query ||
+      [item.media, item.library, item.flow, item.node ?? '', item.detail].some((value) =>
+        value.toLocaleLowerCase('fr-FR').includes(query),
+      ),
+    );
+  });
   protected readonly remainingActive = computed(() =>
     Math.max(0, (this.executionState().data?.activeCount ?? 0) - this.activePreview().length),
   );
@@ -254,6 +292,9 @@ export class HomePageComponent {
     this.destroyRef.onDestroy(
       this.pageShellContext.register({
         searchPlaceholder: 'Rechercher dans Vue d’ensemble…',
+        query: this.searchQuery,
+        onSearchQueryChange: (query) => this.searchQuery.set(query),
+        searchResults: (query) => this.pageSearchResults(query),
         actions: [
           {
             id: 'create-flow',
@@ -270,6 +311,49 @@ export class HomePageComponent {
       .subscribe(() => {
         if (this.overviewView() === 'ai') this.refreshAiOverview();
       });
+  }
+
+  private pageSearchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = query.trim().toLocaleLowerCase('fr-FR');
+    if (!normalized) return [];
+    const matches = (...values: readonly string[]) =>
+      values.some((value) => value.toLocaleLowerCase('fr-FR').includes(normalized));
+    const nodes = (this.state().snapshot?.nodes ?? [])
+      .filter((node) =>
+        matches(node.name, node.displayName ?? '', node.roles.join(' '), node.id),
+      )
+      .slice(0, 4)
+      .map((node) => ({
+        id: `overview-node:${node.id}`,
+        label: node.displayName?.trim() || node.name,
+        description: `${node.status === 'online' ? 'En ligne' : 'Hors ligne'} · ${node.roles.join(' · ')}`,
+        group: 'Nœuds',
+        glyph: '▤',
+        path: '/nodes?tab=cluster',
+      }));
+    const executions = [...this.homeExecutionState().active, ...this.homeExecutionState().publications]
+      .filter((item) => matches(item.media, item.library, item.flow, item.node ?? '', item.detail))
+      .slice(0, 4)
+      .map((item) => ({
+        id: `overview-execution:${item.id}`,
+        label: item.media,
+        description: `${item.library} · ${item.flow}`,
+        group: item.state === 'succeeded' ? 'Traitements terminés' : 'Traitements en cours',
+        glyph: '▣',
+        path: '/activity',
+      }));
+    const conversations = this.aiConversations()
+      .filter((item) => matches(item.title, item.provider, item.source.label))
+      .slice(0, 3)
+      .map((item) => ({
+        id: `overview-ai:${item.id}`,
+        label: item.title,
+        description: `${this.providerLabel(item.provider)} · ${item.source.label}`,
+        group: 'Conversations IA',
+        glyph: '✦',
+        path: '/ai/assistant',
+      }));
+    return [...nodes, ...executions, ...conversations].slice(0, 8);
   }
 
   protected refreshAiOverview(): void {
@@ -361,7 +445,14 @@ export class HomePageComponent {
       },
     ];
   });
-  protected readonly nodes = computed(() => this.state().snapshot?.nodes ?? []);
+  protected readonly nodes = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return (this.state().snapshot?.nodes ?? []).filter((node) =>
+      !query ||
+      [node.name, node.displayName ?? '', node.roles.join(' '), node.inventory?.operatingSystem ?? '']
+        .some((value) => value.toLocaleLowerCase('fr-FR').includes(query)),
+    );
+  });
   protected readonly health = computed(() => {
     const snapshot = this.state().snapshot;
     return snapshot

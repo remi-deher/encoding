@@ -50,6 +50,7 @@ export class LocalNodeController {
   readonly agentUnavailable = signal(false);
   readonly modeUnavailable = signal(false);
   readonly busy = signal(false);
+  readonly modeBusy = signal(false);
   readonly flow = signal<'create' | 'join' | null>(null);
   readonly joinIndex = signal(0);
   readonly address = signal('');
@@ -225,35 +226,33 @@ export class LocalNodeController {
     if (!this.busy()) this.flow.set(null);
   }
 
-  async changeMode(): Promise<void> {
-    if (this.isAdmin() && !this.busy() && (await this.nodeMode.change('/api/v1/node/mode')))
-      this.refresh();
-  }
-
-  async toggleRole(role: 'server' | 'worker'): Promise<void> {
-    if (!this.isAdmin() || this.busy()) return;
-    let status: NodeModeStatus;
+  async setRole(role: 'server' | 'worker', enabled: boolean): Promise<void> {
+    if (!this.isAdmin() || this.busy() || this.modeBusy()) return;
+    this.modeBusy.set(true);
     try {
-      status = await firstValueFrom(this.http.get<NodeModeStatus>('/api/v1/node/mode'));
+      const status = await firstValueFrom(this.http.get<NodeModeStatus>('/api/v1/node/mode'));
+      if (!status.managed) {
+        this.notifications.show(
+          'Les fonctions de ce nœud sont définies par la configuration du déploiement.',
+        );
+        return;
+      }
+      const target: NodeMode = {
+        server: role === 'server' ? enabled : status.server,
+        worker: role === 'worker' ? enabled : status.worker,
+      };
+      if (!target.server && !target.worker) {
+        this.notifications.show(
+          'Gardez au moins une fonction : sans serveur ni worker, le nœud ne ferait plus partie du cluster.',
+        );
+        return;
+      }
+      if (!target[role] && !(await this.nodeMode.confirmRoleDeactivation(role))) return;
+      if (await this.nodeMode.apply('/api/v1/node/mode', target)) this.refresh();
     } catch {
       this.notifications.show('Impossible de lire le mode de ce nœud.');
-      return;
-    }
-    const target: NodeMode = {
-      server: role === 'server' ? !status.server : status.server,
-      worker: role === 'worker' ? !status.worker : status.worker,
-    };
-    if (!target.server && !target.worker) {
-      this.notifications.show(
-        'Gardez au moins une fonction : sans serveur ni worker, le nœud ne ferait plus partie du cluster.',
-      );
-      return;
-    }
-    if (status.server && !target.server && !(await this.nodeMode.confirmServerStop())) {
-      return;
-    }
-    if (await this.nodeMode.apply('/api/v1/node/mode', target)) {
-      this.refresh();
+    } finally {
+      this.modeBusy.set(false);
     }
   }
 

@@ -1116,6 +1116,7 @@ export class LibraryCatalogPageComponent {
     this.destroyRef.onDestroy(
       this.pageShellContext.register({
         searchPlaceholder: 'Rechercher dans Bibliothèques…',
+        query: this.searchQuery,
         onSearchQueryChange: (query) => this.searchQuery.set(query),
         searchResults: (query) => this.librarySearchResults(query),
         actions: [

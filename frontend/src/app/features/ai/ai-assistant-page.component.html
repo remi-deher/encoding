@@ -7,83 +7,21 @@
   (historyClosed)="historyOpen.set(false)"
   (previewClosed)="closePreview()"
 >
-  <section assistant-history class="assistant-history-content">
-    <div class="conversation-heading">
-      <h2>Conversations</h2>
-      <button
-        mat-icon-button
-        type="button"
-        aria-label="Nouvelle conversation"
-        [disabled]="sending()"
-        (click)="startNewConversation()"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="20"
-          height="20"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          aria-hidden="true"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
-    </div>
-    @if (loadingConversations()) {
-      <p class="muted" role="status">Chargement…</p>
-    } @else if (!conversations().length) {
-      <p class="muted">Aucune conversation</p>
-    }
-    <nav aria-label="Conversations IA">
-      @for (conversation of conversations(); track conversation.id) {
-        <div class="conversation-item">
-          <button
-            class="conversation-link"
-            type="button"
-            [class.is-active]="detail()?.conversation.id === conversation.id"
-            [disabled]="sending() || deletingConversationId() === conversation.id"
-            (click)="openConversation(conversation.id)"
-          >
-            <strong>{{ conversation.title }}</strong
-            ><span>{{ conversation.source.label }}</span>
-            @if (coordinatorLabel(conversation); as origin) {
-              <span class="node-origin">{{ origin }}</span>
-            }
-          </button>
-          <button
-            class="conversation-delete"
-            mat-icon-button
-            type="button"
-            [disabled]="sending() || deletingConversationId() !== null"
-            [attr.aria-label]="'Supprimer la conversation ' + conversation.title"
-            title="Supprimer la conversation"
-            (click)="confirmDeleteConversation(conversation)"
-          >
-            @if (deletingConversationId() === conversation.id) {
-              <mat-spinner diameter="16" />
-            } @else {
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                aria-hidden="true"
-              >
-                <path
-                  d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            }
-          </button>
-        </div>
-      }
-    </nav>
-  </section>
+  <app-ai-conversation-history
+    assistant-history
+    [conversations]="filteredConversations()"
+    [totalCount]="conversations().length"
+    [nodes]="aiNodes()"
+    [activeId]="detail()?.conversation?.id ?? null"
+    [deletingId]="deletingConversationId()"
+    [query]="searchQuery()"
+    [loading]="loadingConversations()"
+    [searching]="searchingConversations()"
+    [sending]="sending()"
+    (newConversation)="startNewConversation()"
+    (conversationSelected)="openConversation($event)"
+    (deleteRequested)="confirmDeleteConversation($event)"
+  />
   <section assistant-context class="assistant-context-content">
     <header class="preview-panel__header">
       <h2>{{ previewFlow() ? previewTitle() : 'Espace de travail' }}</h2>
@@ -265,7 +203,8 @@
       <app-flow-preview [flow]="flow" [components]="previewComponents()" mode="flow" />
     }
   </section>
-  <section assistant-chat class="assistant-chat-content">
+  <section assistant-chat class="assistant-chat-content" aria-labelledby="assistant-page-title">
+    <h1 id="assistant-page-title" class="visually-hidden">Assistant</h1>
     @if (!panelMode()) {
       <header class="chat-toolbar">
         <button
@@ -287,20 +226,8 @@
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        @if (renaming()) {
-          <input
-            class="title-input"
-            type="text"
-            maxlength="80"
-            aria-label="Titre de la conversation"
-            [value]="renameDraft()"
-            (input)="renameDraft.set($any($event.target).value)"
-            (keydown.enter)="saveRename()"
-            (keydown.escape)="cancelRename()"
-            (blur)="saveRename()"
-          />
-        } @else {
-          <h1>{{ detail()?.conversation?.title ?? 'Assistant' }}</h1>
+        <div class="chat-toolbar__copy">
+          <h2>{{ detail()?.conversation?.title ?? 'Nouvelle conversation' }}</h2>
           @if (detail(); as current) {
             @if (coordinatorLabel(current.conversation); as origin) {
               <span
@@ -310,50 +237,13 @@
                     ? 'Ce nœud ne répond plus : le nœud courant reprendra la discussion à votre prochain message.'
                     : 'Nœud qui coordonne cette discussion.'
                 "
-                >{{ origin
-                }}{{ coordinatorLost(current.conversation) ? ' · injoignable' : '' }}</span
+                >{{ origin }}{{ coordinatorLost(current.conversation) ? ' · injoignable' : '' }}</span
               >
             }
-            <button
-              mat-icon-button
-              type="button"
-              aria-label="Renommer la conversation"
-              title="Renommer la conversation"
-              [disabled]="sending()"
-              (click)="startRename(current.conversation)"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                aria-hidden="true"
-              >
-                <path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" />
-              </svg>
-            </button>
           }
-        }
-        <button
-          mat-icon-button
-          type="button"
-          aria-label="Nouvelle conversation"
-          [disabled]="sending()"
-          (click)="startNewConversation()"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            aria-hidden="true"
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+        </div>
+        <button matButton="tonal" type="button" class="context-toggle" (click)="openWorkspace()">
+          <span>Contexte</span>
         </button>
       </header>
     }
@@ -367,12 +257,22 @@
       (scroll)="onThreadScroll()"
     >
       @if (detail(); as current) {
-        @for (turn of current.turns; track turn.requestId) {
-          <article class="message user-message">
+        @for (turn of current.turns; track turn.requestId; let turnIndex = $index) {
+          <article
+            class="message user-message"
+            [class.search-match]="highlightedTurn()?.turnIndex === turnIndex && highlightedTurn()?.role === 'user'"
+            [attr.data-turn-index]="turnIndex"
+            data-message-role="user"
+          >
             <h3>Vous</h3>
             <p>{{ turn.userPrompt }}</p>
           </article>
-          <article class="message assistant-message">
+          <article
+            class="message assistant-message"
+            [class.search-match]="highlightedTurn()?.turnIndex === turnIndex && highlightedTurn()?.role === 'assistant'"
+            [attr.data-turn-index]="turnIndex"
+            data-message-role="assistant"
+          >
             <h3>Assistant</h3>
             <p>{{ turn.content }}</p>
             <details class="response-details">

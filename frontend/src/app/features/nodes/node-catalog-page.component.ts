@@ -42,6 +42,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -70,10 +71,14 @@ import {
   runtimeEnvironmentLabel,
 } from '../../shared/models/node-management';
 import { NodeOverviewCardComponent } from './node-overview-card.component';
-import type { NodeOverviewLibrary } from './node-overview-card.component';
+import type {
+  NodeOverviewLibrary,
+  NodeOverviewRoleSwitch,
+} from './node-overview-card.component';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { takeUntilDestroyed, toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -125,6 +130,10 @@ import {
 } from './components/node-group-editor.component';
 import { NodeGroupDetailComponent } from './components/node-group-detail.component';
 import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
+import {
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
 
 interface NodeLibraryRecord extends DataTableRow {
   readonly id: string;
@@ -163,6 +172,9 @@ interface MemberCard {
   readonly statusLabel: string;
   readonly statusTone: StatusTone;
   readonly roles: readonly string[];
+  readonly roleSwitches: readonly NodeOverviewRoleSwitch[];
+  readonly admissionEnabled: boolean | null;
+  readonly admissionDisabled: boolean;
   readonly meta: string;
   readonly sections: readonly ResourceSheetSection[];
   readonly libraries: readonly NodeOverviewLibrary[];
@@ -201,6 +213,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     MatTabsModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatSlideToggleModule,
     RecordFormComponent,
     RecordFormActionsComponent,
     LibraryNodeAccessFormComponent,
@@ -229,6 +242,8 @@ export class NodeCatalogPageComponent {
   });
 
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   private readonly http = inject(HttpClient);
   private readonly clusterApi = inject(ClusterApi);
   private readonly dialog = inject(MatDialog);
@@ -258,6 +273,12 @@ export class NodeCatalogPageComponent {
       : this.route.snapshot.queryParamMap.get('tab') === 'cluster'
         ? 'cluster'
         : 'node',
+  );
+  protected readonly filtersOpen = signal(false);
+  protected readonly admissionBusy = signal<ReadonlySet<string>>(new Set());
+  protected readonly modeBusy = signal<ReadonlySet<string>>(new Set());
+  protected readonly pageSearchQuery = computed(() =>
+    this.pageTab() === 'groups' ? this.groupSearchQuery() : this.nodeSearchQuery(),
   );
   protected readonly managementTabs = NODE_MANAGEMENT_TABS;
   private readonly groups = signal<readonly NodeGroupResponse[]>([]);
@@ -305,7 +326,6 @@ export class NodeCatalogPageComponent {
       clusterName: this.local.standalone() ? null : this.clusterName(),
       agentUnavailable: this.local.agentUnavailable(),
       activeTasks: this.localActivity()?.active ?? null,
-      isAdmin: this.isAdmin(),
     }),
   );
   protected readonly localOverviewStatus = computed(() => {
@@ -325,6 +345,52 @@ export class NodeCatalogPageComponent {
       (role) => NODE_ROLE_LABELS[role],
     ),
   );
+  protected readonly localRoleSwitches = computed<readonly NodeOverviewRoleSwitch[]>(() => {
+    const mode = this.local.mode();
+    const status = mode ?? (this.local.status()
+      ? {
+          server: this.local.status()!.roles.includes('server'),
+          worker: this.local.status()!.roles.includes('worker'),
+          managed: false,
+        }
+      : null);
+    if (!this.isAdmin() || !status || this.local.modeUnavailable()) return [];
+    const requested = this.localNode()?.desiredRoles ?? null;
+    const applied = this.local.status()?.roles ?? [];
+    const current = (role: NodeRole) => requested?.includes(role) ?? status[role];
+    return NODE_ROLE_OPTIONS.map(({ value: role, label }) => ({
+      role,
+      label,
+      checked: current(role),
+      pending: !!requested && requested.includes(role) !== applied.includes(role),
+      disabled:
+        !status.managed ||
+        this.local.busy() ||
+        this.local.modeBusy() ||
+        this.local.agentUnavailable() ||
+        (current(role) && !current(role === 'server' ? 'worker' : 'server')),
+    }));
+  });
+  protected readonly localRoleControlNote = computed(() => {
+    if (!this.isAdmin()) return '';
+    if (this.local.modeUnavailable()) return 'État des fonctions indisponible.';
+    return this.local.mode()?.managed === false
+      ? 'Fonctions gérées par la configuration du déploiement.'
+      : '';
+  });
+  protected readonly localAdmissionEnabled = computed(() => {
+    const node = this.localNode();
+    if (!this.isAdmin() || !node) return null;
+    if (!(node.desiredRoles ?? node.roles).includes('worker')) return null;
+    const lifecycle = nodeLifecycle(node);
+    return lifecycle === 'quarantined' || lifecycle === 'incompatible'
+      ? null
+      : lifecycle !== 'draining';
+  });
+  protected readonly localAdmissionDisabled = computed(() => {
+    const node = this.localNode();
+    return !node || this.admissionBusy().has(node.id);
+  });
   protected readonly localOverviewMeta = computed(() => {
     const lastSignal = formatLastSignal(this.localNode()?.lastSeenAt);
     return `Dernier signal : ${lastSignal ?? (this.local.agentUnavailable() ? 'indisponible' : 'en attente')}`;
@@ -337,10 +403,6 @@ export class NodeCatalogPageComponent {
     if (actionId === 'capabilities') {
       const node = this.localNode();
       if (node) this.openNodeCard(node.id);
-    } else if (actionId === 'toggle-server') {
-      this.local.toggleRole('server');
-    } else if (actionId === 'toggle-worker') {
-      this.local.toggleRole('worker');
     }
   }
   protected readonly clusterName = computed(
@@ -987,7 +1049,6 @@ export class NodeCatalogPageComponent {
   );
   protected readonly nodeActions: readonly DataTableRowAction[] = [
     { id: 'identity', label: 'Nom et étiquettes', visibleWhen: () => this.isAdmin() },
-    { id: 'mode', label: 'Changer le mode', visibleWhen: () => this.isAdmin() },
     {
       id: 'delete',
       label: 'Supprimer',
@@ -1009,11 +1070,6 @@ export class NodeCatalogPageComponent {
       if (node) void this.editNodeIdentity(node);
       return;
     }
-    if (event.actionId === 'mode') {
-      const node = this.nodes().find((item) => item.id === event.row['id']);
-      if (node) void this.requestNodeMode(node);
-      return;
-    }
     if (event.actionId !== 'delete' || this.removalBusy()) return;
     const id = String(event.row['id']);
     this.removalBusy.set(true);
@@ -1032,15 +1088,6 @@ export class NodeCatalogPageComponent {
         this.loadLibraryAccessSummary();
         this.notifications.show('Nœud supprimé du cluster.');
       });
-  }
-  protected toggleDraining(): void {
-    const node = this.rawNode();
-    if (!node || this.lifecycleBusy()) return;
-    this.sendLifecycle(
-      this.http.put<void>('/api/v1/nodes/' + node.id + '/draining', {
-        draining: node.lifecycle !== 'draining',
-      }),
-    );
   }
   protected clearQuarantine(): void {
     const node = this.rawNode();
@@ -1295,6 +1342,9 @@ export class NodeCatalogPageComponent {
         statusLabel: NODE_LIFECYCLE_LABELS[lifecycle],
         statusTone: NODE_LIFECYCLE_TONES[lifecycle],
         roles: node.roles.map((role) => NODE_ROLE_LABELS[role]),
+        roleSwitches: this.memberRoleSwitches(node),
+        admissionEnabled: this.admissionEnabledFor(node),
+        admissionDisabled: this.admissionBusy().has(node.id),
         meta: `Dernier signal : ${record.lastSignal}`,
         sections: memberNodeOverviewSections(
           node,
@@ -1307,11 +1357,134 @@ export class NodeCatalogPageComponent {
       };
     }),
   );
+  protected memberRoleSwitches(node: NodeResponse): readonly NodeOverviewRoleSwitch[] {
+    if (!this.isAdmin()) return [];
+    const requested = node.desiredRoles ?? node.roles;
+    const roleEnabled = (role: NodeRole) => requested.includes(role);
+    return NODE_ROLE_OPTIONS.map(({ value: role, label }) => ({
+      role,
+      label,
+      checked: roleEnabled(role),
+      pending:
+        !!node.desiredRoles && node.desiredRoles.includes(role) !== node.roles.includes(role),
+      disabled:
+        this.modeBusy().has(node.id) ||
+        (roleEnabled(role) && !roleEnabled(role === 'server' ? 'worker' : 'server')),
+    }));
+  }
+  protected admissionEnabledFor(node: NodeResponse): boolean | null {
+    if (!this.isAdmin()) return null;
+    if (!(node.desiredRoles ?? node.roles).includes('worker')) return null;
+    const lifecycle = nodeLifecycle(node);
+    if (lifecycle === 'quarantined' || lifecycle === 'incompatible') return null;
+    return lifecycle !== 'draining';
+  }
+  protected admissionDisabledFor(node: NodeResponse): boolean {
+    return this.admissionBusy().has(node.id);
+  }
+  protected setMemberRole(
+    nodeId: string,
+    role: NodeRole,
+    enabled: boolean,
+  ): void {
+    const node = this.nodes().find((item) => item.id === nodeId);
+    if (node) void this.updateMemberRole(node, role, enabled);
+  }
+  private async updateMemberRole(
+    node: NodeResponse,
+    role: NodeRole,
+    enabled: boolean,
+  ): Promise<void> {
+    const roles = node.desiredRoles ?? node.roles;
+    const current = { server: roles.includes('server'), worker: roles.includes('worker') };
+    if (current[role] === enabled || this.modeBusy().has(node.id)) return;
+    this.modeBusy.update((busy) => new Set(busy).add(node.id));
+    try {
+      if (
+        await this.nodeMode.requestRole(
+          node.id,
+          node.displayName?.trim() || node.name,
+          current,
+          role,
+          enabled,
+          node.status === 'online',
+        )
+      ) {
+        const nodes = await firstValueFrom(this.clusterApi.listNodes());
+        this.nodes.set(nodes);
+      }
+    } catch {
+      this.notifications.show('Impossible d’actualiser les fonctions du nœud.');
+    } finally {
+      this.modeBusy.update((busy) => {
+        const next = new Set(busy);
+        next.delete(node.id);
+        return next;
+      });
+    }
+  }
+  protected setMemberAdmission(nodeId: string, enabled: boolean): void {
+    const node = this.nodes().find((item) => item.id === nodeId);
+    if (node) void this.setNodeAdmission(node, enabled);
+  }
+  protected setLocalAdmission(enabled: boolean): void {
+    const node = this.localNode();
+    if (node) void this.setNodeAdmission(node, enabled);
+  }
+  protected setSelectedNodeAdmission(enabled: boolean): void {
+    const node = this.rawNode();
+    if (node) void this.setNodeAdmission(node, enabled);
+  }
+  private async setNodeAdmission(node: NodeResponse, enabled: boolean): Promise<void> {
+    const active = this.admissionEnabledFor(node);
+    if (active === null || active === enabled || this.admissionBusy().has(node.id)) return;
+    if (!enabled) {
+      const confirmed = await firstValueFrom(
+        this.dialog
+          .open<ConfirmationDialogComponent, unknown, boolean>(ConfirmationDialogComponent, {
+            data: {
+              compact: true,
+              variant: 'danger',
+              eyebrow: 'Traitements du nœud',
+              title: `Suspendre les nouvelles tâches sur « ${node.displayName?.trim() || node.name} » ?`,
+              message:
+                'Aucune nouvelle tâche ne sera affectée à ce nœud. Les traitements déjà en cours ne sont pas interrompus et pourront se terminer normalement.',
+              confirmLabel: 'Suspendre les tâches',
+            },
+          })
+          .afterClosed(),
+      );
+      if (!confirmed) return;
+    }
+    this.admissionBusy.update((busy) => new Set(busy).add(node.id));
+    try {
+      await firstValueFrom(
+        this.http.put<void>(`/api/v1/nodes/${node.id}/draining`, { draining: !enabled }),
+      );
+      const nodes = await firstValueFrom(this.clusterApi.listNodes());
+      this.nodes.set(nodes);
+      this.notifications.show(
+        enabled
+          ? `Le nœud « ${node.displayName?.trim() || node.name} » peut de nouveau recevoir des tâches.`
+          : `Les nouvelles tâches sont suspendues sur « ${node.displayName?.trim() || node.name} ».`,
+      );
+    } catch (error) {
+      this.notifications.show(
+        (error as { error?: { title?: string } } | null)?.error?.title ??
+          'Impossible de modifier l’admission des tâches sur ce nœud.',
+      );
+    } finally {
+      this.admissionBusy.update((busy) => {
+        const next = new Set(busy);
+        next.delete(node.id);
+        return next;
+      });
+    }
+  }
   protected readonly memberActions = computed<readonly ResourceCardAction[]>(() =>
     this.isAdmin()
       ? [
           { id: 'identity', label: 'Nom et étiquettes' },
-          { id: 'mode', label: 'Changer le mode' },
           ...(this.removalBusy()
             ? []
             : [{ id: 'delete', label: 'Supprimer', tone: 'danger' as const }]),
@@ -1385,11 +1558,6 @@ export class NodeCatalogPageComponent {
   protected editSelectedNodeIdentity(): void {
     const node = this.selectedNode();
     if (node) void this.editNodeIdentity(node);
-  }
-
-  protected changeSelectedNodeMode(): void {
-    const node = this.rawNode();
-    if (node) void this.requestNodeMode(node);
   }
 
   private readonly activityLoaded = signal(false);
@@ -1564,6 +1732,23 @@ export class NodeCatalogPageComponent {
   );
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans les nœuds…',
+        query: this.pageSearchQuery,
+        onSearchQueryChange: (query) => {
+          if (this.pageTab() === 'groups') this.groupSearchQuery.set(query);
+          else this.nodeSearchQuery.set(query);
+        },
+        searchResults: (query) => this.pageSearchResults(query),
+        filter: {
+          label: 'Filtres',
+          visibleWhen: () => this.pageTab() === 'cluster' && !this.local.standalone(),
+          activeCount: () => this.activeFilters().length,
+          toggle: () => this.filtersOpen.update((open) => !open),
+        },
+      }),
+    );
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const tab = params.get('tab');
       if (tab === 'groups' || tab === 'cluster' || tab === 'node') {
@@ -1632,19 +1817,57 @@ export class NodeCatalogPageComponent {
     this.selectedRole.set(role);
   }
 
-  private async requestNodeMode(node: NodeResponse): Promise<void> {
-    const roles = node.desiredRoles ?? node.roles;
-    const accepted = await this.nodeMode.request(
-      node.id,
-      node.displayName?.trim() || node.name,
-      { server: roles.includes('server'), worker: roles.includes('worker') },
-      node.status === 'online',
-    );
-    if (!accepted) return;
-    this.clusterApi
-      .listNodes()
-      .pipe(catchError(() => EMPTY))
-      .subscribe((nodes) => this.nodes.set(nodes));
+  private pageSearchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = query.trim().toLocaleLowerCase('fr');
+    if (!normalized) return [];
+    const matches = (...values: readonly string[]) =>
+      values.some((value) => value.toLocaleLowerCase('fr').includes(normalized));
+    if (this.pageTab() === 'groups') {
+      return this.groups()
+        .filter((group) => matches(group.name, group.description))
+        .slice(0, 6)
+        .map((group) => ({
+          id: `node-group:${group.id}`,
+          label: group.name,
+          description: group.description || 'Groupe de nœuds',
+          group: 'Groupes de nœuds',
+          glyph: '▦',
+          run: () => this.openGroupDetail(group),
+        }));
+    }
+    if (this.pageTab() === 'cluster') {
+      return this.nodes()
+        .filter((node) =>
+          matches(
+            node.name,
+            node.displayName ?? '',
+            node.id,
+            node.roles.map((role) => NODE_ROLE_LABELS[role]).join(' '),
+          ),
+        )
+        .slice(0, 6)
+        .map((node) => ({
+          id: `node:${node.id}`,
+          label: formatNodeLabel(node.name, node.displayName),
+          description: `${NODE_LIFECYCLE_LABELS[nodeLifecycle(node)]} · ${node.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ')}`,
+          group: 'Nœuds du cluster',
+          glyph: '▤',
+          run: () => this.openNodeCard(node.id),
+        }));
+    }
+    const local = this.localNode();
+    return local && matches(local.name, local.displayName ?? '', local.id)
+      ? [
+          {
+            id: `node:${local.id}`,
+            label: formatNodeLabel(local.name, local.displayName),
+            description: 'Ce nœud',
+            group: 'Nœud local',
+            glyph: '▤',
+            run: () => this.pageTab.set('node'),
+          },
+        ]
+      : [];
   }
 
   protected addNode(): void {

@@ -1,6 +1,6 @@
 ---
 domain: ui
-updated: 2026-10-26
+updated: 2026-10-27
 legacy_adr:
   [
     0008,
@@ -98,6 +98,8 @@ Route `/activity` : cinq états centrés sur les fichiers découverts : **Non tr
 - Suivi partagé : EventSource conserve sa reconnexion native, le sondage HTTP de secours intervient après 15 s sans événement ; une réponse HTTP ancienne ou en erreur ne remplace pas un événement récent. Les listes paginées sont sondées sans requêtes qui se chevauchent, avec délai maximal de 20 s et conservation des données connues. Les demandes IA sont consultées uniquement par les administrateurs dans **Diagnostiquer**, hors filtre « Traitements » ; elles ne sont pas rechargées dans **Exploiter**. Le filtre « Assistant IA » ne charge pas les listes d'exécutions. Les véritables indisponibilités sont signalées sans vider le journal ni annoncer un historique vide.
 
 ## Autres pages
+
+Assistant (`/assistant`) : historique groupé par période, création accessible depuis le panneau d’historique, composeur unifié pour le message, les pièces jointes et le modèle. La recherche globale affiche les conversations puis les correspondances dans le contenu des tours, avec ouverture directe sur le message trouvé.
 
 Initialisation et accès (`/login`, `/setup`) : `AccessTemplateComponent` fournit le cadre public commun, la marque, l’introduction, l’indicateur de progression et le responsive. La connexion garde son formulaire compact ; le premier démarrage garde la fiche locale et le parcours de création de compte et de rattachement. Le setup conserve un fond clair uni et un halo en thème sombre. La fiche locale liste toutes les adresses IPv4/IPv6 avec leur interface, y compris boucle locale et interfaces virtuelles. L'« Accès au nœud » est distinct : URL publique/annoncée configurée, sinon origine du navigateur (hôte et port publié conservés en Docker bridge). Aucune adresse de passerelle n'est présentée comme IP LAN de l'hôte Docker.
 

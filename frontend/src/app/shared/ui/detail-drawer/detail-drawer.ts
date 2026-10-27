@@ -36,6 +36,7 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
   template: `
     <mat-drawer-container
       class="detail-drawer-container"
+      [style.overflow]="mainScroll() === 'parent' ? 'visible' : null"
       [hasBackdrop]="modal()"
       (backdropClick)="requestClose()"
     >

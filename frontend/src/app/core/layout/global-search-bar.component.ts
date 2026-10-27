@@ -200,7 +200,8 @@ export class GlobalSearchBarComponent {
   private readonly searchField = viewChild(SearchFieldComponent);
 
   protected readonly context = this.pageShell.current;
-  protected readonly query = signal('');
+  private readonly localQuery = signal('');
+  protected readonly query = computed(() => this.context()?.query?.() ?? this.localQuery());
   protected readonly panelOpen = signal(false);
   protected readonly activeIndex = signal(0);
   protected readonly panelWidth = signal<number | string>(880);
@@ -217,7 +218,10 @@ export class GlobalSearchBarComponent {
         .slice(0, 2) ?? [],
   );
   protected readonly filterButtonCount = computed(() =>
-    this.context()?.filter ? (this.context()?.filter?.activeCount?.() ?? 0) : null,
+    this.context()?.filter &&
+    (!this.context()?.filter?.visibleWhen || this.context()?.filter?.visibleWhen?.())
+      ? (this.context()?.filter?.activeCount?.() ?? 0)
+      : null,
   );
   protected readonly pageResults = computed<SearchEntry[]>(() => {
     const context = this.context();
@@ -250,7 +254,7 @@ export class GlobalSearchBarComponent {
   constructor() {
     effect(() => {
       const context = this.context();
-      this.query.set('');
+      this.localQuery.set('');
       context?.onSearchQueryChange?.('');
     });
     afterNextRender(() => {
@@ -282,7 +286,7 @@ export class GlobalSearchBarComponent {
   }
 
   protected updateQuery(value: string): void {
-    this.query.set(value);
+    this.localQuery.set(value);
     this.context()?.onSearchQueryChange?.(value);
     this.activeIndex.set(0);
     this.openPanel();
@@ -295,7 +299,8 @@ export class GlobalSearchBarComponent {
 
   protected openFilters(): void {
     this.closePanel();
-    this.context()?.filter?.toggle();
+    const filter = this.context()?.filter;
+    if (filter && (!filter.visibleWhen || filter.visibleWhen())) filter.toggle();
   }
 
   protected activeItemId(): string | null {

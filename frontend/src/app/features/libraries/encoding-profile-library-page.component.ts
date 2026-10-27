@@ -1,6 +1,6 @@
 import { ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import {
   FormControl,
   FormGroup,
@@ -20,6 +20,7 @@ import { DataTableRow } from '../../shared/ui/data-table.component';
 import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
 import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import { NotificationService } from '../../shared/services/notification.service';
+import { PageShellContextService } from '../../core/layout/page-shell-context';
 import { EncodingProfiles } from '../../shared/services/encoding-profiles';
 import {
   EncodingProfileDetails,
@@ -305,6 +306,8 @@ interface EncoderGroup {
 })
 export class EncodingProfileLibraryPageComponent {
   private readonly api = inject(EncodingProfiles);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   private readonly notifications = inject(NotificationService);
   private readonly route = inject(ActivatedRoute);
   private readonly routeData = toSignal(this.route.data, {
@@ -410,6 +413,13 @@ export class EncodingProfileLibraryPageComponent {
   );
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans les profils d’encodage…',
+        query: this.query,
+        onSearchQueryChange: (query) => this.query.set(query),
+      }),
+    );
     void this.load();
   }
 

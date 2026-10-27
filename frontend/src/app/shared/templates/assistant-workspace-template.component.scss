@@ -1,7 +1,9 @@
 :host {
   position: relative;
   display: block;
-  height: calc(100dvh - 112px);
+  height: calc(
+    100dvh - var(--shell-header-sticky-offset, 84px) - var(--space-5) - var(--space-6)
+  );
   min-height: 360px;
 }
 
@@ -12,7 +14,8 @@
 }
 
 .conversation-panel {
-  width: 240px;
+  width: min(20rem, 30vw);
+  min-width: 16rem;
   padding: var(--space-4);
   background: var(--surface-container-low);
   border: 0;
@@ -64,5 +67,6 @@
 
   :host:not(.assistant-panel-mode) {
     height: calc(100dvh - 100px);
+    min-height: 320px;
   }
 }

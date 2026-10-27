@@ -15,6 +15,8 @@ export interface ConfirmationDialogData {
   readonly confirmLabel?: string;
   /** `danger` pour une action destructive ou irréversible ; `info` est déduit du mode d'information. */
   readonly variant?: DialogVariant;
+  /** Présentation resserrée pour les confirmations liées aux interrupteurs. */
+  readonly compact?: boolean;
   readonly mode?: 'confirmation' | 'information';
   readonly closeLabel?: string;
   readonly items?: readonly { readonly label: string; readonly detail?: string }[];
@@ -118,7 +120,11 @@ export class ConfirmationDialogComponent {
     this.data.variant ?? (this.data.mode === 'information' ? 'info' : 'neutral');
 
   constructor() {
-    this.dialogRef.addPanelClass(['app-dialog-panel', 'confirmation-dialog-panel']);
-    this.dialogRef.updateSize('480px');
+    this.dialogRef.addPanelClass([
+      'app-dialog-panel',
+      'confirmation-dialog-panel',
+      ...(this.data.compact ? ['compact-confirmation-dialog-panel'] : []),
+    ]);
+    this.dialogRef.updateSize(this.data.compact ? '400px' : '480px');
   }
 }

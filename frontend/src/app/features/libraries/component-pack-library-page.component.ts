@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -23,6 +24,7 @@ import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import { FlowComponentPackSummary } from '../../shared/models/flow-component-packs';
 import { FlowComponentPackDetails } from '../../shared/models/flow-component-packs';
 import { MEDIA_TYPE_OPTIONS } from '../../shared/models/media-type';
+import { PageShellContextService } from '../../core/layout/page-shell-context';
 
 interface PackRow extends DataTableRow {
   readonly id: string;
@@ -76,6 +78,8 @@ interface PackRow extends DataTableRow {
 })
 export class ComponentPackLibraryPageComponent {
   private readonly api = inject(FlowComponentPacks);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly routeData = toSignal(this.route.data, {
@@ -218,6 +222,13 @@ export class ComponentPackLibraryPageComponent {
   );
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans les packs de composants…',
+        query: this.query,
+        onSearchQueryChange: (query) => this.query.set(query),
+      }),
+    );
     void this.loadPacks();
     // La fiche est portée par l'URL (?pack=<id>) : le menu latéral et le bouton précédent
     // du navigateur ramènent à la liste.

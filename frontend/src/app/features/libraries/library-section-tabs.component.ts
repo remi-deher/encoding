@@ -16,6 +16,7 @@ const SECTIONS: readonly SubnavOption[] = [
   selector: 'app-library-section-tabs',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SubnavComponent, SubnavTemplateComponent],
+  styleUrl: './library-section-tabs.component.scss',
   template: `
     <app-subnav-template>
       <app-subnav

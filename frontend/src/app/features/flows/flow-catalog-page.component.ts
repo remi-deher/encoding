@@ -690,6 +690,7 @@ export class FlowCatalogPageComponent {
     this.destroyRef.onDestroy(
       this.pageShellContext.register({
         searchPlaceholder: 'Rechercher dans les flows…',
+        query: this.searchQuery,
         onSearchQueryChange: (query) => this.searchQuery.set(query),
         searchResults: (query) => this.flowSearchResults(query),
         actions: [

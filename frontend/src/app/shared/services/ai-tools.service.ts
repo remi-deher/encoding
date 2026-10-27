@@ -10,6 +10,7 @@ import {
   AiSessionPage,
   AiSessionState,
   AiAssistantConversation,
+  AiAssistantConversationSearchResult,
   AiAssistantOptions,
   AiAssistantConversationDetail,
   AiAssistantActivity,
@@ -59,6 +60,12 @@ export class AiToolsService {
   listAssistantConversations(): Observable<readonly AiAssistantConversation[]> {
     return this.http.get<readonly AiAssistantConversation[]>(
       '/api/v1/tools/ai/assistant/conversations',
+    );
+  }
+
+  searchAssistantConversations(query: string): Observable<readonly AiAssistantConversationSearchResult[]> {
+    return this.http.get<readonly AiAssistantConversationSearchResult[]>(
+      `/api/v1/tools/ai/assistant/conversations/search?q=${encodeURIComponent(query)}`,
     );
   }
 
