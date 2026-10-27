@@ -111,6 +111,44 @@ internal static class SubtitlesMediaTests
                 var fromResource = await actions.AddFontsAsync(new Dictionary<string, JsonElement> { ["fontSet"] = JsonSerializer.SerializeToElement("Absent") }, outcome.Primary!, directory, "fonts6", CancellationToken.None, resourceFolder);
                 using var fromResourceInfo = JsonDocument.Parse(await tools.CheckedAsync("mkvmerge", ["-J", fromResource.Primary!], directory, CancellationToken.None));
                 Check(fromResourceInfo.RootElement.GetProperty("attachments").EnumerateArray().Select(a => a.GetProperty("file_name").GetString()).SequenceEqual(["C.ttf"]), "A catalog resource attaches its own fonts.");
+
+                // Reproduction Overgeared S01E01 et déduplication intelligente :
+                var mkvWithDupes = P("mkv-with-dupes.mkv");
+                var fontA = P("ArialBold.ttf");
+                var fontB = P("TrebuchetMSBold.otf");
+                var fontC = P("ArialBoldItalic.ttf");
+                await File.WriteAllBytesAsync(fontA, FontMatcherTests.CreateSyntheticTtf("Arial", "Bold"));
+                await File.WriteAllBytesAsync(fontB, FontMatcherTests.CreateSyntheticTtf("Trebuchet MS", "Bold"));
+                await File.WriteAllBytesAsync(fontC, FontMatcherTests.CreateSyntheticTtf("Arial", "Bold Italic"));
+                await tools.CheckedAsync("mkvmerge", ["-o", mkvWithDupes, outcome.Primary!,
+                    "--attach-file", fontA, "--attach-file", fontB, "--attach-file", fontC], directory, CancellationToken.None);
+
+                var crunchyrollResource = P("crunchyroll-resource"); Directory.CreateDirectory(crunchyrollResource);
+                await File.WriteAllBytesAsync(Path.Combine(crunchyrollResource, "Arial Bold.ttf"), FontMatcherTests.CreateSyntheticTtf("Arial", "Bold"));
+                await File.WriteAllBytesAsync(Path.Combine(crunchyrollResource, "Trebuchet MS Bold.ttf"), FontMatcherTests.CreateSyntheticTtf("Trebuchet MS", "Bold"));
+                await File.WriteAllBytesAsync(Path.Combine(crunchyrollResource, "Times New Roman Bold.ttf"), FontMatcherTests.CreateSyntheticTtf("Times New Roman", "Bold"));
+
+                var dedupResult = await actions.AddFontsAsync(new Dictionary<string, JsonElement>(), mkvWithDupes, directory, "fonts-dedup", CancellationToken.None, crunchyrollResource);
+                Check(dedupResult.Primary is not null, "Adding fonts produces an updated MKV.");
+                using var dedupInfo = JsonDocument.Parse(await tools.CheckedAsync("mkvmerge", ["-J", dedupResult.Primary!], directory, CancellationToken.None));
+                var attachedNames = dedupInfo.RootElement.GetProperty("attachments").EnumerateArray().Select(a => a.GetProperty("file_name").GetString()!).Order().ToArray();
+
+                Check(!attachedNames.Contains("Arial Bold.ttf"), "Arial Bold.ttf was deduplicated and NOT attached.");
+                Check(!attachedNames.Contains("Trebuchet MS Bold.ttf"), "Trebuchet MS Bold.ttf was deduplicated and NOT attached.");
+                Check(attachedNames.Contains("Times New Roman Bold.ttf"), "Times New Roman Bold.ttf had no equivalent and WAS attached.");
+                Check(attachedNames.Contains("ArialBoldItalic.ttf"), "ArialBoldItalic.ttf is kept intact.");
+                Check(attachedNames.Length == 4, $"Exactement 4 polices attachées (3 existantes + 1 nouvelle), trouvé : {attachedNames.Length} ({string.Join(", ", attachedNames)}).");
+
+                Check(dedupResult.Value is { ValueKind: JsonValueKind.Array }, "Notes array is returned in outcome.Value.");
+                var notes = dedupResult.Value!.Value.EnumerateArray().Select(n => n.GetString()!).ToArray();
+                Check(notes.Any(n => n.Contains("Police « Arial Bold.ttf » ignorée : déjà présente (« ArialBold.ttf »)", StringComparison.Ordinal)), "Log mentions Arial Bold.ttf ignored with ArialBold.ttf.");
+                Check(notes.Any(n => n.Contains("Police « Trebuchet MS Bold.ttf » ignorée : déjà présente (« TrebuchetMSBold.otf »)", StringComparison.Ordinal)), "Log mentions Trebuchet MS Bold.ttf ignored with TrebuchetMSBold.otf.");
+                Check(notes.Any(n => n.Contains("Police « Times New Roman Bold.ttf » ajoutée", StringComparison.Ordinal)), "Log mentions Times New Roman Bold.ttf added with size.");
+
+                var secondDedup = await actions.AddFontsAsync(new Dictionary<string, JsonElement>(), dedupResult.Primary!, directory, "fonts-dedup-second", CancellationToken.None, crunchyrollResource);
+                Check(secondDedup.Primary is null, "Second pass adds nothing when all fonts are already present.");
+                var secondNotes = secondDedup.Value!.Value.EnumerateArray().Select(n => n.GetString()!).ToArray();
+                Check(secondNotes.Length == 3 && secondNotes.All(n => n.Contains("ignorée", StringComparison.Ordinal)), "Second pass reports all 3 fonts as ignored in notes.");
                 Console.WriteLine("PASS: fonts attached from the node font set (only missing ones, no free path) and from a catalog resource.");
             }
             finally { Environment.SetEnvironmentVariable("ENCODING_FONT_DIR", previous); }

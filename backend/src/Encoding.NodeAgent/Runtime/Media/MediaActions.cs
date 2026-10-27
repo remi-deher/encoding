@@ -262,16 +262,95 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
         // Comme FileFlows : les polices du profil ne servent qu'aux pistes ASS au profil courant ; sans elles (aucun sous-titre, bitmaps seuls, ASS personnalisés) le fichier reste intact.
         if(!HasProfileAss(identification.RootElement)) return new(null,[]);
-        var present=identification.RootElement.TryGetProperty("attachments",out var attachments)
-            ?attachments.EnumerateArray().Select(a=>(a.GetProperty("file_name").GetString()??"").ToLowerInvariant()).ToHashSet():[];
-        var missing=names.Where(name=>!present.Contains(name.ToLowerInvariant())).ToArray();
-        if(missing.Length==0) return new(null,[]);
-        var file=editWorkingCopy?MutableAssemblyFile(current,directory):Output(directory,node,".mkv");
-        var args=new List<string>(editWorkingCopy?[file]:["-o",file]);
-        foreach(var name in missing) args.AddRange([editWorkingCopy?"--add-attachment":"--attach-file",Path.Combine(folder,name)]);
-        if(!editWorkingCopy) args.Add(current);
-        await tools.CheckedAsync(editWorkingCopy?"mkvpropedit":"mkvmerge",args,directory,ct);
-        return new(file,[],JsonSerializer.SerializeToElement(missing));
+        var existingFonts = await ExtractAndInspectExistingFontsAsync(identification.RootElement, current, directory, ct);
+        var missing = new List<string>();
+        var notes = new List<string>();
+
+        foreach (var name in names)
+        {
+            var candidateFile = Path.Combine(folder, name);
+            var candidateDesc = FontMatcher.Read(candidateFile, name);
+            var existingMatch = existingFonts.FirstOrDefault(existing => FontMatcher.IsEquivalent(candidateDesc, existing));
+            if (existingMatch is not null)
+            {
+                var note = $"Police « {name} » ignorée : déjà présente (« {existingMatch.FileName} »).";
+                notes.Add(note);
+                logger?.LogInformation("{Note}", note);
+            }
+            else
+            {
+                missing.Add(name);
+                var note = $"Police « {name} » ajoutée ({candidateDesc.Size} octets).";
+                notes.Add(note);
+                logger?.LogInformation("{Note}", note);
+            }
+        }
+
+        if (missing.Count == 0) return new(null, [], JsonSerializer.SerializeToElement(notes));
+        var file = editWorkingCopy ? MutableAssemblyFile(current, directory) : Output(directory, node, ".mkv");
+        var args = new List<string>(editWorkingCopy ? [file] : ["-o", file]);
+        foreach (var name in missing) args.AddRange([editWorkingCopy ? "--add-attachment" : "--attach-file", Path.Combine(folder, name)]);
+        if (!editWorkingCopy) args.Add(current);
+        await tools.CheckedAsync(editWorkingCopy ? "mkvpropedit" : "mkvmerge", args, directory, ct);
+        return new(file, [], JsonSerializer.SerializeToElement(notes));
+    }
+
+    private async Task<IReadOnlyList<FontDescriptor>> ExtractAndInspectExistingFontsAsync(JsonElement root, string current, string directory, CancellationToken ct)
+    {
+        if (!root.TryGetProperty("attachments", out var attachments)) return [];
+        var extensions = new[] { ".ttf", ".otf", ".ttc" };
+        var fontAttachments = attachments.EnumerateArray().Where(a =>
+        {
+            var fn = a.TryGetProperty("file_name", out var f) ? f.GetString() ?? "" : "";
+            return extensions.Contains(Path.GetExtension(fn).ToLowerInvariant());
+        }).ToArray();
+        if (fontAttachments.Length == 0) return [];
+
+        if (ProcessToolRunner.Find("mkvextract") is not null)
+        {
+            var tempDir = Path.Combine(directory, "mkv-fonts-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                var extractArgs = new List<string> { "attachments", current };
+                var targets = new List<(JsonElement Attachment, string FilePath)>();
+                foreach (var att in fontAttachments)
+                {
+                    var id = att.GetProperty("id").GetInt32();
+                    var fn = att.GetProperty("file_name").GetString() ?? "";
+                    var target = Path.Combine(tempDir, $"{id}_{fn}");
+                    targets.Add((att, target));
+                    extractArgs.Add($"{id}:{target}");
+                }
+                await tools.CheckedAsync("mkvextract", extractArgs, directory, ct);
+                var result = new List<FontDescriptor>();
+                foreach (var (att, target) in targets)
+                {
+                    var fn = att.GetProperty("file_name").GetString() ?? "";
+                    var size = att.TryGetProperty("size", out var s) ? s.GetInt64() : 0;
+                    result.Add(File.Exists(target) ? FontMatcher.Read(target, fn, size) : FontMatcher.FromFileName(fn, size));
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "Extraction des polices du MKV impossible, repli sur le nom normalisé.");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        }
+
+        return fontAttachments.Select(att =>
+        {
+            var fn = att.GetProperty("file_name").GetString() ?? "";
+            var size = att.TryGetProperty("size", out var s) ? s.GetInt64() : 0;
+            return FontMatcher.FromFileName(fn, size);
+        }).ToArray();
     }
 
     public async Task<CropCoordinates?> DetectCropAsync(string current,string directory,int samplePoints,int sampleDurationSeconds,int threshold,int roundMultiple,double durationSeconds,CancellationToken ct)

@@ -48,6 +48,29 @@ tags: [ressource, police, image, audio, catalogue, version, sha-256, distributio
 - Préchargement : quand une version arrive par réconciliation, le serveur récupère l'octet en arrière-plan. Un worker qui le demande avant la fin déclenche la récupération et attend avec un délai borné ; l'éligibilité d'un segment ne reste jamais bloquée indéfiniment.
 - Tests : empreinte falsifiée, flux tronqué, reprise, pair non admis, signature rejouée, perte d'un pair, deux demandes simultanées de la même empreinte.
 
+## Déduplication des polices attachées (subtitles-add-fonts)
+
+Constaté sur des médias réels (ex. *Overgeared* S01E01) : l'ajout d'un jeu de polices (comme la ressource « Crunchyroll ») peut dupliquer des polices déjà présentes dans le conteneur MKV sous une nomenclature légèrement différente (`Arial Bold.ttf` vs `ArialBold.ttf`, `Trebuchet MS Bold.ttf` vs `TrebuchetMSBold.otf`), augmentant inutilement la taille du média final (+1,7 Mo).
+
+### Règles de déduplication retenues
+1. **Priorité 1 : Analyse des métadonnées SFNT (`name` table)**.
+   - Les fichiers candidats et les pièces jointes existantes du MKV sont inspectés en extrayant leur table `name` standard OpenType / TrueType (`0x00010000`, `'true'`, `'OTTO'`) ou TrueType Collections (`'ttcf'`).
+   - Sont extraits les identifiants : `FontFamily` (nameID 1), `FontSubfamily` (nameID 2) et `FullFontName` (nameID 4) décodés en UTF-16BE (plateforme Unicode/Windows) ou Latin1 (Macintosh).
+   - Les clés d'équivalence normalisées combinent nom complet, famille + style, et famille seule (pour les styles Regular/standard). Deux polices partageant au moins une clé de correspondance sont considérées équivalentes.
+   - Les styles distincts (ex. *Bold* vs *Bold Italic*) génèrent des clés différentes et ne sont jamais confondus.
+2. **Priorité 2 : Repli sur le nom de fichier normalisé**.
+   - En l'absence de table `name` lisible ou en cas d'impossibilité d'extraction, la comparaison retombe sur le nom de fichier normalisé (extension supprimée, suppression de tous les caractères non alphanumériques : espaces, tirets, traits d'union, points, casse ignorée). Exemple : `Arial Bold.ttf` ≡ `ArialBold.otf` ≡ `arial-bold`.
+3. **Garantie de robustesse (non-plantage)**.
+   - Une police corrompue, tronquée ou au format non reconnu ne lève jamais d'exception et ne fait jamais échouer l'exécution du flow. L'inspecteur retombe immédiatement sur le descripteur dérivé du nom de fichier normalisé.
+4. **Visibilité et traçabilité**.
+   - Chaque police ajoutée est journalisée avec sa taille (`Police « Arial Bold.ttf » ajoutée (751104 octets).`).
+   - Chaque police ignorée car déjà présente est consignée avec le nom de la pièce jointe existante correspondante (`Police « Arial Bold.ttf » ignorée : déjà présente (« ArialBold.ttf »).`).
+   - Ces notes sont renvoyées dans le résultat de l'action (`outcome.Value`) et archivées dans les journaux d'exécution du runner, même lorsque toutes les polices étaient déjà présentes.
+
+### Limites connues
+- Polices aux tables de noms corrompues ou utilisant des encodages non conventionnels (hors Unicode/Macintosh) : retombent sur la comparaison par nom normalisé.
+- Synonymes de style non déclarés comme sous-famille standard (ex. « SemiBold » comparé à « DemiBold » ou dénominations typographiques atypiques ne figurant pas dans la table de nom SFNT) : traités comme distincts si leurs noms normalisés divergent.
+
 ## Alternatives écartées
 - **Octets dans l'entité réconciliée ou volume partagé** : le premier alourdit le journal, le second ajoute un prérequis de déploiement. Le lot du journal est borné en nombre d'événements (32), pas en octets : des fichiers de plusieurs mégaoctets alourdiraient chaque échange et chaque reprise.
 - **Tout mettre dans une bibliothèque média** : mélange deux concepts (déclencheur de traitement et ressource consommée), impose des chemins locaux par nœud et expose la ressource à la surveillance et au remplacement.

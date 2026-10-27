@@ -504,12 +504,9 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         var outcome=id=="base-assemble-media"
                             ? await actions.AssembleAsync(c,context.CurrentMetadata!.Value,variables.TryGetValue("tracks.origin",out var origin)?origin:null,current,directory,node.Id,job.Token,resourceFolder)
                             : await actions.AddFontsAsync(c,current,directory,node.Id,job.Token,resourceFolder);
+                        if(outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach(var note in added.EnumerateArray()) if(note.GetString() is { Length: > 0 } text) logger.LogInformation(id=="base-assemble-media"?"Assemblage média : {Note}":"{Note}",text);
                         if(outcome.Primary is null) output="unchanged";
-                        else
-                        {
-                            if(outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach(var note in added.EnumerateArray()) logger.LogInformation("Assemblage média : {Note}",note.GetString());
-                            await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
-                        }
+                        else await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                     }
                     else if(id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules")
                     {

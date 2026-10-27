@@ -17,6 +17,7 @@ await ScriptToolsTests.RunAsync();
 await AudioRulesMediaTests.RunAsync();
 await TrackNamesMediaTests.RunAsync();
 await SubtitlesMediaTests.RunAsync();
+FontMatcherTests.Run();
 await ProcessTests.RunAsync();
 
 await TriggerTests.RunAsync();
