@@ -15,6 +15,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   computed,
   inject,
   signal,
@@ -110,6 +111,9 @@ export class FlowCatalogPageComponent {
   });
 
   protected readonly actionDefinition = signal<RecordFormData | null>(null);
+  private readonly globalFlowImportPicker = viewChild<ElementRef<HTMLInputElement>>(
+    'globalFlowImportPicker',
+  );
   protected readonly actionForm = computed(
     () => this.actionDefinition() ?? this.flowCreationForm(),
   );
@@ -240,8 +244,17 @@ export class FlowCatalogPageComponent {
   private readonly dialog = inject(MatDialog);
   private readonly downloads = inject(FileDownload);
   private readonly notifications = inject(NotificationService);
-  protected readonly listActions = [{ id: 'import', label: 'Importer', fileAccept: '.json,.zip' }];
   protected readonly importing = signal(false);
+  protected readonly exporting = signal(false);
+  protected openGlobalImportPicker(): void {
+    if (!this.importing()) this.globalFlowImportPicker()?.nativeElement.click();
+  }
+  protected onGlobalImportChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void this.onImportFile(file);
+  }
   protected async onImportFile(file: File): Promise<void> {
     this.importing.set(true);
     try {
@@ -272,7 +285,6 @@ export class FlowCatalogPageComponent {
     },
   ];
   protected readonly selectionActions: readonly ResourceListSelectionAction[] = [
-    { id: 'export', label: 'Exporter la sélection (ZIP)' },
     {
       id: 'publish',
       label: 'Publier les brouillons',
@@ -406,13 +418,17 @@ export class FlowCatalogPageComponent {
       await this.deleteSelected(event.rows);
       return;
     }
+  }
+  protected async exportSelectedFlows(): Promise<void> {
+    const ids = [...this.selectedFlowIds()];
+    if (!ids.length || this.exporting()) return;
+    this.exporting.set(true);
     try {
-      this.downloads.save(
-        await this.api.exportMany(event.rows.map((row) => String(row['id']))),
-        'flows.zip',
-      );
+      this.downloads.save(await this.api.exportMany(ids), 'flows.zip');
     } catch {
       this.notifications.show('Export de la sélection impossible.');
+    } finally {
+      this.exporting.set(false);
     }
   }
   protected async publishSelected(rows: readonly DataTableRow[]): Promise<void> {
@@ -699,6 +715,20 @@ export class FlowCatalogPageComponent {
             label: 'Créer un flow',
             icon: 'add',
             run: () => void this.openFlowCreation(),
+          },
+          {
+            id: 'import-flows',
+            label: 'Importer',
+            icon: 'upload',
+            visibleWhen: () => this.selectedFlowIds().size === 0 && !this.importing(),
+            run: () => this.openGlobalImportPicker(),
+          },
+          {
+            id: 'export-flows',
+            label: 'Exporter',
+            icon: 'outward',
+            visibleWhen: () => this.selectedFlowIds().size > 0 && !this.exporting(),
+            run: () => void this.exportSelectedFlows(),
           },
         ],
       }),

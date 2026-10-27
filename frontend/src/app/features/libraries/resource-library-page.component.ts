@@ -57,11 +57,7 @@ type EditorMode = 'create' | 'version';
     <app-resource-catalog-template
       [title]="title()"
       [items]="items()"
-      filterLabel="Ressources"
-      searchLabel="Rechercher une ressource"
-      searchLayout="centered"
-      [searchQuery]="query()"
-      (searchQueryChange)="query.set($event)"
+      [showToolbar]="false"
       resourceIcon="copy"
       listEmptyMessage="Aucune ressource. Ajoutez des polices pour les partager avec tous les nœuds."
       openLabel="Ouvrir"
@@ -77,10 +73,6 @@ type EditorMode = 'create' | 'version';
       detailLayout="page"
       (actionClosed)="closeEditor()"
     >
-      <ng-template #pageActions>
-        <button matButton="filled" type="button" (click)="openCreate()">Ajouter des polices</button>
-      </ng-template>
-
       <ng-template #catalogueNavigation>
         <app-library-section-tabs catalogue-navigation selected="resources" />
       </ng-template>
@@ -313,6 +305,14 @@ export class ResourceLibraryPageComponent {
         searchPlaceholder: 'Rechercher dans les ressources…',
         query: this.query,
         onSearchQueryChange: (query) => this.query.set(query),
+        actions: [
+          {
+            id: 'add-fonts-resource',
+            label: 'Ajouter des polices',
+            icon: 'add',
+            run: () => this.openCreate(),
+          },
+        ],
       }),
     );
     void this.load();

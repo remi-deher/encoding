@@ -44,10 +44,7 @@ interface PackRow extends DataTableRow {
     <app-resource-catalog-template
       [title]="title()"
       [items]="items()"
-      filterLabel="Packs de composants"
-      searchLabel="Rechercher un pack"
-      [searchQuery]="query()"
-      (searchQueryChange)="query.set($event)"
+      [showToolbar]="false"
       resourceIcon="pack"
       listEmptyMessage="Aucun pack. Créez-en un depuis une version publiée dans Flows."
       openLabel="Ouvrir"
@@ -58,7 +55,6 @@ interface PackRow extends DataTableRow {
       [detailTitle]="selectedPack()?.name ?? 'Pack de composants'"
       [detailDescription]="selectedPack()?.description ?? ''"
       detailLayout="page"
-      searchLayout="centered"
     >
       <ng-template #catalogueNavigation>
         <app-library-section-tabs catalogue-navigation selected="packs" />
