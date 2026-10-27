@@ -711,12 +711,6 @@ export class FlowCatalogPageComponent {
         searchResults: (query) => this.flowSearchResults(query),
         actions: [
           {
-            id: 'create-flow',
-            label: 'Créer un flow',
-            icon: 'add',
-            run: () => void this.openFlowCreation(),
-          },
-          {
             id: 'import-flows',
             label: 'Importer',
             icon: 'upload',
@@ -729,6 +723,12 @@ export class FlowCatalogPageComponent {
             icon: 'outward',
             visibleWhen: () => this.selectedFlowIds().size > 0 && !this.exporting(),
             run: () => void this.exportSelectedFlows(),
+          },
+          {
+            id: 'create-flow',
+            label: 'Créer un flow',
+            icon: 'add',
+            run: () => void this.openFlowCreation(),
           },
         ],
       }),
