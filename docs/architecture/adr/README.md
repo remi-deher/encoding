@@ -36,3 +36,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0018](0018-shell-adaptatif-et-palettes.md) | Shell adaptatif et palettes Material partagées | implemented | ui |
 | [0019](0019-recherche-contextuelle-du-shell.md) | Recherche contextuelle dans le shell | implemented | ui |
 | [0020](0020-gabarit-partage-de-sous-navigation.md) | Gabarit partagé de sous-navigation | implemented | ui |
+| [0021](0021-activation-cluster-plugins-outils.md) | Activation cluster des plugins et outils média | implemented | plugins |

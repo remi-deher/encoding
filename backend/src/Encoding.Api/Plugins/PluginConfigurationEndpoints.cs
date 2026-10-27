@@ -10,15 +10,34 @@ public static class PluginConfigurationEndpoints
     public static void MapPluginConfigurationEndpoints(this WebApplication app)
     {
         var plugins = app.MapGroup("/api/v1/plugins").WithTags("Plugins");
-        plugins.MapGet("", (FlowComponentRegistry catalog) =>
+        plugins.MapGet("", (FlowComponentRegistry catalog, ClusterExtensionActivationState activation) =>
             Results.Ok(catalog.Plugins.Select(p => new
             {
                 p.Id,
                 p.Name,
                 p.Version,
                 p.ConfigurationSchema,
-                componentsCount = p.Components.Count
+                componentsCount = p.Components.Count,
+                enabled = activation.IsPluginEnabled(p.Id),
+                canDisable = activation.CanDisablePlugin(p.Id)
             }))).AllowViewer().WithName("ListPlugins");
+        plugins.MapPut("/{pluginId}/enabled", async (string pluginId, SetExtensionEnabledRequest request,
+            ClusterExtensionActivationState activation, CancellationToken ct) =>
+        {
+            try
+            {
+                await activation.SetPluginEnabledAsync(pluginId, request.Enabled, ct);
+                return Results.Ok(new { pluginId, enabled = request.Enabled });
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.NotFound(new { title = "Plugin inconnu." });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { title = exception.Message });
+            }
+        }).WithName("SetClusterPluginEnabled");
         plugins.MapGet("/rejected", (FlowComponentRegistry catalog) => Results.Ok(catalog.Rejected)).AllowViewer().WithName("ListRejectedPlugins");
         plugins.MapGet("/{pluginId}/configuration", async (string pluginId, FlowComponentRegistry catalog,
             PluginConfigurationRepository configurations, CancellationToken ct) =>
@@ -85,9 +104,9 @@ public static class PluginConfigurationEndpoints
 
         // --- OUTILS MÉDIA DU CLUSTER (0064) ---
         // Le serveur ne sonde pas les outils : la version et la conformité réelles sont annoncées par chaque nœud
-        // (capacités, ToolCapabilityProbe). Cette liste décrit seulement les outils livrés ; aucun état n'est inventé.
+        // (capacités, ToolCapabilityProbe). L'état enabled décrit la préférence d'usage partagée du cluster.
         var tools = app.MapGroup("/api/v1/tools").WithTags("Tools");
-        tools.MapGet("", () =>
+        tools.MapGet("", (ClusterExtensionActivationState activation) =>
         {
             var encoders = VideoEncoderCatalog.All.Select(e => new
             {
@@ -98,7 +117,7 @@ public static class PluginConfigurationEndpoints
                 e.QualityMode
             }).ToList();
 
-            static object Tool(string id, string name, string role, string[] executables, string[] mediaTypes, object encoders) => new
+            object Tool(string id, string name, string role, string[] executables, string[] mediaTypes, object encoders) => new
             {
                 id,
                 name,
@@ -111,7 +130,8 @@ public static class PluginConfigurationEndpoints
                 executables,
                 mediaTypes,
                 encoders,
-                clusterReadiness = "Version et état annoncés par chaque nœud"
+                clusterReadiness = "Version et état annoncés par chaque nœud",
+                enabled = activation.IsToolEnabled(id)
             };
             var none = Array.Empty<object>();
             var list = new object[]
@@ -126,9 +146,25 @@ public static class PluginConfigurationEndpoints
             return Results.Ok(list);
         }).AllowViewer().WithName("ListClusterTools");
 
+        tools.MapPut("/{toolId}/enabled", async (string toolId, SetExtensionEnabledRequest request,
+            ClusterExtensionActivationState activation, CancellationToken ct) =>
+        {
+            try
+            {
+                await activation.SetToolEnabledAsync(toolId, request.Enabled, ct);
+                return Results.Ok(new { toolId, enabled = request.Enabled });
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.NotFound(new { title = "Outil média inconnu." });
+            }
+        }).WithName("SetClusterMediaToolEnabled");
+
         // Aucun test de conformité n'existe encore : répondre « réussi » sans rien exécuter serait une fausse assurance.
         tools.MapPost("/{toolId}/conformance-test", (string toolId) =>
             Results.Json(new { title = "Le test de conformité des outils n’est pas encore disponible." },
                 statusCode: StatusCodes.Status501NotImplemented)).WithName("TestToolConformance");
     }
 }
+
+public sealed record SetExtensionEnabledRequest(bool Enabled);

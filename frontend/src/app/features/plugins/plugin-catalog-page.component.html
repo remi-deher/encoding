@@ -24,6 +24,11 @@
 
   <div catalogue-table>
     @if (activeTab() === 'plugins') {
+      <p class="activation-scope-note">
+        L’activation est partagée dans le cluster. Une désactivation bloque les nouveaux traitements
+        quand elle est reçue par chaque serveur ; les traitements déjà lancés continuent. Elle ne
+        désinstalle pas le paquet, qui reste installé séparément sur chaque serveur.
+      </p>
       @if (rejectedPlugins().length > 0) {
         <div class="rejected-plugins" role="alert">
           <strong>{{ rejectedPlugins().length }} manifeste(s) de plugin ignoré(s) :</strong>
@@ -49,20 +54,13 @@
               <div class="plugin-grid">
                 @for (plugin of group.plugins; track plugin.id) {
                   <article class="plugin-card" [id]="'plugin-' + plugin.id">
-                    <button
-                      matIconButton
-                      type="button"
-                      class="plugin-menu"
-                      [matMenuTriggerFor]="pluginMenu"
-                      [attr.aria-label]="'Actions pour ' + plugin.name"
-                    >
-                      <span aria-hidden="true">⋮</span>
-                    </button>
-                    <mat-menu #pluginMenu="matMenu">
-                      <button mat-menu-item type="button" (click)="onPluginOpen(plugin.id)">
-                        Consulter
-                      </button>
-                    </mat-menu>
+                    <mat-slide-toggle
+                      class="plugin-activation"
+                      [checked]="plugin.enabled"
+                      [disabled]="!plugin.canDisable || isActivationBusy('plugin', plugin.id)"
+                      [aria-label]="(plugin.enabled ? 'Désactiver ' : 'Activer ') + plugin.name"
+                      (change)="setPluginEnabled(plugin, $event.checked)"
+                    />
                     <div class="plugin-card-header">
                       <img class="plugin-icon" [src]="plugin.iconUrl" alt="" />
                       <div>
@@ -80,7 +78,9 @@
                     </div>
                     <p>{{ plugin.components }}</p>
                     <div class="plugin-meta">
-                      <span class="plugin-state">{{ plugin.state }}</span>
+                      <span class="plugin-state" [class.plugin-state_disabled]="!plugin.enabled">
+                        {{ plugin.state }}
+                      </span>
                       <span>Version {{ plugin.version }}</span>
                     </div>
                   </article>
@@ -98,6 +98,10 @@
         }
       </div>
     } @else if (activeTab() === 'tools') {
+      <p class="activation-scope-note">
+        Ces interrupteurs règlent l’usage des outils dans tout le cluster. Les binaires restent
+        installés ; les traitements déjà lancés continuent.
+      </p>
       <section class="plugin-section" aria-label="Outils média déclarés par le cluster">
         <header class="plugin-section-heading">
           <div>
@@ -140,7 +144,17 @@
                     tool.provider === 'stock' ? 'Outil livré avec l’image' : 'Personnalisé'
                   }}</span>
                 </div>
-                <app-status-badge [label]="tool.clusterReadiness" />
+                <app-status-badge
+                  [label]="tool.enabled ? tool.clusterReadiness : 'Désactivé'"
+                  [tone]="tool.enabled ? 'neutral' : 'warning'"
+                />
+                <mat-slide-toggle
+                  class="tool-activation"
+                  [checked]="tool.enabled"
+                  [disabled]="isActivationBusy('tool', tool.id)"
+                  [aria-label]="(tool.enabled ? 'Désactiver ' : 'Activer ') + tool.name"
+                  (change)="setToolEnabled(tool, $event.checked)"
+                />
               </div>
 
               <p class="tool-description">{{ tool.role }}</p>

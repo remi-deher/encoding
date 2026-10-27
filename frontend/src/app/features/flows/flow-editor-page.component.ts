@@ -354,7 +354,7 @@ export class FlowEditorPageComponent {
     void this.serverValidation
       .catalog()
       .then(async (plugins) => {
-        const installed = plugins.flatMap((plugin) =>
+        const installed = plugins.filter((plugin) => plugin.enabled !== false).flatMap((plugin) =>
           plugin.components.map((component) => ({
             ...component,
             pluginId: plugin.id,

@@ -2,10 +2,13 @@ using System.Text;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;
+using Encoding.Api.Plugins;
 
 namespace Encoding.Api.Flows;
 
-public sealed class FlowCatalogPromptBuilder(FlowComponentRegistry registry)
+public sealed class FlowCatalogPromptBuilder(
+    FlowComponentRegistry registry,
+    ClusterExtensionActivationState? activation = null)
 {
     public string BuildSystemPrompt(string mediaType)
     {
@@ -35,7 +38,7 @@ public sealed class FlowCatalogPromptBuilder(FlowComponentRegistry registry)
         sb.AppendLine();
         sb.AppendLine("CATALOGUE DES COMPOSANTS DISPONIBLES :");
 
-        foreach (var plugin in registry.Plugins)
+        foreach (var plugin in registry.Plugins.Where(plugin => activation?.IsPluginEnabled(plugin.Id) ?? true))
         {
             var matching = plugin.Components
                 .Where(c => c.SupportedFlowMediaTypes.Contains(mediaType, StringComparer.OrdinalIgnoreCase)

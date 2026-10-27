@@ -106,7 +106,7 @@ Initialisation et accès (`/login`, `/setup`) : `AccessTemplateComponent` fourni
 
 Jonction depuis le premier démarrage : bouton explicite « Créer le compte et continuer » avant la recherche ou la vérification d’un cluster. Les informations du compte et le mode sont ensuite confirmés ; la vérification, l’envoi et les nouvelles tentatives restent dans l’assistant avec la même session. Le code se compare sur le cluster d’accueil. L’ouverture de l’application suit l’approbation ; une demande encore en attente propose « Suivre la demande dans Nœuds ».
 
-Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins & Outils (plugins regroupés par famille, inventaire média remonté par le cluster, Store et dépôts). La recherche de cette page filtre la sous-page active ; les actions d’ajout de dépôt et d’import d’archive apparaissent dans la barre globale sur Store & Dépôts.
+Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins & Outils (plugins regroupés par famille, inventaire média remonté par le cluster, Store et dépôts). Le nom d'un plugin ouvre sa fiche dans la Mat Drawer ; ses switchs et ceux des outils règlent leur activation à l'échelle du cluster. Les outils gardent un seul switch d'activation. La recherche de cette page filtre la sous-page active ; les actions d'ajout de dépôt et d'import d'archive apparaissent dans la barre globale sur Store & Dépôts.
 
 ## Mise à jour
 

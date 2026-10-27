@@ -3,10 +3,14 @@ using Encoding.Api.Flows;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Nodes;
 using Encoding.Contracts.Executions;
+using Encoding.Api.Plugins;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefinitionValidator validator)
+public sealed class RuntimeEligibility(
+    FlowComponentRegistry registry,
+    FlowDefinitionValidator validator,
+    ClusterExtensionActivationState? activation = null)
 {
     public bool RequiresWriteAccess(FlowDefinition flow,string? nextNodeId=null,bool resumed=false)
     {
@@ -32,17 +36,24 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
     }
 
     /// <summary>Une sonde n'exécute qu'une condition de plugin : seule la capacité de ce plugin est requise.</summary>
-    public bool CanProbe(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,string blockNodeId)
+    public bool CanProbe(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,string blockNodeId,bool resumed=false)
     {
         var node=flow.Nodes.SingleOrDefault(item=>item.Id==blockNodeId);
-        return node is not null && registry.Resolve(node.Component) is not null && capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId
+        var activationPluginId = node is not null && FlowComponentRegistry.TryGetLegacyAlias(node.Component.ComponentId, out var target)
+            ? target.PluginId
+            : node?.Component.PluginId;
+        return node is not null && registry.Resolve(node.Component) is not null
+            && (resumed || activation is null || activation.IsPluginEnabled(activationPluginId!))
+            && capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId
             && (c.Version==node.Component.PluginVersion || c.Version==registry.RuntimePluginVersion(node.Component)));
     }
 
     public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null)
     {
         if(context?.DirectSource is not null && !capabilities.Any(capability=>capability.ToolId==RuntimeSourceObservation.Capability)) return false;
-        if(!validator.Validate(flow).IsValid) return false;
+        if(!(resumed ? validator.ValidateContinuation(flow) : validator.Validate(flow)).IsValid) return false;
+        if(!resumed && activation is not null)
+            capabilities=activation.EnabledCapabilities(capabilities,capability=>capability.ToolId);
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
         // « Bibliothèque sur ce nœud » avec « et encodeur du profil » : un worker sans encodeur utilisable répond « non » (voir le runner),
         // donc la branche « oui » ne lui est pas demandée.

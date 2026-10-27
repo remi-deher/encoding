@@ -12,6 +12,7 @@ export interface FlowPluginCatalog {
   readonly id: string;
   readonly version: string;
   readonly name: string;
+  readonly enabled?: boolean;
   readonly configurationSchema?: FlowComponentConfigurationSchema;
   readonly components: readonly (Omit<FlowComponentDefinition, 'pluginId' | 'pluginName'> & {
     readonly id: string;

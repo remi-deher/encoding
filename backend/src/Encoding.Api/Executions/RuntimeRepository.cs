@@ -242,7 +242,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         {
             if(item.Probe is {} wanted)
             {
-                if(!eligibility.CanProbe(item.Flow,capabilities,wanted.BlockNodeId)) continue;
+                if(!eligibility.CanProbe(item.Flow,capabilities,wanted.BlockNodeId,item.Checkpoint is not null)) continue;
             }
             else if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value,nodeIdentity))) continue;
             if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,inventory)) continue;
