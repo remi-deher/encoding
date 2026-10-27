@@ -31,7 +31,12 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
             await using var admission=Sql.Command("SELECT public_key FROM cluster_peer_admissions WHERE cluster_id=@cluster AND peer_id=@peer AND revoked_at IS NULL",c,tx);
             admission.Parameters.AddWithValue("cluster",e.ClusterId);admission.Parameters.AddWithValue("peer",e.AuthorPeerId);
             var key=e.AuthorPeerId==identity.PeerId?identity.PublicKey:await admission.ExecuteScalarAsync(ct) as string;
-            if(key is null) return(null,true);
+            if(key is null)
+            {
+                await using var revoked=Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_peer_admissions WHERE cluster_id=@cluster AND peer_id=@peer AND revoked_at IS NOT NULL)",c,tx);
+                revoked.Parameters.AddWithValue("cluster",e.ClusterId);revoked.Parameters.AddWithValue("peer",e.AuthorPeerId);
+                return(null,!await revoked.ScalarBoolAsync(ct));
+            }
             return ClusterPeerIdentityStore.Verify(key,System.Text.Encoding.UTF8.GetBytes(signed.Data),Convert.FromBase64String(signed.Signature))?(e,false):(null,false);
         }
         catch(Exception ex) when(ex is JsonException or FormatException or ArgumentException) {return(null,false);}

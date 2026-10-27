@@ -15,6 +15,10 @@ public sealed record ClusterTaskResult(bool Success,string Detail,Guid? Transfer
 public sealed record ClusterTaskPeerRequest(int Version,Guid ClusterId,Guid Nonce,string Kind,Guid ExecutionId=default,string? Digest=null,string? Payload=null);
 public sealed record ClusterTaskPeerReply(int Version,Guid ClusterId,Guid PeerId,Guid Nonce,bool Success,string? Payload=null,string? Detail=null);
 public sealed record ClusterTaskObservation(Guid ObserverPeerId,Guid SubjectPeerId,long Sequence,DateTimeOffset ObservedAt,DateTimeOffset ExpiresAt,bool Reachable);
-public sealed record ClusterTaskClusterStatus(bool Isolated,int WaitingSourceWrites,int PendingTransfers,IReadOnlyList<ClusterTaskObservation> Observations,Guid LocalPeerId=default,int PendingCheckpointPreparations=0,int PendingCheckpointCaches=0,bool Neutralized=false,bool CatchingUp=false);
+public sealed record ClusterTaskClusterStatus(bool Isolated,int WaitingSourceWrites,int PendingTransfers,IReadOnlyList<ClusterTaskObservation> Observations,Guid LocalPeerId=default,int PendingCheckpointPreparations=0,int PendingCheckpointCaches=0,bool Neutralized=false,bool CatchingUp=false,TaskCoordinationStatus? Coordination=null);
 
 public sealed record ClusterTaskControlRequest(Guid ExecutionId,int? ExpectedRevision=null);
+
+// Metadata only: never expose signed bodies or checkpoint contents in diagnostics.
+public sealed record TaskCoordinationDiagnostic(string RegisterKey,string Disposition,string Reason,long Attempts,DateTimeOffset? NextAttemptAt);
+public sealed record TaskCoordinationStatus(int Pending,int Parked,int Rejected,int Retained,IReadOnlyList<TaskCoordinationDiagnostic> Events);

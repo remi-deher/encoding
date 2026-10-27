@@ -42,11 +42,11 @@ public static class ClusterReconciliationEndpoints
         .WithTags("Cluster reconciliation")
         .WithName("GetLocalClusterPeerIdentity");
 
-        app.MapGet("/api/v1/cluster/reconciliation/status", async (ClusterReconciliationHealth health, ClusterEntityReconciliation entities, Encoding.Api.Executions.TaskOwnershipRepository ownership, CancellationToken ct) =>
+        app.MapGet("/api/v1/cluster/reconciliation/status", async (ClusterReconciliationHealth health, ClusterEntityReconciliation entities, Encoding.Api.Executions.TaskOwnershipRepository ownership, Encoding.Api.Executions.TaskCoordinationProjection coordination, CancellationToken ct) =>
             {
                 var status = health.GetStatus();
                 return Results.Ok(new { status.Enabled, status.DisabledReason, status.DiscoveryAvailable,
-                    status.DiscoveryError, status.Peers, Projections = await entities.ProjectionDiagnosticsAsync(ct), AttributionBlockers = await ownership.ReadinessBlockersAsync(ct) });
+                    status.DiscoveryError, status.Peers, Projections = await entities.ProjectionDiagnosticsAsync(ct), AttributionBlockers = await ownership.ReadinessBlockersAsync(ct), Coordination = await coordination.StatusAsync(ct) });
             })
             .RequireAuthorization()
             .WithTags("Cluster reconciliation")

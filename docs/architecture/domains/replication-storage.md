@@ -1,6 +1,6 @@
 ---
 domain: replication-storage
-updated: 2026-10-25
+updated: 2026-10-27
 legacy_adr: [0001, 0004, 0014, 0029, 0043, 0049, 0060-peer, 0061-peer]
 code:
   - backend/src/Encoding.Api/Infrastructure/Data/
@@ -107,3 +107,6 @@ Les refus de reprise faute de fichiers/checkpoint sont normaux et visibles. Le c
 Les sauvegardes de brouillon sont projetées comme instantanés immuables : égalité JSON idempotente sans changement du statut local ; divergence conservée en attente, sans écrasement. La table **locale non réconciliée** `cluster_projection_diagnostics` (0058) conserve la cause structurée et l’ancienneté, jamais les payloads. Un conflit immuable n’est pas retenté automatiquement. Les autres erreurs restent retentables ; les avertissements sont dédupliqués par événement et cause. Le statut de réconciliation expose les diagnostics et les prérequis d’attribution ; aucune garde n’est desserrée. Portée et limites : [bilan des corrections](../../operations/corrections-2026-10-27.md).
 
 Les migrations additives suivantes introduisent `cluster_join_user_collisions` (0059, **locale**, préflight d’identité sans credentials) et `node_peer_reconciliation_urls` (0060, **réconciliée**, métadonnée de découverte activée après admission). Les anciens pairs ignorent cette nouvelle métadonnée ; les adresses explicites restent disponibles pour une transition mixte. La nouvelle politique média exige une capacité explicite et n’est pas dégradée sur des workers anciens.
+
+### Échéances et dispositions de coordination (0061)
+Migration additive 0061 : `next_attempt_at` et `reason` de l'inbox, `disposition` du registre historique `task_coordination_rejections` et nouvelle table `task_coordination_parked` sont **locaux, jamais réconciliés**. Le registre de refus distingue désormais `rejected` et `retained` ; les anciennes lignes restent `rejected`. Le journal signé demeure la preuve réconciliée. Une suspension conserve provenance et corps original ; son retour atomique en inbox exige que la propriété ne soit plus en quarantaine, puis la vérification complète est refaite. Les checkpoints valides restent dans le magasin existant, sans import de travail. Les échéances survivent au redémarrage, ne limitent pas le nombre total de tentatives et ne desserrent pas la barrière de préparation. Voir [ADR 0023](../adr/0023-coordination-et-quarantaine.md).

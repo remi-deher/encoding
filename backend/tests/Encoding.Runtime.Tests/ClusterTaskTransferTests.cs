@@ -27,7 +27,7 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
-public sealed class ClusterTaskTransferTests(ITestOutputHelper output)
+public sealed partial class ClusterTaskTransferTests(ITestOutputHelper output)
 {
     private sealed class Wire:IHttpClientFactory
     {

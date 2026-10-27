@@ -116,6 +116,6 @@ public sealed class ClusterTaskMaintenance(DbDataSource db,ClusterPeerIdentitySt
         await using(var read=db.CreateCommand("SELECT (SELECT count(*) FROM task_checkpoint_dirty),(SELECT count(*) FROM task_checkpoints p JOIN task_ownership o ON o.execution_id=p.execution_id AND o.epoch=p.epoch LEFT JOIN executions e ON e.id=p.execution_id WHERE p.author_peer_id<>@local AND o.state='active' AND COALESCE(e.state,'queued') IN ('queued','running') AND NOT EXISTS(SELECT 1 FROM task_checkpoint_cached x WHERE x.execution_id=p.execution_id AND x.body=p.body))"))
         {read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);await r.ReadAsync(ct);preparations=r.GetInt32(0);caches=r.GetInt32(1);}
         await using var stopped=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@local AND released_at IS NULL)");stopped.Parameters.AddWithValue("local",identity.PeerId);
-        return new(isolated,writes,transfers,observations,identity.PeerId,preparations,caches,await stopped.ScalarBoolAsync(ct),catchingUp);
+        return new(isolated,writes,transfers,observations,identity.PeerId,preparations,caches,await stopped.ScalarBoolAsync(ct),catchingUp,await projection.StatusAsync(ct));
     }
 }
