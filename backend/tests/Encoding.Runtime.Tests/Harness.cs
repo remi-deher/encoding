@@ -238,6 +238,12 @@ internal static partial class Harness
             Directory.CreateDirectory(directory);
             testDb=await TestDatabase.CreateAsync(connection,"handoff"); db=testDb.Db;
             await DatabaseMigrator.ApplyAsync(db,RepositoryRoot(),CancellationToken.None);
+            var extensionActivation = new ClusterExtensionActivationState(
+                db,
+                new ClusterReconciliationRepository(db),
+                registry,
+                NullLogger<ClusterExtensionActivationState>.Instance);
+            await extensionActivation.InitializeAsync(CancellationToken.None);
             var config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Runtime:ArtifactDirectory"]=Path.Combine(directory,"durable") }).Build();
             configurations=new(db,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
             TaskOwnershipRepository? ownership=null;
@@ -270,6 +276,7 @@ internal static partial class Harness
             builder.Services.AddSingleton(new ExecutionWaitRepository(db, presenceOptions)); builder.Services.AddSingleton(new RuntimeTransferRepository(db,sourceWrites:sourceWriteBarrier,ownership:ownership)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db,sourceWriteBarrier)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton(new LibraryProcessingRepository(db)); builder.Services.AddSingleton(workflowRepo);
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(presenceOptions);
+            builder.Services.AddSingleton(extensionActivation);
             builder.Services.AddSingleton(eligibility); builder.Services.AddSingleton(new NodeRepository(db));
             builder.Services.AddSingleton(new NodeDirectoryBrowserRepository(db));
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton(flowRepo); builder.Services.AddSingleton(new FlowArchiveService(flowRepo, validator));
