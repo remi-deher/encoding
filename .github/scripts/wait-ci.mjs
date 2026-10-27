@@ -19,6 +19,8 @@ export function equivalentCheckCommits(target, sources, git) {
 }
 
 export function evaluateChecks(sources, target, runs, equivalents = {}) {
+  const hasCurrentChecks = Object.keys(sources).some(name =>
+    runs.some(run => run.name === name && run.sha === target));
   return Object.entries(sources).map(([name, source]) => {
     const candidates = [...new Set([target, ...(equivalents[name] ?? [source])])];
     const checked = candidates.find(commit => runs.some(run => run.name === name && run.sha === commit));
@@ -26,7 +28,9 @@ export function evaluateChecks(sources, target, runs, equivalents = {}) {
     // Retries supersede previous attempts of the same check on the same commit.
     const latest = matching.sort((a, b) => b.id - a.id)[0];
     const state = !latest ? 'missing' : latest.status !== 'completed' ? 'pending'
-      : latest.conclusion === 'success' ? 'success' : 'failed';
+      : latest.conclusion === 'success' ? 'success'
+      : latest.conclusion === 'cancelled' && checked !== target && hasCurrentChecks ? 'pending'
+      : 'failed';
     return { name, state, sha: latest?.sha ?? source, conclusion: latest?.conclusion, url: latest?.details_url };
   });
 }
