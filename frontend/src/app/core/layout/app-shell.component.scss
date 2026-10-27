@@ -397,11 +397,19 @@ button.assistant-launcher {
   box-sizing: border-box;
   width: 100%;
   max-width: var(--content-max-width);
+  --main-content-padding-block-start: var(--space-5);
+  --main-content-padding-block-end: var(--space-6);
   margin-inline: auto;
   padding-inline: clamp(16px, 3vw, 40px);
-  padding-block: var(--space-5) var(--space-6);
+  padding-block: var(--main-content-padding-block-start) var(--main-content-padding-block-end);
   flex: 1;
   outline: none;
+}
+
+.main-content.is-full-width {
+  max-width: none;
+  min-height: 0;
+  margin-inline: 0;
 }
 
 /* Workspace Shell (Flow Editor Fullscreen Atelier) */
@@ -463,12 +471,15 @@ button.assistant-launcher {
   }
 
   .main-content {
+    --main-content-padding-block-start: 10px;
+    --main-content-padding-block-end: 28px;
     padding-inline: 16px;
-    padding-block: 10px 28px;
+    padding-block: var(--main-content-padding-block-start) var(--main-content-padding-block-end);
   }
 
   .compact-navigation-shell .main-content {
-    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    --main-content-padding-block-end: calc(80px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: var(--main-content-padding-block-end);
   }
 }
 
@@ -479,11 +490,14 @@ button.assistant-launcher {
 
   .main-content {
     padding-inline: 12px;
-    padding-block: 8px 24px;
+    --main-content-padding-block-start: 8px;
+    --main-content-padding-block-end: 24px;
+    padding-block: var(--main-content-padding-block-start) var(--main-content-padding-block-end);
   }
 
   .compact-navigation-shell .main-content {
-    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    --main-content-padding-block-end: calc(80px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: var(--main-content-padding-block-end);
   }
 }
 

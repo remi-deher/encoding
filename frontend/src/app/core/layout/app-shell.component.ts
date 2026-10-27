@@ -108,6 +108,9 @@ export class AppShellComponent {
 
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
+  protected readonly fullWidthContent = computed(
+    () => this.navigationEnd().contentWidth === 'full',
+  );
   constructor() {
     effect(() => {
       if (!this.isCompactNavigation()) this.navigationSheetOpen.set(false);
@@ -155,6 +158,7 @@ export class AppShellComponent {
     url: string;
     workspaceMode: boolean;
     authMode: boolean;
+    contentWidth: string;
   } {
     let route = this.router.routerState.snapshot.root;
 
@@ -166,6 +170,7 @@ export class AppShellComponent {
       url: this.router.url,
       workspaceMode: route.data['layout'] === 'workspace',
       authMode: route.data['authPage'] !== undefined,
+      contentWidth: route.data['contentWidth'] === 'full' ? 'full' : 'standard',
     };
   }
 }
