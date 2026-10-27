@@ -70,7 +70,8 @@ type EditorMode = 'create' | 'version';
       [detailOpen]="selected() !== null"
       [detailTitle]="selected()?.summary?.name ?? 'Ressource'"
       [detailDescription]="selected()?.summary?.description ?? ''"
-      detailLayout="page"
+      detailLayout="drawer"
+      (detailClosed)="closeDetail()"
       (actionClosed)="closeEditor()"
     >
       <ng-template #catalogueNavigation>
@@ -336,6 +337,14 @@ export class ResourceLibraryPageComponent {
 
   protected openResource(id: string): void {
     void this.router.navigate([], { relativeTo: this.route, queryParams: { resource: id } });
+  }
+
+  protected closeDetail(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { resource: null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   protected openCreate(): void {

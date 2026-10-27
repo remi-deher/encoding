@@ -137,7 +137,10 @@
       loadState() === 'ready' &&
       reconciliationBanner().isAlert
     ) {
-      <div class="node-alert-banner node-alert-banner_warning" role="status">
+      <div
+        class="node-alert-banner node-alert-banner_warning node-alert-banner_unframed"
+        role="status"
+      >
         <span class="node-alert-icon" aria-hidden="true">!</span>
         <p>
           <strong>{{ reconciliationBanner().title }}</strong>
@@ -285,6 +288,7 @@
     } @else if (pageTab() === 'node') {
       <app-node-overview-card
         ariaLabel="Fiche du nœud local"
+        layout="local"
         [title]="localSheet().title"
         [subtitle]="localSheet().subtitle"
         [statusLabel]="localOverviewStatus().label"

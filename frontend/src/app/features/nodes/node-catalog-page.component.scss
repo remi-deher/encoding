@@ -61,6 +61,13 @@ p[role='note'] {
   }
 }
 
+.node-alert-banner.node-alert-banner_unframed {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .catalogue-filters-container {
   display: flex;
   flex-wrap: wrap;

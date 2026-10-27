@@ -92,8 +92,8 @@ interface FlowTemplateRow extends DataTableRow {
       [detailOpen]="selectedTemplate() !== null"
       [detailTitle]="selectedTemplate()?.name ?? 'Modèle'"
       [detailDescription]="selectedTemplate()?.sourceFlowName ?? ''"
-      detailLayout="page"
-      searchLayout="centered"
+      detailLayout="drawer"
+      (detailClosed)="closeTemplateDetail()"
       (actionClosed)="closeCreateFlow()"
     >
       <ng-template #catalogueNavigation>
@@ -538,6 +538,14 @@ export class FlowTemplateLibraryPageComponent {
         glyph: '◫',
         run: () => this.openTemplate({ id: template.id }),
       }));
+  }
+
+  protected closeTemplateDetail(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { template: null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   protected onRowAction(event: { readonly actionId: string; readonly row: DataTableRow }): void {

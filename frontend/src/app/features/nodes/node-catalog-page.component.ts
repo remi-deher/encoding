@@ -391,7 +391,7 @@ export class NodeCatalogPageComponent {
   });
   protected readonly localOverviewMeta = computed(() => {
     const lastSignal = formatLastSignal(this.localNode()?.lastSeenAt);
-    return `Dernier signal : ${lastSignal ?? (this.local.agentUnavailable() ? 'indisponible' : 'en attente')}`;
+    return lastSignal ?? (this.local.agentUnavailable() ? 'Indisponible' : 'En attente');
   });
   protected readonly localOverviewLibraries = computed(() =>
     this.nodeOverviewLibraries(this.localNode()?.id ?? this.local.status()?.nodeId ?? null),

@@ -54,7 +54,8 @@ interface PackRow extends DataTableRow {
       [detailOpen]="selectedPack() !== null"
       [detailTitle]="selectedPack()?.name ?? 'Pack de composants'"
       [detailDescription]="selectedPack()?.description ?? ''"
-      detailLayout="page"
+      detailLayout="drawer"
+      (detailClosed)="closeDetail()"
     >
       <ng-template #catalogueNavigation>
         <app-library-section-tabs catalogue-navigation selected="packs" />
@@ -233,7 +234,7 @@ export class ComponentPackLibraryPageComponent {
       const items = this.packs();
       untracked(() => {
         if (!id) {
-          if (this.selectedPack()) this.closeDetail();
+          if (this.selectedPack()) this.clearDetailState();
           return;
         }
         if (this.selectedPack()?.id === id) return;
@@ -269,6 +270,14 @@ export class ComponentPackLibraryPageComponent {
   }
 
   protected closeDetail(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { pack: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private clearDetailState(): void {
     this.selectedPack.set(null);
     this.selectedDetails.set(null);
     this.selectedDetailsLoadState.set('idle');
