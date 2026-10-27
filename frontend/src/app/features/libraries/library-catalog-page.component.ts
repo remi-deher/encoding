@@ -1378,7 +1378,11 @@ export class LibraryCatalogPageComponent {
   }
 
   protected onDetailClosed(): void {
-    this.selectedLibrary.set(null);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { library: null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   protected addLibrary(): void {

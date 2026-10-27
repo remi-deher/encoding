@@ -54,7 +54,9 @@ Chaque ressource (membre du cluster, bibliothèque média, flow, plugin, profil,
 
 ## 4. Présentation d’une ressource ouverte (`ResourceSheetComponent`)
 
-Qu’elle soit affichée en pleine page (comme l’onglet **Ce nœud**) ou dans un tiroir de consultation (détail d’un membre du cluster, d’une bibliothèque, d’un flow, d’un plugin, d’un modèle ou d’un pack), la fiche utilise `ResourceSheetComponent` :
+Qu’elle soit affichée en pleine page (comme l’onglet **Ce nœud**) ou dans un tiroir de consultation (détail d’un membre du cluster, d’une bibliothèque, d’une ressource partagée, d’un flow, d’un plugin, d’un modèle ou d’un pack), la fiche utilise `ResourceSheetComponent` :
+
+Dans les catalogues de bibliothèques, Ressources, Modèles de flow et Packs de composants, l’ouverture d’un élément garde la liste visible et affiche sa fiche dans `DetailDrawer`. Les onglets qui changent de catalogue continuent d’ouvrir leur route dédiée ; le tiroir est réservé à la fiche de l’élément sélectionné.
 
 1. **Bandeaux d’avis (`notices`)** : Affichés en tête uniquement lorsqu’une intervention ou une anomalie existe (agent injoignable, changement de rôle en attente, nœud en vidange).
 2. **En-tête de synthèse** : Titre, sous-titre et statut global.
