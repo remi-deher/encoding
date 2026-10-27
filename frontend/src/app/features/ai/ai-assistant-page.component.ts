@@ -312,6 +312,17 @@ export class AiAssistantPageComponent implements OnDestroy {
           query: this.searchQuery,
           onSearchQueryChange: (query) => this.updateSearchQuery(query),
           searchResults: (query) => this.conversationSearchResults(query),
+          actions: [
+            {
+              id: 'new-assistant-conversation',
+              label: 'Nouvelle conversation',
+              icon: 'add',
+              run: () => {
+                this.updateSearchQuery('');
+                this.startNewConversation();
+              },
+            },
+          ],
         }),
       );
     });

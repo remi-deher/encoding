@@ -56,10 +56,14 @@
       .avatar { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; color: var(--on-primary); background: var(--primary); font-weight: 700; }
       main { display: flex; min-width: 0; min-height: 100vh; flex-direction: column; padding: var(--space-4) var(--space-5) var(--space-5); }
       .global-header { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-5); min-height: 52px; margin-bottom: var(--space-4); }
-      .global-search { position: absolute; left: 50%; display: flex; width: min(610px, calc(100% - 480px)); min-width: 240px; height: 44px; align-items: center; gap: var(--space-2); padding-inline: var(--space-4); transform: translateX(-50%); border: 1px solid var(--outline); border-radius: var(--radius-pill); background: var(--surface-lowest); }
-      .global-search span { color: var(--primary); font-size: 20px; }
-      .global-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 14px; }
-      .global-search input::placeholder { color: var(--text-muted); }
+      .global-search { position: absolute; left: 50%; display: flex; width: min(610px, calc(100% - 480px)); min-width: 240px; height: 48px; align-items: center; transform: translateX(-50%); overflow: hidden; border: 1px solid var(--outline); border-radius: var(--radius-pill); background: var(--surface-lowest); }
+      .search-input { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: var(--space-2); padding-inline: var(--space-4); }
+      .search-input > span { color: var(--primary); font-size: 20px; }
+      .search-input input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 14px; }
+      .search-input input::placeholder { color: var(--text-muted); }
+      .search-action { display: inline-flex; min-height: 100%; flex: 0 0 auto; align-items: center; justify-content: center; gap: var(--space-2); padding-inline: var(--space-3); border-left: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent); color: var(--text-primary); background: transparent; font-size: 13px; font-weight: 650; white-space: nowrap; }
+      .search-action:hover { color: var(--primary); background: var(--surface-high); }
+      .search-action span { color: var(--primary); font-size: 18px; }
       .system-status { display: flex; grid-column: 2; align-items: center; gap: var(--space-2); }
       .status-pill { min-height: 36px; padding: 0 var(--space-3); border-radius: var(--radius-pill); background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 650; white-space: nowrap; }
       .status-pill strong { color: var(--primary); }
@@ -68,8 +72,6 @@
       .history-heading { display: flex; min-height: var(--touch-target); align-items: center; gap: var(--space-2); padding-inline: var(--space-2); }
       .history-heading h1 { margin: 0; font-size: 16px; font-weight: 680; letter-spacing: -0.01em; }
       .count { display: grid; min-width: 28px; height: 28px; place-items: center; padding-inline: var(--space-2); border-radius: var(--radius-pill); color: var(--text-secondary); background: var(--surface-high); font-size: 12px; font-weight: 650; }
-      .new-chat { display: flex; width: 100%; min-height: var(--touch-target); align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border-radius: var(--radius-pill); color: var(--text-primary); background: var(--primary-container); font-size: 14px; font-weight: 650; text-align: left; }
-      .new-chat span { color: var(--primary); font-size: 20px; }
       .history-list { display: grid; align-content: start; gap: var(--space-4); min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-1); }
       .history-group { display: grid; gap: var(--space-1); }
       .history-group h2 { margin: 0; padding: var(--space-1) var(--space-2); color: var(--text-muted); font-size: 12px; font-weight: 650; }
@@ -124,7 +126,9 @@
         .primary-nav { display: none; }
         main { min-height: 100vh; padding: var(--space-3); }
         .global-header { grid-template-columns: minmax(0, 1fr); min-height: 48px; margin-bottom: var(--space-3); }
-        .global-search { position: static; grid-column: 1; width: 100%; min-width: 0; transform: none; }
+        .global-search { position: static; grid-column: 1; width: 100%; min-width: 0; height: auto; flex-wrap: wrap; transform: none; border-radius: var(--radius-lg); }
+        .search-input { min-height: 46px; flex: 1 0 100%; border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent); }
+        .search-action { min-height: 44px; max-width: 50%; border-left: 0; padding-inline: var(--space-2); font-size: 12px; }
         .system-status { display: none; }
         .workspace { display: block; min-height: calc(100dvh - 84px); border-radius: var(--radius-lg); }
         .history { position: absolute; inset: 0 auto 0 0; display: none; width: min(300px, calc(100vw - 48px)); border-radius: var(--radius-lg) 0 0 var(--radius-lg); box-shadow: 0 12px 32px color-mix(in srgb, #000 36%, transparent); }
@@ -164,7 +168,10 @@
 
       <main>
         <header class="global-header" aria-label="En-tête global">
-          <label class="global-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Rechercher dans Encoding…" aria-label="Rechercher dans Encoding" /></label>
+          <div class="global-search" aria-label="Recherche globale et action de page">
+            <label class="search-input"><span aria-hidden="true">⌕</span><input type="search" placeholder="Rechercher dans Encoding…" aria-label="Rechercher dans Encoding" /></label>
+            <button class="search-action" type="button" id="new-conversation"><span aria-hidden="true">＋</span>Nouvelle conversation</button>
+          </div>
           <div class="system-status" aria-label="État du système">
             <span class="status-pill"><strong>●</strong> 2 / 2 en ligne</span>
             <span class="status-pill"><strong>0 jobs en cours</strong></span>
@@ -174,7 +181,6 @@
         <div class="workspace history-open" id="assistant-workspace">
           <aside class="history" id="conversation-history" aria-label="Historique des conversations">
             <header class="history-heading"><h1>Conversations</h1><span class="count">4</span></header>
-            <button class="new-chat" type="button" id="new-conversation"><span aria-hidden="true">＋</span>Nouvelle conversation</button>
             <nav class="history-list" aria-label="Conversations IA">
               <section class="history-group" aria-label="Aujourd’hui">
                 <h2>Aujourd’hui</h2>

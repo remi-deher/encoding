@@ -5,12 +5,11 @@ import {
   AiAssistantConversation,
   AiNodeAvailability,
 } from '../../../shared/models/ai-tools';
-import { IconComponent } from '../../../shared/ui/icon.component';
 
 @Component({
   selector: 'app-ai-conversation-history',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatProgressSpinnerModule, IconComponent],
+  imports: [MatButtonModule, MatProgressSpinnerModule],
   template: `
     <section
       assistant-history
@@ -24,16 +23,6 @@ import { IconComponent } from '../../../shared/ui/icon.component';
           <span class="conversation-count" aria-label="Nombre de conversations">{{ totalCount() }}</span>
         </div>
       </header>
-      <button
-        matButton="tonal"
-        type="button"
-        class="new-conversation-button"
-        [disabled]="sending()"
-        (click)="newConversation.emit()"
-      >
-        <app-icon name="add" />
-        <span>Nouvelle conversation</span>
-      </button>
       @if (loading()) {
         <p class="history-status muted" role="status">Chargement des conversations…</p>
       } @else if (searching() && !conversations().length) {
@@ -119,7 +108,6 @@ export class AiConversationHistoryComponent {
   readonly searching = input(false);
   readonly sending = input(false);
 
-  readonly newConversation = output<void>();
   readonly conversationSelected = output<string>();
   readonly deleteRequested = output<AiAssistantConversation>();
 

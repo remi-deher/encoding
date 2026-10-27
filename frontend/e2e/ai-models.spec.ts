@@ -85,26 +85,33 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test('the conversation history drawer toggles at desktop and mobile widths without horizontal overflow', async ({
+test('the global search starts conversations and the history drawer works without horizontal overflow', async ({
   page,
 }) => {
-  await page.goto('/ai/assistant');
+  await page.goto(`/ai/assistant?conversation=${conversationId}`);
   const assistant = page.locator('app-ai-assistant-page').first();
   const history = assistant.locator('#assistant-conversation-history');
+  const newConversation = page
+    .locator('app-global-search-bar')
+    .getByRole('button', { name: 'Nouvelle conversation' });
   const isCompact = await page.evaluate(() => matchMedia('(max-width: 760px)').matches);
+
+  await expect(newConversation).toBeVisible();
+  await expect(history.getByRole('button', { name: 'Nouvelle conversation' })).toHaveCount(0);
+  await expect(assistant.getByRole('heading', { name: conversation.title })).toBeVisible();
 
   if (isCompact) {
     await expect(history).toBeHidden();
     await assistant.getByRole('button', { name: 'Afficher les conversations' }).click();
     await expect(history).toBeVisible();
-    await expect(history.getByRole('button', { name: 'Nouvelle conversation' })).toBeVisible();
     await expect(history.getByRole('textbox')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    await newConversation.click();
+    await expect(assistant.getByRole('heading', { name: 'Nouvelle conversation' })).toBeVisible();
     return;
   }
 
   await expect(history).toBeVisible();
-  await expect(history.getByRole('button', { name: 'Nouvelle conversation' })).toBeVisible();
   await expect(history.getByRole('textbox')).toHaveCount(0);
   await assistant.getByRole('button', { name: 'Masquer les conversations' }).click();
   await expect(history).toBeHidden();
@@ -116,8 +123,9 @@ test('the conversation history drawer toggles at desktop and mobile widths witho
   await expect(history).toBeHidden();
   await assistant.getByRole('button', { name: 'Afficher les conversations' }).click();
   await expect(history).toBeVisible();
-  await expect(history.getByRole('button', { name: 'Nouvelle conversation' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await newConversation.click();
+  await expect(assistant.getByRole('heading', { name: 'Nouvelle conversation' })).toBeVisible();
 });
 
 test('backend models and reasoning drive each turn while old turns retain observed models', async ({
