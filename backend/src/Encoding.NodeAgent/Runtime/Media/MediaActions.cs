@@ -108,7 +108,10 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         if(Text(c,"mode","apply")=="snapshot") return new(null,[],TrackNaming.Snapshot(identification.RootElement).Clone());
         var edits=TrackNaming.Plan(identification.RootElement,probe,origin,TrackNameOptions.From(c));
         if(edits.Count==0) return new(null,[]);
-        var file=editWorkingCopy?MutableAssemblyFile(current,directory):Output(directory,node,".mkv"); if(!editWorkingCopy) File.Copy(current,file,true); var args=new List<string> { file };
+        var canEditDirectly = editWorkingCopy || (Path.GetDirectoryName(current) == Path.GetFullPath(directory) && Path.GetFileName(current).StartsWith("out-", StringComparison.Ordinal) && new FileInfo(current).LinkTarget is null);
+        var file = canEditDirectly ? (editWorkingCopy ? MutableAssemblyFile(current, directory) : current) : Output(directory, node, ".mkv");
+        if (!canEditDirectly) File.Copy(current, file, true);
+        var args = new List<string> { file };
         foreach(var edit in edits)
         {
             args.AddRange(["--edit","track:="+edit.Uid,"--set","name="+edit.Name]);

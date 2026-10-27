@@ -74,18 +74,9 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                 async Task UploadAsync(string relative,bool main)
                 {
                     var path=SafeMediaPaths.Resolve(transfer.Root,relative);
-                    var temporary=Path.Combine(directory,"source-"+Guid.NewGuid().ToString("N")+Path.GetExtension(path));
-                    try
-                    {
-                        await using(var source=File.OpenRead(path))
-                        await using(var copy=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
-                        { await source.CopyToAsync(copy,ct); await copy.FlushAsync(ct); copy.Flush(true); }
-                        var sha=await SafeMediaPaths.DigestAsync(temporary,ct);
-                        if(await SafeMediaPaths.DigestAsync(path,ct)!=sha) throw new IOException("La source a changé pendant sa copie.");
-                        if(main && transfer.Observation is {} expected) new MediaFileStamp(expected.Bytes,expected.LastWriteUtcTicks).Verify(path);
-                        await client.PutAsync(transfer.ExecutionId,transfer.Epoch,temporary,sha,main,ct,main?null:relative);
-                    }
-                    finally { if(File.Exists(temporary)) File.Delete(temporary); }
+                    var sha=await SafeMediaPaths.DigestAsync(path,ct);
+                    if(main && transfer.Observation is {} expected) new MediaFileStamp(expected.Bytes,expected.LastWriteUtcTicks).Verify(path);
+                    await client.PutAsync(transfer.ExecutionId,transfer.Epoch,path,sha,main,ct,main?null:relative);
                 }
                 foreach(var input in transfer.InputPaths??[]) await UploadAsync(input,false);
                 await UploadAsync(transfer.MediaPath,true);
@@ -99,7 +90,9 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                     await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),current.Revision,$".encoding-results/{transfer.ExecutionId:D}/result{transfer.ResultExtension}",transfer.ResultSha256,resumed),ct);
                     return;
                 }
-                if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé depuis le début du traitement.");
+                var originalStamp=MediaFileStamp.Read(original);
+                if(transfer.Observation is {} obs && new MediaFileStamp(obs.Bytes,obs.LastWriteUtcTicks).Matches(original)) { }
+                else if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé depuis le début du traitement.");
                 var incoming=Path.Combine(directory,"result"+transfer.ResultExtension);
                 await client.DownloadAsync(transfer.ExecutionId,transfer.Epoch,transfer.ResultSha256,incoming,ct);
                 var before=await scanner.ScanAsync(original,ct);
@@ -112,16 +105,28 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                 {
                     if(!File.Exists(target))
                     {
+                        using var shaStream=System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
                         await using(var source=File.OpenRead(incoming))
                         await using(var destination=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
-                        { await source.CopyToAsync(destination,ct); await destination.FlushAsync(ct); destination.Flush(true); }
+                        {
+                            var buffer=new byte[81920]; int read;
+                            while((read=await source.ReadAsync(buffer,ct))>0)
+                            {
+                                shaStream.AppendData(buffer,0,read);
+                                await destination.WriteAsync(buffer.AsMemory(0,read),ct);
+                            }
+                            await destination.FlushAsync(ct); destination.Flush(true);
+                        }
+                        var writtenSha=Convert.ToHexStringLower(shaStream.GetHashAndReset());
+                        if(writtenSha!=transfer.ResultSha256) throw new IOException("La sortie écrite ne correspond pas au résultat validé.");
                         var state=await client.ExecutionAsync(transfer.ExecutionId,ct);
                         if(state.State!="running") return;
                         await client.GetAsync<RuntimeSourceState>($"executions/{transfer.ExecutionId:D}/source?epoch={transfer.Epoch}",ct);
-                        if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé avant publication.");
+                        if(originalStamp is not null && !originalStamp.Matches(original) && await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256)
+                            throw new IOException("La source a changé avant publication.");
                         Encoding.Core.AtomicFilePublication.Publish(temporary,target);
                     }
-                    if(await SafeMediaPaths.DigestAsync(target,ct)!=transfer.ResultSha256) throw new IOException("La sortie existante est différente du résultat validé.");
+                    else if(await SafeMediaPaths.DigestAsync(target,ct)!=transfer.ResultSha256) throw new IOException("La sortie existante est différente du résultat validé.");
                     Encoding.Core.AtomicFilePublication.Confirm(target);
                     SourceReplacementReport? replacement=null;
                     if(transfer.ReplacementGraceHours is not null)

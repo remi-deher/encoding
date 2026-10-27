@@ -85,7 +85,17 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     current=Path.Combine(directory,"current"+context.Extension);
                     context=context with { CurrentSha256=sourceSha,DirectSource=null };
                 }
-                await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
+                var localSource = lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null
+                    ? SafeMediaPaths.Resolve(lease.SourceRoot, lease.MediaPath) : null;
+                if (localSource is not null && File.Exists(localSource))
+                {
+                    if (!File.Exists(original))
+                        await SafeMediaPaths.CopyVerifiedAsync(localSource, original, sourceSha!, job.Token);
+                }
+                else
+                {
+                    await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
+                }
                 if(context.CurrentSha256==sourceSha)
                     await SafeMediaPaths.CopyVerifiedAsync(original,current,sourceSha!,job.Token);
                 else await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
@@ -141,10 +151,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             async Task EnsureDecodedAsync()
             {
                 await EnsureFilesAsync();
-                if(await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256)
+                if(currentStamp?.Matches(current) != true && await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256)
                     throw new IOException("Le résultat a changé depuis sa validation ; publication refusée.");
                 if(decodedSha==context.CurrentSha256) return;
-                await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token);
+                var hasVideoEncoding = context.VideoEncodings is { Count: > 0 };
+                var duration = context.CurrentMetadata is { } meta && meta.TryGetProperty("format", out var fmt)
+                    && fmt.TryGetProperty("duration", out var dProp) && double.TryParse(dProp.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var dVal) ? dVal : (double?)null;
+                await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token,decodeVideo:hasVideoEncoding,duration:duration);
                 decodedSha=context.CurrentSha256;
             }
             async Task EnsurePublicationIntegrityAsync()

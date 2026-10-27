@@ -29,11 +29,55 @@ public sealed class MediaScanner(ProcessToolRunner tools)
         return metadata;
     }
     /// <summary>Décodage complet des flux audio/vidéo (ADR 0007) : exigé une fois, juste avant la publication d'un résultat.</summary>
-    public async Task DecodeAsync(string candidate,string mediaType,CancellationToken ct)
+    public async Task DecodeAsync(string candidate,string mediaType,CancellationToken ct,bool decodeVideo=true,double? duration=null)
     {
         if(mediaType is not ("video" or "music")) return;
-        var result=await tools.RunAsync(ProcessToolRunner.Find("ffmpeg") ?? throw new IOException("Outil indisponible : ffmpeg."),
-            ["-nostdin","-v","error","-xerror","-i",candidate,"-map","0:v?","-map","0:a?","-f","null","-"],Path.GetDirectoryName(candidate)!,TimeSpan.FromHours(6),ct);
+        var ffmpeg = ProcessToolRunner.Find("ffmpeg") ?? throw new IOException("Outil indisponible : ffmpeg.");
+        var dir = Path.GetDirectoryName(candidate)!;
+
+        if (mediaType == "video" && !decodeVideo)
+        {
+            // La vidéo est copiée bit-à-bit : on décode intégralement l'audio (modifié),
+            // et on échantillonne rapidement la vidéo aux points clés (début, milieu, fin)
+            // pour garantir le démultiplexage et les trames clés sans décoder des dizaines de milliers d'images CPU.
+            var audioResult = await tools.RunAsync(ffmpeg,
+                ["-nostdin", "-v", "error", "-xerror", "-i", candidate, "-map", "0:a?", "-f", "null", "-"],
+                dir, TimeSpan.FromHours(1), ct);
+            if (audioResult.ExitCode != 0 || !string.IsNullOrWhiteSpace(audioResult.Error))
+            {
+                var detail = audioResult.Error.Trim(); if (detail.Length > 400) detail = detail[..400];
+                throw new MediaToolException("ffmpeg (décodage audio de contrôle avant publication)", audioResult.ExitCode, detail);
+            }
+
+            var dur = duration;
+            if (dur is null or <= 0)
+            {
+                var meta = await ScanAsync(candidate, ct);
+                if (meta.TryGetProperty("format", out var fmt) && fmt.TryGetProperty("duration", out var dProp)
+                    && double.TryParse(dProp.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var dVal))
+                    dur = dVal;
+            }
+
+            if (dur is { } length and > 0)
+            {
+                foreach (var at in new[] { 0d, Math.Max(0, length / 2 - 2), Math.Max(0, length - 5) }.Distinct())
+                {
+                    var sampleResult = await tools.RunAsync(ffmpeg,
+                        ["-nostdin", "-v", "error", "-xerror", "-ss", at.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                         "-i", candidate, "-t", "5", "-map", "0:v?", "-f", "null", "-"],
+                        dir, TimeSpan.FromMinutes(1), ct);
+                    if (sampleResult.ExitCode != 0 || !string.IsNullOrWhiteSpace(sampleResult.Error))
+                    {
+                        var detail = sampleResult.Error.Trim(); if (detail.Length > 400) detail = detail[..400];
+                        throw new MediaToolException("ffmpeg (échantillonnage vidéo de contrôle avant publication)", sampleResult.ExitCode, detail);
+                    }
+                }
+            }
+            return;
+        }
+
+        var result=await tools.RunAsync(ffmpeg,
+            ["-nostdin","-v","error","-xerror","-i",candidate,"-map","0:v?","-map","0:a?","-f","null","-"],dir,TimeSpan.FromHours(6),ct);
         // ffmpeg 6.x sort en 0 sur une image corrompue ou un conteneur abîmé, même avec -xerror : avec « -v error », toute ligne d'erreur sur stderr est un échec.
         if(result.ExitCode!=0 || !string.IsNullOrWhiteSpace(result.Error))
         {

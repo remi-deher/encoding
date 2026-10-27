@@ -35,7 +35,11 @@ public sealed class MediaIntegrityChecker(ProcessToolRunner tools, MediaScanner 
                 foreach (var (name, api) in new[] { ("nvenc", "cuda"), ("qsv", "qsv"), ("vaapi", "vaapi") })
                 {
                     if (!announced.Contains(name, StringComparer.Ordinal)) continue;
-                    string[] candidate = ["-hwaccel", api, "-hwaccel_output_format", api];
+                    string[] candidate = api switch {
+                        "vaapi" => ["-vaapi_device", Encoding.NodeAgent.Services.GpuDeviceSelector.RenderDevice(), "-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"],
+                        "qsv" => ["-init_hw_device", $"qsv=hw,child_device={Encoding.NodeAgent.Services.GpuDeviceSelector.RenderDevice()}", "-filter_hw_device", "hw", "-hwaccel", "qsv", "-hwaccel_output_format", "qsv"],
+                        _ => ["-hwaccel", api, "-hwaccel_output_format", api]
+                    };
                     var probe = await DecodeAsync(ffmpeg, path, candidate, 0, 2, ct);
                     if (probe.ExitCode != 0 || !string.IsNullOrWhiteSpace(probe.Error)) continue;
                     hardware = candidate;
