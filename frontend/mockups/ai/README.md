@@ -4,6 +4,8 @@ Maquette Angular isolée du produit, compilée aussi en fichier HTML autonome. L
 
 Ouvrir directement [`maquette-ia.html`](./maquette-ia.html) dans un navigateur. Le fichier inclut les styles et le JavaScript compilés ; il ne dépend pas d’un CDN.
 
+La maquette de mise en page de l’assistant est disponible dans [`assistant-layout-proposal.html`](./assistant-layout-proposal.html). Elle permet de replier et déplier l’historique sur ordinateur et mobile, de parcourir les conversations et de démarrer une nouvelle conversation depuis le bouton intégré à la barre de recherche globale. Aucun champ de recherche n’est placé dans l’historique.
+
 ## Sélecteur IA
 
 - Un premier menu ne liste que les fournisseurs activés qui exposent des modèles : ChatGPT, Claude et OpenAI API dans cet exemple.

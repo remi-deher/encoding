@@ -14,6 +14,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   afterRenderEffect,
+  effect,
   DestroyRef,
   ElementRef,
   viewChild,
@@ -120,9 +121,12 @@ export class AiAssistantPageComponent implements OnDestroy {
     inject(BreakpointObserver)
       .observe('(max-width: 760px)')
       .pipe(map((state) => state.matches)),
-    { initialValue: false },
+    {
+      initialValue:
+        typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches,
+    },
   );
-  protected readonly historyOpen = signal(false);
+  protected readonly historyOpen = signal(!this.compact());
   protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
   protected readonly selectedResourceId = signal('');
   protected readonly selectedResource = signal<AssistantResourceOption | null>(null);
@@ -297,6 +301,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   constructor() {
+    effect(() => this.historyOpen.set(!this.compact()));
     afterNextRender(() => {
       // Le même composant vit aussi dans l’assistant flottant : seul l’écran de route
       // possède le contexte de recherche global.
@@ -307,6 +312,17 @@ export class AiAssistantPageComponent implements OnDestroy {
           query: this.searchQuery,
           onSearchQueryChange: (query) => this.updateSearchQuery(query),
           searchResults: (query) => this.conversationSearchResults(query),
+          actions: [
+            {
+              id: 'new-assistant-conversation',
+              label: 'Nouvelle conversation',
+              icon: 'add',
+              run: () => {
+                this.updateSearchQuery('');
+                this.startNewConversation();
+              },
+            },
+          ],
         }),
       );
     });
@@ -445,7 +461,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected startNewConversation(): void {
     if (this.sending()) return;
     this.closePreview();
-    this.historyOpen.set(false);
+    if (this.compact()) this.historyOpen.set(false);
     this.followTail.set(true);
     this.searchTarget.set(null);
     this.highlightedTurn.set(null);
@@ -849,7 +865,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.selectedResource.set(null);
     this.removeAttachment();
     this.pendingActionProposal.set(null);
-    this.historyOpen.set(false);
+    if (this.compact()) this.historyOpen.set(false);
     this.followTail.set(true);
     this.searchTarget.set(null);
     this.highlightedTurn.set(null);

@@ -9,6 +9,9 @@
 >
   <app-ai-conversation-history
     assistant-history
+    [historyId]="
+      panelMode() ? 'assistant-conversation-history-panel' : 'assistant-conversation-history'
+    "
     [conversations]="filteredConversations()"
     [totalCount]="conversations().length"
     [nodes]="aiNodes()"
@@ -18,7 +21,6 @@
     [loading]="loadingConversations()"
     [searching]="searchingConversations()"
     [sending]="sending()"
-    (newConversation)="startNewConversation()"
     (conversationSelected)="openConversation($event)"
     (deleteRequested)="confirmDeleteConversation($event)"
   />
@@ -211,7 +213,13 @@
           class="history-toggle"
           mat-icon-button
           type="button"
-          aria-label="Afficher les conversations"
+          [attr.aria-label]="
+            historyOpen() ? 'Masquer les conversations' : 'Afficher les conversations'
+          "
+          [attr.aria-expanded]="historyOpen()"
+          [attr.aria-controls]="
+            panelMode() ? 'assistant-conversation-history-panel' : 'assistant-conversation-history'
+          "
           (click)="historyOpen.set(!historyOpen())"
         >
           <svg

@@ -18,8 +18,9 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       <mat-drawer
         class="conversation-panel"
         [mode]="compact() ? 'over' : 'side'"
-        [opened]="!panelMode() && (!compact() || historyOpen())"
+        [opened]="!panelMode() && historyOpen()"
         (closedStart)="historyClosed.emit()"
+        aria-label="Historique des conversations"
       >
         <ng-content select="[assistant-history]" />
       </mat-drawer>

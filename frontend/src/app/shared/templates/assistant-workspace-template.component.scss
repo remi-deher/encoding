@@ -1,6 +1,10 @@
 :host {
   position: relative;
   display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
   height: calc(
     100dvh - var(--shell-header-sticky-offset, 84px) - var(--space-5) - var(--space-6)
   );
@@ -8,14 +12,19 @@
 }
 
 .assistant-layout {
+  width: 100%;
   height: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   background: transparent;
   border-radius: var(--radius-xl);
 }
 
 .conversation-panel {
-  width: min(20rem, 30vw);
-  min-width: 16rem;
+  width: clamp(15rem, 21vw, 17.5rem);
+  min-width: 15rem;
+  max-width: calc(100vw - var(--space-5));
   padding: var(--space-4);
   background: var(--surface-container-low);
   border: 0;
@@ -36,6 +45,8 @@
   flex-direction: column;
   height: 100%;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   overflow: hidden;
   background: var(--page-background);
 }
@@ -60,6 +71,11 @@
 }
 
 @media (max-width: 760px) {
+  .conversation-panel {
+    width: min(19rem, calc(100vw - var(--space-5)));
+    min-width: 0;
+  }
+
   .preview-panel {
     width: min(92vw, 440px);
     min-width: 0;
