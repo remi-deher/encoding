@@ -85,6 +85,41 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test('the conversation history drawer toggles at desktop and mobile widths without horizontal overflow', async ({
+  page,
+}) => {
+  await page.goto('/ai/assistant');
+  const assistant = page.locator('app-ai-assistant-page').first();
+  const history = assistant.locator('#assistant-conversation-history');
+  const isCompact = await page.evaluate(() => matchMedia('(max-width: 760px)').matches);
+
+  if (isCompact) {
+    await expect(history).toBeHidden();
+    await assistant.getByRole('button', { name: 'Afficher les conversations' }).click();
+    await expect(history).toBeVisible();
+    await expect(history.getByRole('button', { name: 'Nouvelle conversation' })).toBeVisible();
+    await expect(history.getByRole('textbox')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    return;
+  }
+
+  await expect(history).toBeVisible();
+  await expect(history.getByRole('button', { name: 'Nouvelle conversation' })).toBeVisible();
+  await expect(history.getByRole('textbox')).toHaveCount(0);
+  await assistant.getByRole('button', { name: 'Masquer les conversations' }).click();
+  await expect(history).toBeHidden();
+  await assistant.getByRole('button', { name: 'Afficher les conversations' }).click();
+  await expect(history).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(history).toBeHidden();
+  await assistant.getByRole('button', { name: 'Afficher les conversations' }).click();
+  await expect(history).toBeVisible();
+  await expect(history.getByRole('button', { name: 'Nouvelle conversation' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});
+
 test('backend models and reasoning drive each turn while old turns retain observed models', async ({
   page,
 }, testInfo) => {

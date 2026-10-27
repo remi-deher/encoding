@@ -12,7 +12,12 @@ import { IconComponent } from '../../../shared/ui/icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatProgressSpinnerModule, IconComponent],
   template: `
-    <section assistant-history class="assistant-history-content" aria-labelledby="assistant-history-title">
+    <section
+      assistant-history
+      [id]="historyId()"
+      class="assistant-history-content"
+      aria-labelledby="assistant-history-title"
+    >
       <header class="conversation-heading">
         <div class="conversation-heading__title">
           <h2 id="assistant-history-title">Conversations</h2>
@@ -103,6 +108,7 @@ import { IconComponent } from '../../../shared/ui/icon.component';
   styleUrl: './ai-conversation-history.component.scss',
 })
 export class AiConversationHistoryComponent {
+  readonly historyId = input('assistant-conversation-history');
   readonly conversations = input<readonly AiAssistantConversation[]>([]);
   readonly totalCount = input(0);
   readonly nodes = input<readonly AiNodeAvailability[]>([]);
