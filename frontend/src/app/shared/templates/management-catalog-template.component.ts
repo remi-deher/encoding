@@ -43,11 +43,19 @@ export interface CatalogEmptyState {
       [modal]="drawerModal()"
       [title]="actionOpen() ? actionTitle() : detailTitle()"
       [description]="actionOpen() ? actionDescription() : detailDescription()"
-      [content]="actionOpen() ? actionContentTemplate() : detailContentTemplate()"
+      [content]="
+        actionOpen() ? actionContentTemplate() : detailOpen() ? detailContentTemplate() : undefined
+      "
       [headerActions]="
         actionOpen() || detailLayout() === 'page' ? undefined : detailHeaderActionsTemplate()
       "
-      [footerActions]="actionOpen() ? actionFooterActionsTemplate() : detailFooterActionsTemplate()"
+      [footerActions]="
+        actionOpen()
+          ? actionFooterActionsTemplate()
+          : detailOpen()
+            ? detailFooterActionsTemplate()
+            : undefined
+      "
       [step]="actionOpen() ? actionStep() : null"
       [closeGuarded]="actionOpen() && actionCloseGuarded()"
       (closeRequested)="actionCloseRequested.emit()"

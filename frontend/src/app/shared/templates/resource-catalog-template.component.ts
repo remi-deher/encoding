@@ -58,13 +58,13 @@ import {
       [drawerHeaderDensity]="drawerHeaderDensity()"
       [detailBodyLayout]="detailBodyLayout()"
       [drawerModal]="drawerModal()"
-      [pageActionsInput]="pageActions()"
-      [toolbarActionsInput]="toolbarActions()"
+      [pageActionsInput]="pageActionsTemplate() ?? pageActions()"
+      [toolbarActionsInput]="toolbarActionsTemplate() ?? toolbarActions()"
       [detailContentInput]="detailContent()"
       [detailFooterActionsInput]="detailFooterActions()"
-      [detailHeaderActionsInput]="detailHeaderActions()"
-      [actionFooterActionsInput]="actionFooterActions()"
-      [actionContentInput]="actionContent()"
+      [detailHeaderActionsInput]="detailHeaderActionsTemplate() ?? detailHeaderActions()"
+      [actionFooterActionsInput]="actionFooterActionsTemplate() ?? actionFooterActions()"
+      [actionContentInput]="actionContentTemplate() ?? actionContent()"
       [catalogueNavigationInput]="catalogueNavigation()"
       [catalogueSummaryInput]="catalogueSummary()"
       (searchQueryChange)="searchQueryChange.emit($event)"
@@ -98,6 +98,11 @@ import {
   `,
 })
 export class ResourceCatalogTemplateComponent {
+  readonly toolbarActionsTemplate = input<TemplateRef<unknown> | undefined>();
+  readonly pageActionsTemplate = input<TemplateRef<unknown> | undefined>();
+  readonly detailHeaderActionsTemplate = input<TemplateRef<unknown> | undefined>();
+  readonly actionFooterActionsTemplate = input<TemplateRef<unknown> | undefined>();
+  readonly actionContentTemplate = input<TemplateRef<unknown> | undefined>();
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
   protected readonly toolbarActions = contentChild('catalogueToolbarActions', {
     read: TemplateRef,

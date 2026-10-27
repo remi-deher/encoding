@@ -67,6 +67,11 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
       [detailBodyLayout]="detailBodyLayout()"
       [drawerModal]="drawerModal()"
       [catalogueNavigationTemplate]="catalogueNavigation()"
+      [actionContentTemplate]="actionContent()"
+      [actionFooterActionsTemplate]="actionFooterActions()"
+      [detailHeaderActionsTemplate]="detailHeaderActions()"
+      [pageActionsTemplate]="pageActions()"
+      [toolbarActionsTemplate]="toolbarActions()"
       (searchQueryChange)="searchQueryChange.emit($event)"
       (emptyStateAction)="emptyStateAction.emit()"
       (detailClosed)="detailClosed.emit()"
@@ -130,6 +135,17 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
   `,
 })
 export class LibraryPreparationTemplateComponent {
+  protected readonly actionContent = contentChild('actionContent', { read: TemplateRef });
+  protected readonly actionFooterActions = contentChild('actionFooterActions', {
+    read: TemplateRef,
+  });
+  protected readonly detailHeaderActions = contentChild('detailHeaderActions', {
+    read: TemplateRef,
+  });
+  protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
+  protected readonly toolbarActions = contentChild('catalogueToolbarActions', {
+    read: TemplateRef,
+  });
   readonly title = input.required<string>();
   readonly items = input.required<readonly ResourceListItem[]>();
   readonly rowActions = input<readonly DataTableRowAction[]>([]);
