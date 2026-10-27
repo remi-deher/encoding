@@ -15,6 +15,7 @@ import {
   SaveNodeGroupPayload,
 } from './components/node-group-editor.component';
 import { NodeGroupDetailComponent } from './components/node-group-detail.component';
+import { IconComponent } from '../../shared/ui/icon.component';
 
 @Component({
   selector: 'app-node-groups-page',
@@ -24,6 +25,7 @@ import { NodeGroupDetailComponent } from './components/node-group-detail.compone
     NodeGroupCardComponent,
     NodeGroupEditorComponent,
     NodeGroupDetailComponent,
+    IconComponent,
     MatButtonModule,
     RouterLink,
   ],

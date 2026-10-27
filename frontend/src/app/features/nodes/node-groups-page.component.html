@@ -30,7 +30,7 @@
   <div catalogue-table class="groups-grid">
     @if (filteredGroups().length === 0) {
       <div class="groups-empty">
-        <span class="empty-icon" aria-hidden="true">🏷️</span>
+        <span class="empty-icon"><app-icon name="sell" /></span>
         @if (searchQuery().trim()) {
           <h3 class="empty-title">Aucun résultat</h3>
           <p class="empty-desc">
