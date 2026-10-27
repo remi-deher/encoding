@@ -12,7 +12,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { MatTabsModule } from '@angular/material/tabs';
 import { ClusterMaintenanceTemplateComponent } from '../../shared/templates/cluster-maintenance-template.component';
-import { DataTableRow } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
 import { FlowValidation } from '../../shared/services/flow-validation';
@@ -35,7 +34,7 @@ import {
 } from '../../shared/ui/resource-sheet.component';
 
 import { MatButtonModule } from '@angular/material/button';
-import { MatMenuModule } from '@angular/material/menu';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ClusterExtensionsService } from '../../shared/services/cluster-extensions.service';
 import {
   ClusterTool,
@@ -51,7 +50,7 @@ import {
 
 type PluginFamily = 'base' | 'cluster' | 'media' | 'automation' | 'custom';
 
-interface PluginRecord extends DataTableRow {
+interface PluginRecord {
   readonly id: string;
   readonly name: string;
   readonly family: PluginFamily;
@@ -63,9 +62,13 @@ interface PluginRecord extends DataTableRow {
   readonly configuration: string;
   readonly state: string;
   readonly iconUrl: string;
+  readonly enabled: boolean;
+  readonly canDisable: boolean;
 }
 
-const PLUGIN_RECORDS: readonly PluginRecord[] = [
+type StaticPluginRecord = Omit<PluginRecord, 'enabled' | 'canDisable'>;
+
+const PLUGIN_RECORDS: readonly StaticPluginRecord[] = [
   {
     id: 'base',
     name: 'Base',
@@ -288,7 +291,7 @@ const PLUGIN_FAMILY_DESCRIPTIONS: Readonly<Record<PluginFamily, string>> = {
     PlexSetupAssistantComponent,
     MatTabsModule,
     MatButtonModule,
-    MatMenuModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './plugin-catalog-page.component.html',
   styleUrl: './plugin-catalog-page.component.scss',
@@ -395,12 +398,22 @@ export class PluginCatalogPageComponent {
   protected readonly rejectedPlugins = signal<readonly RejectedPlugin[]>([]);
   protected readonly selectedPlugin = signal<PluginRecord | null>(null);
   private readonly pluginCatalog = signal<readonly FlowPluginCatalog[]>([]);
+  private readonly pluginEnabledOverrides = signal<Readonly<Record<string, boolean>>>({});
+  protected readonly activationBusy = signal<ReadonlySet<string>>(new Set());
   /** Fiches connues du front, versions réelles du serveur, et plugins tiers déclarés par le catalogue. */
   protected readonly pluginRecords = computed<readonly PluginRecord[]>(() => {
     const catalog = this.pluginCatalog();
+    const overrides = this.pluginEnabledOverrides();
     const known = PLUGIN_RECORDS.map((record) => {
       const live = catalog.find((plugin) => plugin.id === record.id);
-      return live ? { ...record, version: live.version } : record;
+      const enabled = overrides[record.id] ?? live?.enabled ?? true;
+      return {
+        ...record,
+        ...(live ? { version: live.version } : {}),
+        enabled,
+        canDisable: record.id !== 'base' && record.id !== 'nodes',
+        state: enabled ? record.state : 'Désactivé',
+      };
     });
     const custom = catalog
       .filter((plugin) => !PLUGIN_RECORDS.some((record) => record.id === plugin.id))
@@ -416,8 +429,10 @@ export class PluginCatalogPageComponent {
         configuration: plugin.configurationSchema
           ? `${plugin.configurationSchema.fields.length} champ(s) déclaré(s)`
           : 'Aucune configuration globale',
-        state: 'Déclaré',
+        state: plugin.enabled === false ? 'Désactivé' : 'Actif',
         iconUrl: '/plugins/base.svg',
+        enabled: overrides[plugin.id] ?? plugin.enabled ?? true,
+        canDisable: true,
       }));
     return [...known, ...custom];
   });
@@ -639,6 +654,77 @@ export class PluginCatalogPageComponent {
 
   protected onStoreCategoryChange(cat: string): void {
     this.selectedStoreCategory.set(cat);
+  }
+
+  protected isActivationBusy(kind: 'plugin' | 'tool', id: string): boolean {
+    return this.activationBusy().has(`${kind}:${id}`);
+  }
+
+  protected async setPluginEnabled(plugin: PluginRecord, enabled: boolean): Promise<void> {
+    const busyKey = `plugin:${plugin.id}`;
+    if (!plugin.canDisable || this.activationBusy().has(busyKey)) return;
+    this.setActivationBusy(busyKey, true);
+    this.setPluginActivationView(plugin.id, enabled);
+    try {
+      const result = await this.extensionsService.setPluginEnabled(plugin.id, enabled);
+      this.setPluginActivationView(plugin.id, result.enabled);
+      this.notifications.show(
+        result.enabled
+          ? `Plugin « ${plugin.name} » activé pour le cluster.`
+          : `Plugin « ${plugin.name} » désactivé pour les nouveaux traitements du cluster.`,
+      );
+    } catch (error) {
+      this.setPluginActivationView(plugin.id, plugin.enabled);
+      this.notifications.show(this.storeError(error, 'Impossible de modifier l’activation du plugin.'));
+    } finally {
+      this.setActivationBusy(busyKey, false);
+    }
+  }
+
+  protected async setToolEnabled(tool: ClusterTool, enabled: boolean): Promise<void> {
+    const busyKey = `tool:${tool.id}`;
+    if (this.activationBusy().has(busyKey)) return;
+    this.setActivationBusy(busyKey, true);
+    this.setToolActivationView(tool.id, enabled);
+    try {
+      const result = await this.extensionsService.setToolEnabled(tool.id, enabled);
+      this.setToolActivationView(tool.id, result.enabled);
+      this.notifications.show(
+        result.enabled
+          ? `Outil « ${tool.name} » activé pour le cluster.`
+          : `Outil « ${tool.name} » désactivé pour les nouveaux traitements du cluster.`,
+      );
+    } catch (error) {
+      this.setToolActivationView(tool.id, tool.enabled);
+      this.notifications.show(this.storeError(error, 'Impossible de modifier l’activation de l’outil.'));
+    } finally {
+      this.setActivationBusy(busyKey, false);
+    }
+  }
+
+  private setPluginActivationView(id: string, enabled: boolean): void {
+    this.pluginEnabledOverrides.update((current) => ({ ...current, [id]: enabled }));
+    const defaultState = PLUGIN_RECORDS.find((record) => record.id === id)?.state ?? 'Actif';
+    this.selectedPlugin.update((current) =>
+      current?.id === id
+        ? { ...current, enabled, state: enabled ? defaultState : 'Désactivé' }
+        : current,
+    );
+  }
+
+  private setToolActivationView(id: string, enabled: boolean): void {
+    this.clusterTools.update((tools) =>
+      tools.map((tool) => (tool.id === id ? { ...tool, enabled } : tool)),
+    );
+  }
+
+  private setActivationBusy(key: string, busy: boolean): void {
+    this.activationBusy.update((current) => {
+      const next = new Set(current);
+      if (busy) next.add(key);
+      else next.delete(key);
+      return next;
+    });
   }
 
   protected readonly repositoryUrl = signal('');

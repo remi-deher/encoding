@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   TemplateRef,
+  contentChild,
   input,
   output,
   viewChild,
@@ -37,6 +38,7 @@ import {
       [detailOpen]="detailOpen()"
       [detailTitle]="detailTitle()"
       [detailDescription]="detailDescription()"
+      [detailContentInput]="detailContentProjection()"
       [actionOpen]="actionOpen()"
       [actionTitle]="actionTitle()"
       [actionDescription]="actionDescription()"
@@ -90,6 +92,9 @@ import {
 })
 export class ClusterMaintenanceTemplateComponent {
   /** Les emplacements catalogue passent au gabarit comme templates explicites. */
+  protected readonly detailContentProjection = contentChild('detailContent', {
+    read: TemplateRef,
+  });
   protected readonly catalogueSummaryProjection = viewChild('catalogueSummarySlot', {
     read: TemplateRef,
   });

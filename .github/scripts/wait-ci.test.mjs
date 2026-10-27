@@ -23,6 +23,22 @@ test('cancelled, skipped, neutral, timed out and missing checks do not authorize
   assert.equal(evaluate([]), 'missing');
 });
 
+test('a cancelled equivalent check waits while the current commit has CI checks running', () => {
+  const results = evaluateChecks(
+    { 'backend-runtime-tests': 'old', 'frontend-fast': 'old' },
+    'current',
+    [
+      { id: 1, sha: 'old', name: 'backend-runtime-tests', conclusion: 'cancelled', status: 'completed' },
+      { id: 2, sha: 'current', name: 'frontend-fast', conclusion: null, status: 'in_progress' },
+    ],
+    {
+      'backend-runtime-tests': ['current', 'old'],
+      'frontend-fast': ['current', 'old'],
+    },
+  );
+  assert.equal(results.find(result => result.name === 'backend-runtime-tests').state, 'pending');
+});
+
 test('an explicitly equivalent ancestor can carry CI beyond the last file-changing commit', () => {
   const sources = { 'frontend-e2e': 'last-change' };
   const equivalents = { 'frontend-e2e': ['current', 'validated', 'last-change'] };

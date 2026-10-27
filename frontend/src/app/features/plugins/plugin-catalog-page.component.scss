@@ -222,6 +222,16 @@
   gap: var(--space-4);
 }
 
+.activation-scope-note {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-container-low);
+  color: var(--text-secondary);
+  font-size: var(--font-label);
+  line-height: 1.5;
+}
+
 .plugin-section {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
@@ -295,6 +305,12 @@
 
 .plugin-card-header > div {
   min-width: 0;
+}
+
+.plugin-activation {
+  position: absolute;
+  inset-block-start: var(--space-4);
+  inset-inline-end: var(--space-4);
 }
 
 .plugin-card h3 {
@@ -373,16 +389,9 @@
   color: var(--success);
 }
 
-.plugin-menu {
-  position: absolute;
-  inset-block-start: var(--space-2);
-  inset-inline-end: var(--space-2);
+.plugin-meta .plugin-state_disabled {
+  background: var(--surface-container-highest);
   color: var(--text-secondary);
-}
-
-.plugin-menu span {
-  font-size: var(--font-title);
-  line-height: 1;
 }
 
 .plugin-empty {
@@ -415,6 +424,11 @@
   background: var(--accent-soft, var(--surface-container-high));
   color: var(--accent);
   font-size: var(--font-title);
+}
+
+.tool-activation {
+  flex: 0 0 auto;
+  margin-inline-start: var(--space-1);
 }
 
 .tool-card .tool-description {

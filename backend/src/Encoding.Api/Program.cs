@@ -76,6 +76,8 @@ builder.Services.AddHttpClient("release-updates", client =>
 builder.Services.AddSingleton<ExecutionStreamBroadcaster>();
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
+builder.Services.AddSingleton<Encoding.Api.Plugins.ClusterExtensionActivationState>();
+builder.Services.AddHostedService(services => services.GetRequiredService<Encoding.Api.Plugins.ClusterExtensionActivationState>());
 builder.Services.AddSingleton<FlowDefinitionValidator>();
 builder.Services.AddSingleton<FlowCatalogPromptBuilder>();
 builder.Services.AddSingleton<FlowAiGeneratorService>();
@@ -196,6 +198,8 @@ await StandardFlowTemplateSeeder.EnsureAsync(
     flowRegistry,
     app.Services.GetRequiredService<FlowDefinitionValidator>(),
     app.Lifetime.ApplicationStopping);
+await app.Services.GetRequiredService<Encoding.Api.Plugins.ClusterExtensionActivationState>()
+    .InitializeAsync(app.Lifetime.ApplicationStopping);
 await app.Services.GetRequiredService<TaskOwnershipRepository>().InitializeAsync(app.Lifetime.ApplicationStopping);
 app.UseRequestObservability();
 app.UseTrustedProxies();

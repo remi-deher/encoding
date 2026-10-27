@@ -1,5 +1,6 @@
 using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Plugins;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 
@@ -196,16 +197,29 @@ public static class FlowEndpoints
         })
             .WithName("CreateFlowFromTemplate");
 
-        flows.MapGet("/components", (FlowComponentRegistry registry) => Results.Ok(registry.Plugins))
+        flows.MapGet("/components", (FlowComponentRegistry registry, ClusterExtensionActivationState activation) => Results.Ok(
+            registry.Plugins.Select(plugin => new
+            {
+                plugin.ContractVersion,
+                plugin.Id,
+                plugin.Version,
+                plugin.Name,
+                plugin.SupportedHostContractVersions,
+                plugin.Components,
+                plugin.ConfigurationSchema,
+                plugin.PublicationGuard,
+                enabled = activation.IsPluginEnabled(plugin.Id)
+            })))
             .WithName("GetFlowComponentCatalog");
 
-        flows.MapGet("/schema", (FlowComponentRegistry registry) =>
+        flows.MapGet("/schema", (FlowComponentRegistry registry, ClusterExtensionActivationState activation) =>
         {
             var components = registry.Plugins.SelectMany(p => p.Components.Select(c => new
             {
                 pluginId = p.Id,
                 pluginName = p.Name,
                 pluginVersion = p.Version,
+                pluginEnabled = activation.IsPluginEnabled(p.Id),
                 componentId = c.Id,
                 componentName = c.Name,
                 description = c.Description,

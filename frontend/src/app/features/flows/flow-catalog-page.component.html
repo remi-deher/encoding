@@ -1,3 +1,12 @@
+<input
+  #globalFlowImportPicker
+  hidden
+  type="file"
+  accept=".json,.zip"
+  [disabled]="importing()"
+  (change)="onGlobalImportChange($event)"
+/>
+
 <app-resource-catalog-template
   [title]="title()"
   [items]="catalogueItems()"
@@ -23,7 +32,7 @@
   filterLabel=""
   searchLabel=""
   searchLayout="end"
-  [showToolbar]="true"
+  [showToolbar]="false"
   [emptyState]="catalogState() === 'ready' && totalCount() === 0 ? emptyState : null"
   (emptyStateAction)="openFlowCreation()"
   [searchQuery]="searchQuery()"
@@ -36,15 +45,6 @@
   (action)="onRowAction($event)"
   (selectionAction)="onSelectionAction($event)"
 >
-  <ng-template #catalogueToolbarActions>
-    <app-file-import
-      label="Importer"
-      accept=".json,.zip"
-      [busy]="importing()"
-      (selected)="onImportFile($event)"
-    />
-  </ng-template>
-
   <ng-template #catalogueSummary>
     <div class="flow-types" role="group" aria-label="Filtrer par type de média">
       @if (totalCount() > 0) {

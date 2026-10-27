@@ -2,6 +2,7 @@ export type ExtensionTab = 'plugins' | 'tools' | 'store';
 
 export interface ClusterTool {
   readonly id: string;
+  readonly enabled: boolean;
   readonly name: string;
   readonly role: string;
   readonly provider: 'stock' | 'custom' | 'managed';

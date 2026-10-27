@@ -1,6 +1,6 @@
 ---
 domain: plugins
-updated: 2026-10-25
+updated: 2026-10-27
 legacy_adr: [0005, 0011, 0019, 0020, 0021, 0024, 0032, 0054, 0055, 0056, 0057, 0058, 0059, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070, 0075, 0076, 0079]
 code:
   - backend/src/Encoding.Api/Flows/Catalog/*.json
@@ -24,6 +24,11 @@ Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `b
 - Évolution : tout changement de comportement incrémente la version du plugin, garde les versions précédentes résolubles (`compatiblePluginVersions`) et un worker n'annonçant pas la version requise (`plugin/<id>` + version) ne reçoit pas le flow (pendant une mise à jour progressive les flows attendent un worker à jour). Un composant ou une option peut exiger une version minimale.
 - Configuration à deux niveaux : **plugin** (défauts du cluster) puis **dérogation par flow** (révision propre), plus les paramètres d'**instance** du bloc. Valeurs effectives fusionnées à l'attribution et figées pour la tâche. Secrets chiffrés en base, jamais dans exports/sauvegardes/événements/journaux ; un champ `"scope": "server"` ne quitte jamais le serveur (ex. `webhookSecret`). Test de connexion depuis le serveur (ne prouve pas l'accès depuis les workers).
 
+## Activation cluster (ADR [0021](../adr/0021-activation-cluster-plugins-outils.md))
+- Les switchs de Plugins & Outils modifient une préférence cluster enregistrée dans les registres LWW existants. L’activation est la valeur par défaut ; `base` et `nodes` ne peuvent pas être désactivés.
+- Désactiver un plugin bloque la publication et l’exécution de nouveaux traitements, et son éligibilité aux nouvelles attributions. Les brouillons existants restent modifiables. Désactiver un outil exclut sa capacité des nouvelles attributions. Une exécution déjà commencée, y compris une reprise à checkpoint ou une sonde différée, peut terminer.
+- Cette préférence converge éventuellement : un serveur isolé peut conserver son état connu jusqu’à réception de l’événement. L’installation et le Store de paquets tiers restent locaux à chaque serveur ; le switch ne supprime aucun paquet.
+
 ## Exécution et isolation
 - Plugins tiers : **processus séparé** (jamais chargés dans ASP.NET ou l'agent), protocole stdin/stdout versionné (`describe`, `execute`, `contractVersion` 1), réponses bornées, sous **Landlock** ([runtime.md](runtime.md)). Runtimes : `python3` (stdlib, SDK `encoding_plugin_sdk.py`) et `node` (SDK `encoding-plugin-sdk.mjs`). Pas de plugin .NET : jamais démarré sous Landlock réel, non vérifié.
 - `ProcessSandbox.MinimalEnvironment` : liste blanche d'environnement. `/proc` et `/sys` sont lisibles dans le bac à sable (décision de sécurité ouverte : [open-questions.md](../open-questions.md)).
@@ -33,7 +38,7 @@ Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `b
 - Paquet `.zip` : `plugin.json` à la racine = `PluginManifest` + bloc `runtime` (`{type: python3|node, entrypoint}`) ; identifiant qualifié `espace.nom` ; limites 32 Mo compressé, 128 Mo décompressé, 500 fichiers ; chemins absolus, `..`, `:` refusés. `official.*` réservé au dépôt officiel.
 - Dépôts statiques `repository.json` 1.x (validés entrée par entrée, SHA-256 obligatoire, versions publiées immuables). **Le dépôt officiel n'existe que si `PluginStore:OfficialRepositoryUrl` est configuré** ; aucune adresse n'est codée en dur.
 - Serveur : installation à chaud (`FlowComponentRegistry.TryInstall`), stockage `PluginStore:Directory`, empreinte vérifiée au démarrage. Workers : `PluginSyncService` (chaque minute) télécharge depuis `GET /api/v1/store/installed`, vérifie le SHA-256, extrait dans `Runtime:CustomPluginDirectory` puis écrit `.verified`. Mises à jour **manuelles**, jamais automatiques.
-- Limites : l'état du Store est **local à chaque serveur** (non réconcilié) ; pas de désactivation sans retrait, pas de refus de retrait si un flow l'utilise, pas de signature, `minEngineVersion`/`requiredTools` non contrôlés, synchronisation périodique des dépôts non faite, rien exécuté sous Landlock réel.
+- Limites : l'état d'installation du Store est **local à chaque serveur** (non réconcilié) ; le retrait n'est pas refusé lorsqu'un flow utilise le plugin ; pas de signature, `minEngineVersion`/`requiredTools` non contrôlés, synchronisation périodique des dépôts non faite, rien exécuté sous Landlock réel.
 - Outils d'auteur : validateur de manifeste/paquet, simulation locale, SDK JavaScript ; MCP `validate_plugin_manifest`, `validate_tool_definition`, `list_media_tools`, `get_media_tool_info` ([auth-ops.md](auth-ops.md)). Guide : `backend/plugins/README.md`.
 
 ## Plugins intégrés (rôle, pas liste exhaustive)
@@ -46,6 +51,7 @@ Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `b
 
 ## Outils média : rôles et fournisseurs
 - Les composants consomment un **rôle d'outil** (`ffmpeg`, `ffprobe`, `mkvmerge`, `mediainfo`…), jamais un chemin brut. Fournisseur actuel : l'outil de l'image. Le catalogue de l'éditeur (`media-tool-actions.ts`) est éditorial et n'atteste pas qu'un binaire est installé ; seul l'agent déclare outils, versions et encodeurs vérifiés.
+- Le switch d’un outil média règle son usage dans le cluster ; il ne désinstalle pas le binaire. Les nœuds retirent la capacité désactivée des nouvelles attributions après convergence de la préférence partagée.
 - **Non implémenté** (conçu, jamais livré) : fournisseurs `custom`/`managed`, manifeste `tool.json`, dossier `/opt/encoding/tools/`, test de conformité. Principe à retenir s'il est repris : conserver toujours le FFmpeg de référence de l'image pour les sondes matérielles et le heartbeat. Voir [open-questions.md](../open-questions.md).
 
 ## Invariants

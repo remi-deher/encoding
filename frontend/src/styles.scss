@@ -547,7 +547,11 @@ a {
 .detail-drawer-container.mat-drawer-container {
   width: 100%;
   overflow: visible;
-  z-index: 100;
+  z-index: 0;
+}
+
+.detail-drawer-container.mat-drawer-container.drawer-layer-active {
+  z-index: 90;
 }
 
 .pack-expanded {

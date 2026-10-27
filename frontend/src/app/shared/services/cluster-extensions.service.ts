@@ -20,6 +20,24 @@ export class ClusterExtensionsService {
     return firstValueFrom(this.http.get<readonly ClusterTool[]>('/api/v1/tools'));
   }
 
+  setPluginEnabled(id: string, enabled: boolean): Promise<{ pluginId: string; enabled: boolean }> {
+    return firstValueFrom(
+      this.http.put<{ pluginId: string; enabled: boolean }>(
+        `/api/v1/plugins/${encodeURIComponent(id)}/enabled`,
+        { enabled },
+      ),
+    );
+  }
+
+  setToolEnabled(id: string, enabled: boolean): Promise<{ toolId: string; enabled: boolean }> {
+    return firstValueFrom(
+      this.http.put<{ toolId: string; enabled: boolean }>(
+        `/api/v1/tools/${encodeURIComponent(id)}/enabled`,
+        { enabled },
+      ),
+    );
+  }
+
   testToolConformance(
     toolId: string,
   ): Promise<{ toolId: string; passed: boolean; message: string }> {

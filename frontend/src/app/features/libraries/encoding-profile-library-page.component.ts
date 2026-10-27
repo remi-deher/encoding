@@ -61,15 +61,11 @@ interface EncoderGroup {
     <app-resource-catalog-template
       [title]="title()"
       [items]="items()"
-      filterLabel="Profils d’encodage"
-      searchLabel="Rechercher un profil"
-      searchLayout="centered"
+      [showToolbar]="false"
       resourceIcon="video"
       openLabel="Configurer"
       listEmptyMessage="Aucun profil ne correspond à la recherche."
       (open)="selectProfile($event)"
-      [searchQuery]="query()"
-      (searchQueryChange)="query.set($event)"
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [actionOpen]="editorOpen()"
@@ -77,9 +73,6 @@ interface EncoderGroup {
       [actionDescription]="editorDescription()"
       (actionClosed)="closeEditor()"
     >
-      <ng-template #pageActions>
-        <button matButton="filled" type="button" (click)="newProfile()">Nouveau profil</button>
-      </ng-template>
       <ng-template #catalogueNavigation>
         <app-library-section-tabs catalogue-navigation selected="encoding" />
       </ng-template>
@@ -418,6 +411,14 @@ export class EncodingProfileLibraryPageComponent {
         searchPlaceholder: 'Rechercher dans les profils d’encodage…',
         query: this.query,
         onSearchQueryChange: (query) => this.query.set(query),
+        actions: [
+          {
+            id: 'new-encoding-profile',
+            label: 'Nouveau profil',
+            icon: 'add',
+            run: () => this.newProfile(),
+          },
+        ],
       }),
     );
     void this.load();

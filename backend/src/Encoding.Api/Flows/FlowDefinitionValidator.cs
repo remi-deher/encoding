@@ -3,14 +3,18 @@ using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows.Conditions;
+using Encoding.Api.Plugins;
 
 namespace Encoding.Api.Flows;
 
-public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
+public sealed class FlowDefinitionValidator(
+    FlowComponentRegistry registry,
+    ClusterExtensionActivationState? activation = null)
 {
     public FlowValidationResult ValidateDraft(FlowDefinition flow)
     {
-        var result=Validate(flow,true);
+        // A disabled plugin may remain in an editable draft; publication and execution are checked separately.
+        var result=Validate(flow,true,false);
         var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict","wait.invalid","wait.block.invalid","builder.scope.invalid","builder.scope.unclosed"};
         var issues=result.Issues.Where(issue=>!allowed.Contains(issue.Code)
             && !(issue.Code=="field.invalid" && (issue.Message=="Ce paramètre est obligatoire."
@@ -42,9 +46,12 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
         }
     }
 
-    public FlowValidationResult Validate(FlowDefinition flow)=>Validate(flow,false);
+    public FlowValidationResult Validate(FlowDefinition flow)=>Validate(flow,false,true);
 
-    private FlowValidationResult Validate(FlowDefinition flow,bool allowIncompleteConditions)
+    /// <summary>Valide une suite déjà lancée sans appliquer les préférences d'activation aux plugins.</summary>
+    public FlowValidationResult ValidateContinuation(FlowDefinition flow)=>Validate(flow,false,false);
+
+    private FlowValidationResult Validate(FlowDefinition flow,bool allowIncompleteConditions,bool checkPluginActivation)
     {
         var issues = new List<FlowValidationIssue>();
         void Issue(string code, string path, string message) => issues.Add(new(code, path, message));
@@ -71,8 +78,14 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             var path = $"/nodes/{i}";
             if (node is null || string.IsNullOrWhiteSpace(node.Id)) { Issue("node.id.required", path + "/id", "Identifiant de bloc obligatoire."); continue; }
             if (!ids.Add(node.Id)) { Issue("node.id.duplicate", path + "/id", "Identifiant de bloc dupliqué."); continue; }
-            var component = node.Component is null ? null : registry.Resolve(node.Component);
+            var reference = node.Component;
+            var component = reference is null ? null : registry.Resolve(reference);
             if (component is null) { Issue("component.unavailable", path + "/component", "Cette version du composant, du plugin ou du schéma n’est pas disponible."); continue; }
+            var pluginId = FlowComponentRegistry.TryGetLegacyAlias(reference!.ComponentId, out var legacyTarget)
+                ? legacyTarget.PluginId
+                : reference.PluginId;
+            if (checkPluginActivation && activation is not null && !activation.IsPluginEnabled(pluginId))
+                Issue("plugin.disabled", path + "/component", "Ce plugin est désactivé pour les nouveaux traitements du cluster.");
             nodes.Add(node.Id, component);
             if (!component.SupportedFlowMediaTypes.Contains(flow.MediaType, StringComparer.Ordinal)) Issue("component.incompatible", path + "/component", "Composant incompatible avec le média du flow.");
             if (node.Configuration is null) { Issue("configuration.required", path + "/configuration", "La configuration doit être un objet."); continue; }
