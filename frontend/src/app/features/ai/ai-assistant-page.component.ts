@@ -28,6 +28,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -82,6 +83,7 @@ interface AssistantResourceOption {
     IconComponent,
     FormsModule,
     MatButtonModule,
+    MatCardModule,
     MatFormFieldModule,
     MatInputModule,
     MatProgressSpinnerModule,
@@ -123,6 +125,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     { initialValue: false },
   );
   protected readonly historyOpen = signal(false);
+  protected readonly historyCollapsed = signal(false);
   protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
   protected readonly selectedResourceId = signal('');
   protected readonly selectedResource = signal<AssistantResourceOption | null>(null);
@@ -442,10 +445,23 @@ export class AiAssistantPageComponent implements OnDestroy {
     if (selected) this.selectModel(this.modelOptionKey(selected));
   }
 
+  protected toggleHistory(): void {
+    if (this.compact()) {
+      this.historyOpen.update((open) => !open);
+      return;
+    }
+    this.historyCollapsed.update((collapsed) => !collapsed);
+  }
+
+  protected closeHistory(): void {
+    if (this.compact()) this.historyOpen.set(false);
+    else this.historyCollapsed.set(true);
+  }
+
   protected startNewConversation(): void {
     if (this.sending()) return;
     this.closePreview();
-    this.historyOpen.set(false);
+    if (this.compact()) this.historyOpen.set(false);
     this.followTail.set(true);
     this.searchTarget.set(null);
     this.highlightedTurn.set(null);
@@ -849,7 +865,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.selectedResource.set(null);
     this.removeAttachment();
     this.pendingActionProposal.set(null);
-    this.historyOpen.set(false);
+    if (this.compact()) this.historyOpen.set(false);
     this.followTail.set(true);
     this.searchTarget.set(null);
     this.highlightedTurn.set(null);

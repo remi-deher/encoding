@@ -119,15 +119,24 @@
   gap: var(--space-3);
   flex: 0 0 auto;
   min-height: calc(var(--touch-target) + var(--space-2));
-  padding: var(--space-2) var(--space-5);
-  border-bottom: 1px solid var(--outline-variant);
-  background: color-mix(in srgb, var(--surface-container-low) 76%, transparent);
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
 }
 .chat-toolbar__copy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   flex: 1;
   min-width: 0;
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-4);
+  border-color: var(--outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-low);
 }
 .chat-toolbar h2 {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-size: var(--font-title-sm);
   font-weight: 650;
@@ -142,13 +151,13 @@
 .chat-toolbar .node-badge {
   display: inline-block;
   max-width: 100%;
-  margin-top: var(--space-1);
+  margin-top: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
 }
 .history-toggle {
-  display: none;
+  display: inline-flex;
 }
 .message-list {
   display: flex;
@@ -322,9 +331,6 @@
   font-size: var(--font-label);
 }
 @media (max-width: 760px) {
-  .history-toggle {
-    display: inline-flex;
-  }
   .conversation-footer {
     padding: var(--space-2);
   }

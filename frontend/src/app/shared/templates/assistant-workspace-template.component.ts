@@ -18,7 +18,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       <mat-drawer
         class="conversation-panel"
         [mode]="compact() ? 'over' : 'side'"
-        [opened]="!panelMode() && (!compact() || historyOpen())"
+        [opened]="!panelMode() && (compact() ? historyOpen() : !historyCollapsed())"
         (closedStart)="historyClosed.emit()"
       >
         <ng-content select="[assistant-history]" />
@@ -44,6 +44,7 @@ export class AssistantWorkspaceTemplateComponent {
   readonly compact = input(false);
   readonly panelMode = input(false);
   readonly historyOpen = input(false);
+  readonly historyCollapsed = input(false);
   readonly previewOpen = input(false);
 
   readonly backdropClicked = output<void>();

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Encoding · Proposition de mise en page IA</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --page: #111318;
+        --surface: #191b20;
+        --surface-2: #20232a;
+        --surface-3: #2a2d35;
+        --outline: #3a3d46;
+        --text: #e4e2e9;
+        --muted: #b9bac5;
+        --primary: #b2c5ff;
+        --primary-soft: #26334f;
+        --radius-sm: 12px;
+        --radius-md: 16px;
+        --radius-lg: 20px;
+        --radius-xl: 28px;
+        font: 15px/1.5 Inter, Roboto, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; background: var(--page); color: var(--text); }
+      button, input, textarea { color: inherit; font: inherit; }
+      button { cursor: pointer; }
+      .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 10px; width: 100%; height: 100dvh; min-height: 560px; padding: 10px; overflow: hidden; transition: grid-template-columns 200ms ease, gap 200ms ease; }
+      .app.history-hidden { grid-template-columns: 0 minmax(0, 1fr); gap: 0; }
+      .app.history-hidden .sidebar { min-width: 0; overflow: hidden; padding-inline: 0; visibility: hidden; }
+      .sidebar, .main { min-width: 0; min-height: 0; border-radius: var(--radius-xl); }
+      .sidebar { display: flex; flex-direction: column; gap: 14px; padding: 14px 12px; background: var(--surface); }
+      .side-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 5px; }
+      .side-heading h2 { margin: 0; font-size: 16px; font-weight: 650; }
+      .count { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+      .material-button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 42px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-weight: 600; transition: background 160ms ease, transform 160ms ease; }
+      .material-button:hover { background: #303d59; }
+      .material-button:active { transform: scale(.98); }
+      .material-button svg { flex: none; }
+      .new-chat { justify-content: flex-start; width: 100%; border-radius: var(--radius-md); }
+      .history { display: grid; align-content: start; gap: 6px; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+      .history-label { margin: 5px 7px 2px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+      .history-item { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: center; gap: 4px; min-width: 0; padding: 3px; border-radius: var(--radius-md); }
+      .history-item.active { background: var(--primary-soft); }
+      .history-select { display: grid; gap: 2px; min-width: 0; padding: 9px 11px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: left; }
+      .history-select:hover { background: var(--surface-3); }
+      .history-item.active .history-select:hover { background: transparent; }
+      .history-select strong, .history-select span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .history-select strong { font-size: 13px; font-weight: 600; }
+      .history-select span { color: var(--muted); font-size: 11px; }
+      .more { width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 19px; }
+      .more:hover { background: var(--surface-3); color: var(--text); }
+      .main { position: relative; display: flex; flex-direction: column; overflow: hidden; background: var(--page); }
+      .topbar { z-index: 1; display: flex; align-items: center; gap: 10px; min-width: 0; margin: 2px 2px 0; padding: 9px 12px; border: 1px solid var(--outline); border-radius: var(--radius-xl); background: var(--surface); }
+      .icon-button { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+      .icon-button:hover { background: var(--surface-3); color: var(--text); }
+      .title-card { display: flex; align-items: center; min-width: 0; flex: 1; min-height: 42px; padding: 0 15px; border-radius: 999px; background: var(--surface-2); }
+      .title-card h1 { overflow: hidden; margin: 0; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+      .top-actions { display: flex; align-items: center; gap: 4px; }
+      .top-actions .material-button { min-height: 40px; padding: 0 17px; }
+      .thread { display: flex; flex: 1; flex-direction: column; gap: 16px; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 28px clamp(16px, 5vw, 72px); }
+      .welcome { display: grid; place-content: center; flex: 1; gap: 10px; padding: 24px; text-align: center; }
+      .spark { color: var(--primary); font-size: 30px; }
+      .welcome h2 { margin: 0; font-size: clamp(24px, 3vw, 34px); letter-spacing: -.035em; }
+      .welcome p { margin: 0; color: var(--muted); }
+      .message { max-width: min(760px, 100%); padding: 15px 18px; border-radius: var(--radius-lg); overflow-wrap: anywhere; }
+      .message.user { align-self: flex-end; background: var(--surface-3); }
+      .message.assistant { align-self: flex-start; background: var(--surface); }
+      .message-label { margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+      .message p { margin: 0; }
+      .composer-wrap { flex: none; width: min(100%, 920px); align-self: center; padding: 8px 22px 18px; }
+      .composer { display: grid; gap: 12px; padding: 15px; border: 1px solid var(--outline); border-radius: var(--radius-xl); background: var(--surface-2); }
+      .composer textarea { width: 100%; min-width: 0; min-height: 48px; max-height: 140px; resize: vertical; border: 0; outline: 0; background: transparent; }
+      .composer textarea::placeholder { color: var(--muted); }
+      .composer-bottom { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+      .composer-tools, .composer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+      .tool-button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--surface-3); color: var(--text); font-size: 13px; }
+      .tool-button:hover { background: #343843; }
+      .send { width: 42px; height: 42px; padding: 0; background: var(--primary); color: #1d2c49; }
+      .send:hover { background: #c7d5ff; }
+      .scrim { display: none; }
+      .context-panel { position: absolute; z-index: 3; inset: 0 0 0 auto; display: flex; flex-direction: column; gap: 14px; width: min(340px, 90%); padding: 20px; border: 1px solid var(--outline); border-radius: var(--radius-xl); background: var(--surface); box-shadow: 0 18px 50px #0008; transform: translateX(105%); transition: transform 220ms ease; }
+      .context-panel.open { transform: translateX(0); }
+      .context-head { display: flex; align-items: center; justify-content: space-between; }
+      .context-head h2 { margin: 0; font-size: 17px; }
+      .context-card { display: grid; gap: 4px; padding: 14px; border-radius: var(--radius-md); background: var(--surface-2); }
+      .context-card span { color: var(--muted); font-size: 13px; }
+      .toast { position: absolute; z-index: 5; right: 24px; bottom: 115px; padding: 10px 15px; border-radius: 999px; background: var(--surface-3); box-shadow: 0 5px 18px #0005; }
+      @media (max-width: 760px) {
+        .app { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; }
+        .main { border-radius: 0; }
+        .sidebar { position: fixed; z-index: 5; inset: 8px auto 8px 8px; width: min(290px, calc(100vw - 48px)); border: 1px solid var(--outline); box-shadow: 0 20px 50px #0008; transform: translateX(calc(-100% - 16px)); transition: transform 220ms ease; }
+        .app.history-hidden .sidebar { visibility: visible; padding: 14px 12px; }
+        .sidebar.open { transform: translateX(0); }
+        .scrim { position: fixed; z-index: 4; inset: 0; display: block; visibility: hidden; border: 0; background: #0008; opacity: 0; transition: opacity 180ms ease, visibility 180ms ease; }
+        .scrim.open { visibility: visible; opacity: 1; }
+        .topbar { margin: 8px 8px 0; }
+        .top-actions .material-button span { display: none; }
+        .top-actions .material-button { width: 42px; padding: 0; }
+        .thread { padding: 20px 14px; }
+        .composer-wrap { padding: 8px 10px 12px; }
+        .composer { padding: 12px; }
+      }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" id="historyPanel" aria-label="Historique des conversations">
+        <div class="side-heading"><h2>Conversations</h2><span class="count" id="count">4</span></div>
+        <button class="material-button new-chat" id="newChat" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          Nouvelle conversation
+        </button>
+        <div class="history-label">Récentes</div>
+        <nav class="history" id="historyList" aria-label="Conversations récentes"></nav>
+      </aside>
+      <button class="scrim" id="scrim" aria-label="Fermer l’historique"></button>
+      <main class="main">
+        <header class="topbar">
+          <button class="icon-button" id="historyToggle" type="button" aria-label="Afficher ou masquer les conversations" aria-expanded="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <div class="title-card"><h1 id="chatTitle">Analyser les performances du cluster</h1></div>
+          <div class="top-actions">
+            <button class="icon-button" id="rename" type="button" aria-label="Renommer la conversation" title="Renommer">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" /></svg>
+            </button>
+            <button class="material-button" id="contextToggle" type="button" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14"/><circle cx="9" cy="6" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/></svg><span>Contexte</span></button>
+          </div>
+        </header>
+        <section class="thread" id="thread" aria-live="polite"></section>
+        <footer class="composer-wrap">
+          <form class="composer" id="composer">
+            <textarea id="prompt" rows="1" aria-label="Votre message" placeholder="Envoyer un message à l’Assistant"></textarea>
+            <div class="composer-bottom">
+              <div class="composer-tools"><button class="tool-button" type="button" id="attach">＋ <span>Ajouter une ressource</span></button></div>
+              <div class="composer-actions"><button class="tool-button" type="button" id="model">Réglages · Automatique⌄</button><button class="material-button send" type="submit" aria-label="Envoyer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
+            </div>
+          </form>
+        </footer>
+        <aside class="context-panel" id="contextPanel" aria-label="Contexte de la conversation" aria-hidden="true">
+          <div class="context-head"><h2>Contexte</h2><button class="icon-button" id="closeContext" type="button" aria-label="Fermer le contexte">×</button></div>
+          <p>Les ressources utiles à cet échange, regroupées au même endroit.</p>
+          <div class="context-card"><strong>Cluster principal</strong><span>3 nœuds · 2 workers disponibles</span></div>
+          <div class="context-card"><strong>Flow · Encodage séries</strong><span>Version publiée · modifié hier</span></div>
+          <button class="material-button" id="addContext" type="button">＋ Ajouter une ressource</button>
+        </aside>
+        <div class="toast" id="toast" role="status" hidden></div>
+      </main>
+    </div>
+    <script>
+      const conversations = [
+        { title: 'Analyser les performances du cluster', source: 'Cluster principal', messages: [['Vous', 'Peux-tu résumer les performances des nœuds ?'], ['Assistant', 'Le cluster compte trois nœuds. Deux workers sont disponibles et aucun traitement actif ne bloque la file. Je peux détailler les capacités déclarées de chaque nœud.']] },
+        { title: 'Préparer un flow pour les séries', source: 'Flow · Encodage séries', messages: [['Vous', 'Quels blocs utiliser pour vérifier les sous-titres ?'], ['Assistant', 'Commence par scanner le média, puis ajoute le contrôle des pistes de sous-titres avant la validation de sortie.']] },
+        { title: 'Comprendre une exécution en échec', source: 'Exécution · 24 oct.', messages: [['Vous', 'Pourquoi cette exécution est-elle en échec ?'], ['Assistant', 'La dernière étape indique une erreur de lecture de la source. Vérifie l’accès bibliothèque déclaré sur le nœud attributaire.']] },
+        { title: 'Options du modèle', source: 'Assistant', messages: [['Vous', 'Comment choisir le modèle ?'], ['Assistant', 'Choisis un fournisseur activé dans les réglages IA, puis sélectionne un modèle disponible pour ce fournisseur.']] },
+      ];
+      let selected = 0;
+      let extraMessages = [];
+      const history = document.querySelector('#historyList');
+      const thread = document.querySelector('#thread');
+      const title = document.querySelector('#chatTitle');
+      const sidebar = document.querySelector('#historyPanel');
+      const scrim = document.querySelector('#scrim');
+      const panel = document.querySelector('#contextPanel');
+      const toast = document.querySelector('#toast');
+      function renderHistory() {
+        history.innerHTML = '';
+        conversations.forEach((item, index) => {
+          const row = document.createElement('div'); row.className = `history-item${selected === index ? ' active' : ''}`;
+          const choose = document.createElement('button'); choose.className = 'history-select'; choose.type = 'button'; choose.setAttribute('aria-current', selected === index ? 'page' : 'false');
+          const strong = document.createElement('strong'); strong.textContent = item.title;
+          const source = document.createElement('span'); source.textContent = item.source;
+          choose.append(strong, source); choose.addEventListener('click', () => selectConversation(index));
+          const more = document.createElement('button'); more.className = 'more'; more.type = 'button'; more.textContent = '⋯'; more.setAttribute('aria-label', `Actions pour ${item.title}`); more.addEventListener('click', () => showToast('Actions de conversation'));
+          row.append(choose, more); history.append(row);
+        });
+      }
+      function renderThread() {
+        thread.innerHTML = '';
+        if (selected === -1) {
+          const welcome = document.createElement('div'); welcome.className = 'welcome'; welcome.innerHTML = '<span class="spark" aria-hidden="true">✦</span><h2>Que souhaitez-vous faire ?</h2><p>Posez une question ou joignez une ressource Encoding.</p>'; thread.append(welcome); title.textContent = 'Nouvelle conversation'; return;
+        }
+        title.textContent = conversations[selected].title;
+        [...conversations[selected].messages, ...extraMessages].forEach(([speaker, content]) => {
+          const card = document.createElement('article'); card.className = `message ${speaker === 'Vous' ? 'user' : 'assistant'}`;
+          const label = document.createElement('div'); label.className = 'message-label'; label.textContent = speaker;
+          const text = document.createElement('p'); text.textContent = content; card.append(label, text); thread.append(card);
+        });
+      }
+      function selectConversation(index) { selected = index; extraMessages = []; renderHistory(); renderThread(); if (matchMedia('(max-width: 760px)').matches) { sidebar.classList.remove('open'); scrim.classList.remove('open'); document.querySelector('#historyToggle').setAttribute('aria-expanded', 'false'); } }
+      function showToast(message) { toast.textContent = message; toast.hidden = false; setTimeout(() => toast.hidden = true, 1800); }
+      document.querySelector('#newChat').addEventListener('click', () => { selected = -1; extraMessages = []; renderHistory(); renderThread(); if (matchMedia('(max-width: 760px)').matches) { sidebar.classList.remove('open'); scrim.classList.remove('open'); document.querySelector('#historyToggle').setAttribute('aria-expanded', 'false'); } });
+      document.querySelector('#historyToggle').addEventListener('click', event => { const button = event.currentTarget; if (matchMedia('(max-width: 760px)').matches) { const open = !sidebar.classList.contains('open'); sidebar.classList.toggle('open', open); scrim.classList.toggle('open', open); button.setAttribute('aria-expanded', String(open)); } else { const hidden = app.classList.toggle('history-hidden'); button.setAttribute('aria-expanded', String(!hidden)); } });
+      scrim.addEventListener('click', () => { sidebar.classList.remove('open'); scrim.classList.remove('open'); document.querySelector('#historyToggle').setAttribute('aria-expanded', 'false'); });
+      document.querySelector('#contextToggle').addEventListener('click', event => { const open = !panel.classList.contains('open'); panel.classList.toggle('open', open); panel.setAttribute('aria-hidden', String(!open)); event.currentTarget.setAttribute('aria-expanded', String(open)); });
+      document.querySelector('#closeContext').addEventListener('click', () => { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); document.querySelector('#contextToggle').setAttribute('aria-expanded', 'false'); });
+      document.querySelector('#rename').addEventListener('click', () => { if (selected < 0) return; const next = window.prompt('Nouveau titre', conversations[selected].title); if (next?.trim()) { conversations[selected].title = next.trim(); renderHistory(); renderThread(); } });
+      document.querySelector('#attach').addEventListener('click', () => showToast('Sélection de ressource · aperçu interactif'));
+      document.querySelector('#addContext').addEventListener('click', () => showToast('Ajouter une ressource au contexte'));
+      document.querySelector('#model').addEventListener('click', () => showToast('Réglages du modèle'));
+      document.querySelector('#composer').addEventListener('submit', event => { event.preventDefault(); const input = document.querySelector('#prompt'); const value = input.value.trim(); if (!value) return; if (selected < 0) { conversations.unshift({ title: value.slice(0, 38), source: 'Nouvelle conversation', messages: [] }); selected = 0; document.querySelector('#count').textContent = conversations.length; } extraMessages.push(['Vous', value], ['Assistant', 'Voici une réponse de démonstration. Dans la version réelle, l’assistant répondra à partir du contexte et des ressources sélectionnées.']); input.value = ''; renderHistory(); renderThread(); thread.scrollTop = thread.scrollHeight; });
+      const app = document.querySelector('.app');
+      renderHistory(); renderThread();
+    </script>
+  </body>
+</html>

@@ -46,6 +46,7 @@ import { IconComponent } from '../../../shared/ui/icon.component';
               <article class="conversation-item" [class.is-active]="activeId() === conversation.id">
                 <button
                   class="conversation-link"
+                  matButton="tonal"
                   type="button"
                   [class.is-active]="activeId() === conversation.id"
                   [disabled]="sending() || deletingId() === conversation.id"

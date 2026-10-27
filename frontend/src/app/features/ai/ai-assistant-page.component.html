@@ -2,9 +2,10 @@
   [compact]="compact()"
   [panelMode]="panelMode()"
   [historyOpen]="historyOpen()"
+  [historyCollapsed]="historyCollapsed()"
   [previewOpen]="previewOpen()"
-  (backdropClicked)="historyOpen.set(false); closePreview()"
-  (historyClosed)="historyOpen.set(false)"
+  (backdropClicked)="closeHistory(); closePreview()"
+  (historyClosed)="closeHistory()"
   (previewClosed)="closePreview()"
 >
   <app-ai-conversation-history
@@ -211,8 +212,9 @@
           class="history-toggle"
           mat-icon-button
           type="button"
-          aria-label="Afficher les conversations"
-          (click)="historyOpen.set(!historyOpen())"
+          aria-label="Afficher ou masquer les conversations"
+          [attr.aria-expanded]="compact() ? historyOpen() : !historyCollapsed()"
+          (click)="toggleHistory()"
         >
           <svg
             viewBox="0 0 24 24"
@@ -226,7 +228,7 @@
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div class="chat-toolbar__copy">
+        <mat-card appearance="outlined" class="chat-toolbar__copy">
           <h2>{{ detail()?.conversation?.title ?? 'Nouvelle conversation' }}</h2>
           @if (detail(); as current) {
             @if (coordinatorLabel(current.conversation); as origin) {
@@ -241,7 +243,7 @@
               >
             }
           }
-        </div>
+        </mat-card>
         <button matButton="tonal" type="button" class="context-toggle" (click)="openWorkspace()">
           <span>Contexte</span>
         </button>
