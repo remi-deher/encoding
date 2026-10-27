@@ -53,6 +53,7 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Assistant IA',
+      contentWidth: 'full',
       navigation: {
         group: 'Intelligence artificielle',
         label: 'Assistant',

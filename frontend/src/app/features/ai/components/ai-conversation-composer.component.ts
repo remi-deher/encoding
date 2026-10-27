@@ -148,15 +148,21 @@ export const AI_ASSISTANT_FILE_ACCEPT =
   styles: `
     :host {
       display: block;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 100%;
       min-width: 0;
       container-type: inline-size;
     }
     .composer {
+      box-sizing: border-box;
       display: grid;
       gap: var(--space-2);
+      width: 100%;
+      min-width: 0;
       padding: var(--space-3) var(--space-4);
       border: 1px solid var(--outline-variant);
-      border-radius: var(--radius-xl);
+      border-radius: var(--radius-2xl);
       background: var(--surface-container);
       box-shadow: var(--elevation-1);
       transition:
@@ -265,6 +271,17 @@ export const AI_ASSISTANT_FILE_ACCEPT =
       margin-left: 0;
       background: var(--accent-strong);
       color: var(--on-accent, #fff);
+    }
+    @container (max-width: 560px) {
+      .composer-tools {
+        flex-wrap: wrap;
+      }
+      .composer-attachments {
+        flex: 1 1 auto;
+      }
+      app-ai-model-selector {
+        margin-left: auto;
+      }
     }
     @container (max-width: 420px) {
       .composer-tools {
