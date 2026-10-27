@@ -34,6 +34,10 @@ Résolue par l'ADR [0003](adr/0003-publication-etape-de-flow.md) : le bloc `base
 ### 9. Compatibilité entre versions de nœuds
 Seule la version de protocole (`Current = 1`) est contrôlée. Pas de plage de schéma, pas de règle « serveurs avant workers ». Les migrations doivent rester additives en attendant.
 
+### 10. Planification de placement des flows de bout en bout (ADR 0024, en proposition)
+- Constaté : l'éligibilité d'un nœud est calculée par segment jusqu'au prochain `nodes-handoff`. Tout nœud capable du premier segment peut réclamer la tâche, provoquant des allers-retours de transferts de fichiers volumineux (A vers B vers A vers B).
+- Proposition : calcul des besoins de bout en bout dès l'inspection de la source et sélection du nœud optimal pour l'ensemble du flow (priorité au nœud d'accès direct, plan en 3 phases regroupées si transcodage distant indispensable, échec explicite immédiat si capacité manquante). Voir ADR [0024](adr/0024-planificateur-de-placement-des-flows.md).
+
 ## Hygiène du dépôt
 
 - `backend/migrations/0036_library_cluster_tombstones.sql` (racine) n'est pas chargé par le migrateur (seul `migrations/sqlite/` l'est) : reliquat à supprimer.
