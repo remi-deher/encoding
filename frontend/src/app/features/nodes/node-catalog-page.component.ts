@@ -315,6 +315,32 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
+  protected readonly localTaskCapacity = computed(() => {
+    const node = this.localNode();
+    const status = this.local.status();
+    const roles = node?.desiredRoles ?? node?.roles ?? status?.roles ?? null;
+    const workerEnabled = roles?.includes('worker') ?? null;
+    const accepted = this.localActivity()?.active ?? null;
+    const maximum = node?.maxConcurrentTasks ?? status?.maxConcurrentTasks ?? null;
+    const remaining =
+      workerEnabled === true && accepted !== null && maximum !== null
+        ? Math.max(0, maximum - accepted)
+        : null;
+    let note = '';
+    if (workerEnabled === false) note = 'Fonction Worker désactivée.';
+    else if (workerEnabled === null) note = 'État du Worker indisponible.';
+    else if (accepted === null) note = 'Comptage des tâches indisponible.';
+    else if (maximum === null) note = 'Capacité non déclarée.';
+    else if (node && nodeLifecycle(node) === 'draining')
+      note = 'Admission suspendue : les places libres ne sont pas attribuées.';
+
+    return {
+      accepted,
+      remaining,
+      maximum: workerEnabled === true ? maximum : null,
+      note,
+    };
+  });
   protected readonly localSheet = computed(() =>
     localNodeSheet({
       status: this.local.status(),

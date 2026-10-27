@@ -28,6 +28,13 @@ export interface NodeOverviewRoleSwitch {
   readonly disabled?: boolean;
 }
 
+export interface NodeOverviewTaskCapacity {
+  readonly accepted: number | null;
+  readonly remaining: number | null;
+  readonly maximum: number | null;
+  readonly note: string;
+}
+
 @Component({
   selector: 'app-node-overview-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -183,6 +190,34 @@ export interface NodeOverviewRoleSwitch {
                 </span>
               }
             </div>
+          }
+          @if (layout() === 'local') {
+            @if (taskCapacity(); as capacity) {
+              <section
+                class="node-overview-task-capacity"
+                aria-label="Tâches acceptées et places restantes"
+              >
+                <span class="node-overview-control-label">CAPACITÉ DE TRAITEMENT</span>
+                <dl class="node-overview-task-capacity-values">
+                  <div>
+                    <dt>Tâches acceptées</dt>
+                    <dd>{{ capacity.accepted ?? '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Places restantes</dt>
+                    <dd>{{ capacity.remaining ?? '—' }}</dd>
+                  </div>
+                </dl>
+                @if (capacity.maximum !== null) {
+                  <span class="node-overview-task-capacity-total">
+                    Sur {{ capacity.maximum }} place(s) simultanée(s)
+                  </span>
+                }
+                @if (capacity.note) {
+                  <span class="node-overview-task-capacity-note">{{ capacity.note }}</span>
+                }
+              </section>
+            }
           }
           @if (meta()) {
             <div class="node-overview-meta-control">
@@ -358,6 +393,7 @@ export class NodeOverviewCardComponent {
   readonly roleControlNote = input('');
   readonly admissionEnabled = input<boolean | null>(null);
   readonly admissionDisabled = input(false);
+  readonly taskCapacity = input<NodeOverviewTaskCapacity | null>(null);
   readonly meta = input('');
   readonly notices = input<readonly ResourceSheetNotice[]>([]);
   readonly sections = input<readonly ResourceSheetSection[]>([]);
