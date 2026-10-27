@@ -354,13 +354,15 @@ export class FlowEditorPageComponent {
     void this.serverValidation
       .catalog()
       .then(async (plugins) => {
-        const installed = plugins.filter((plugin) => plugin.enabled !== false).flatMap((plugin) =>
-          plugin.components.map((component) => ({
-            ...component,
-            pluginId: plugin.id,
-            pluginName: plugin.name,
-          })),
-        );
+        const installed = plugins
+          .filter((plugin) => plugin.enabled !== false)
+          .flatMap((plugin) =>
+            plugin.components.map((component) => ({
+              ...component,
+              pluginId: plugin.id,
+              pluginName: plugin.name,
+            })),
+          );
         this.installedComponents.set(installed);
         if (templateId && !this.flowId) {
           await this.loadTemplate(templateId, plugins);

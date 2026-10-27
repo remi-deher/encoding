@@ -111,9 +111,8 @@ export class FlowCatalogPageComponent {
   });
 
   protected readonly actionDefinition = signal<RecordFormData | null>(null);
-  private readonly globalFlowImportPicker = viewChild<ElementRef<HTMLInputElement>>(
-    'globalFlowImportPicker',
-  );
+  private readonly globalFlowImportPicker =
+    viewChild<ElementRef<HTMLInputElement>>('globalFlowImportPicker');
   protected readonly actionForm = computed(
     () => this.actionDefinition() ?? this.flowCreationForm(),
   );
