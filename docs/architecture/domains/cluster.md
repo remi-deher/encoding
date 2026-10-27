@@ -57,6 +57,8 @@ Un cluster est un ensemble de nœuds sans coordinateur permanent. Une installati
 ### Interface (page Nœuds)
 La page **Nœuds** comporte trois sous-vues : **Ce nœud**, **Cluster** et **Groupes de nœuds**. Les vues Ce nœud et Cluster partagent `NodeOverviewCardComponent` : une carte par nœud, quatre blocs imbriqués (état et activité, matériel déclaré, capacités de traitement, identité et appartenance), puis les bibliothèques avec leur chemin et leur mode d'accès. Les rôles worker/serveur et l'admission de nouveaux traitements se règlent avec des commutateurs sur les cartes et dans la fiche du nœud ; la confirmation d'un changement de rôle rappelle les effets et les contrôles métier. Les demandes de rattachement restent en tableau et les actions groupées appellent l'API unitaire. L'inventaire facultatif annonce aussi l'environnement d'exécution (`docker`, `podman`, `container`, `native`), sans invalider les agents antérieurs qui ne le transmettent pas. L'assistant de rattachement utilise `GuidedSetup` (stepper CDK). Détails visuels dans [ui.md](ui.md).
 
+Dans **Ce nœud**, l’en-tête `node-overview-head` met en avant l’identité, l’état et le dernier signal ; les commutateurs d’admission et de fonctions restent interactifs. La vue **Cluster** garde ses cartes de membres. Le bandeau d’isolement et de réconciliation conserve son icône et son texte sans cadre ni fond de panneau.
+
 ## Invariants
 1. Aucun serveur permanent ; chaque serveur actif sert la gestion depuis sa copie locale, la convergence est éventuelle.
 2. Un nœud appartient à un seul cluster ; l'arrivée est toujours approuvée par le cluster d'accueil ; secrets jamais envoyés à un autre cluster que celui choisi par un admin.

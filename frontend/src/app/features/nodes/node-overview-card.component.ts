@@ -51,7 +51,11 @@ export interface NodeOverviewRoleSwitch {
           <span>{{ notice.description }}</span>
         </div>
       }
-      <header class="node-overview-head">
+      <header
+        class="node-overview-head"
+        [class.node-overview-head_local]="layout() === 'local'"
+        [class.has-select]="selectable()"
+      >
         @if (selectable()) {
           <mat-checkbox
             class="node-overview-select"
@@ -68,6 +72,9 @@ export interface NodeOverviewRoleSwitch {
           </svg>
         </span>
         <div class="node-overview-identity">
+          @if (layout() === 'local') {
+            <span class="node-overview-eyebrow">CE NŒUD</span>
+          }
           <div class="node-overview-title-line">
             @if (openable()) {
               <button class="node-overview-title" type="button" (click)="open.emit()">
@@ -76,7 +83,7 @@ export interface NodeOverviewRoleSwitch {
             } @else {
               <h2 class="node-overview-title-static">{{ title() }}</h2>
             }
-            @if (admissionEnabled() !== null) {
+            @if (layout() === 'standard' && admissionEnabled() !== null) {
               <mat-slide-toggle
                 class="node-overview-admission-toggle"
                 [checked]="admissionEnabled() ?? false"
@@ -103,22 +110,45 @@ export interface NodeOverviewRoleSwitch {
             }
           </div>
           @if (roleSwitches().length) {
-            <div class="node-overview-role-switches" role="group" aria-label="Fonctions du nœud">
+            <div
+              class="node-overview-role-switches"
+              [class.node-overview-role-switches_local]="layout() === 'local'"
+              role="group"
+              aria-label="Fonctions du nœud"
+            >
+              @if (layout() === 'local') {
+                <span class="node-overview-role-group-title">FONCTIONS</span>
+              }
               @for (control of roleSwitches(); track control.role) {
-                <mat-slide-toggle
-                  [checked]="control.checked"
-                  [disabled]="control.disabled ?? false"
-                  [aria-label]="
-                    (control.checked ? 'Désactiver' : 'Activer') +
-                    ' la fonction ' + control.label + ' de ' + title()
-                  "
-                  (change)="roleToggle.emit({ role: control.role, enabled: $event.checked })"
-                >
-                  {{ control.label }}
-                </mat-slide-toggle>
-                @if (control.pending) {
-                  <span class="node-overview-role-pending">En attente</span>
-                }
+                <div class="node-overview-role-control">
+                  <mat-slide-toggle
+                    [checked]="control.checked"
+                    [disabled]="control.disabled ?? false"
+                    [aria-label]="
+                      (control.checked ? 'Désactiver' : 'Activer') +
+                      ' la fonction ' + control.label + ' de ' + title()
+                    "
+                    (change)="roleToggle.emit({ role: control.role, enabled: $event.checked })"
+                  >
+                    {{ control.label }}
+                  </mat-slide-toggle>
+                  @if (layout() === 'local') {
+                    <span
+                      class="node-overview-role-state"
+                      [class.is-active]="control.checked && !control.pending"
+                    >
+                      {{
+                        control.pending
+                          ? 'En attente'
+                          : control.checked
+                            ? 'Activée'
+                            : 'Désactivée'
+                      }}
+                    </span>
+                  } @else if (control.pending) {
+                    <span class="node-overview-role-pending">En attente</span>
+                  }
+                </div>
               }
             </div>
           }
@@ -126,9 +156,43 @@ export interface NodeOverviewRoleSwitch {
             <p class="node-overview-role-note">{{ roleControlNote() }}</p>
           }
         </div>
-        @if (meta()) {
-          <span class="node-overview-meta">{{ meta() }}</span>
-        }
+        <div class="node-overview-head-controls">
+          @if (layout() === 'local' && admissionEnabled() !== null) {
+            <div
+              class="node-overview-admission-control"
+              [class.is-disabled]="admissionDisabled()"
+            >
+              @if (layout() === 'local') {
+                <span class="node-overview-control-label">ADMISSION</span>
+              }
+              <mat-slide-toggle
+                class="node-overview-admission-toggle"
+                [checked]="admissionEnabled() ?? false"
+                [disabled]="admissionDisabled()"
+                [aria-label]="
+                  (admissionEnabled() ? 'Suspendre' : 'Réactiver') +
+                  ' les nouvelles tâches sur ' + title()
+                "
+                (change)="admissionChange.emit($event.checked)"
+              >
+                Nouvelles tâches
+              </mat-slide-toggle>
+              @if (layout() === 'local') {
+                <span class="node-overview-control-state">
+                  {{ admissionEnabled() ? 'Acceptées' : 'Suspendues' }}
+                </span>
+              }
+            </div>
+          }
+          @if (meta()) {
+            <div class="node-overview-meta-control">
+              @if (layout() === 'local') {
+                <span class="node-overview-control-label">DERNIER SIGNAL</span>
+              }
+              <span class="node-overview-meta">{{ meta() }}</span>
+            </div>
+          }
+        </div>
         @if (actions().length) {
           <button
             mat-icon-button
@@ -287,6 +351,7 @@ export class NodeOverviewCardComponent {
   readonly subtitle = input('');
   readonly statusLabel = input.required<string>();
   readonly statusTone = input<StatusTone>('neutral');
+  readonly layout = input<'standard' | 'local'>('standard');
   readonly nodeId = input('node-overview');
   readonly roles = input<readonly string[]>([]);
   readonly roleSwitches = input<readonly NodeOverviewRoleSwitch[]>([]);
