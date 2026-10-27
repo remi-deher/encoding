@@ -230,6 +230,19 @@ public sealed class ClusterReconciliationServiceTests
         public void Advance(TimeSpan elapsed) => timestamp += elapsed.Ticks;
     }
 
+    [Fact]
+    public async Task AuthenticatedSelfAliasIsNeverConsideredARemoteCatchUpPeer()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var calls = 0;
+        using var client = new HttpClient(new Handler((_, _) => { calls++; return Task.FromResult(fixture.Response(self: true)); }));
+        using var service = fixture.Service(client);
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://self-alias/"], default);
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://self-alias/"], default);
+        Assert.Equal(1, calls);
+        Assert.Empty(fixture.Health.GetStatus().Peers);
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -237,6 +250,7 @@ public sealed class ClusterReconciliationServiceTests
         private readonly EphemeralDataProtectionProvider protection = new();
         private IConfiguration configuration = null!;
         private ClusterPeerIdentityStore identity = null!;
+        private ClusterPeerIdentityStore remote = null!;
         private ClusterDataKeyStore keys = null!;
         private ClusterPeerAdmissionRepository admissions = null!;
         public TestDatabase Database { get; private set; } = null!;
@@ -256,9 +270,12 @@ public sealed class ClusterReconciliationServiceTests
                 ["PluginSettings:KeyDirectory"] = fixture.root
             }).Build();
             fixture.identity = new(fixture.configuration, fixture.protection);
+            fixture.remote = new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> {
+                ["PluginSettings:KeyDirectory"] = Path.Combine(fixture.root, "remote") }).Build(), fixture.protection);
             fixture.keys = new(fixture.configuration, fixture.protection);
             fixture.admissions = new(fixture.Database.Db, clusters, fixture.identity, fixture.keys);
             await fixture.admissions.EnsureRootAdmissionAsync(fixture.ClusterId, CancellationToken.None);
+            await fixture.admissions.CreateDirectApprovalGrantAsync(Guid.NewGuid(), fixture.remote.PeerId, fixture.remote.PublicKey, CancellationToken.None);
             fixture.Journal = new(fixture.Database.Db);
             return fixture;
         }
@@ -269,21 +286,23 @@ public sealed class ClusterReconciliationServiceTests
             identity, admissions, keys, Health, configuration, new ClientFactory(client),
             NullLogger<ClusterReconciliationService>.Instance, clock);
 
-        public HttpResponseMessage Response(IReadOnlyDictionary<Guid, long>? vector = null, IReadOnlyList<ClusterChangeEvent>? changes = null)
+        public HttpResponseMessage Response(IReadOnlyDictionary<Guid, long>? vector = null, IReadOnlyList<ClusterChangeEvent>? changes = null, bool self = false)
         {
+            var signer = self ? identity : remote;
             var body = JsonSerializer.SerializeToUtf8Bytes(new ClusterReconciliationExchangeResponse(
                 1, ClusterId, vector ?? new Dictionary<Guid, long>(), changes ?? []), Json);
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
             var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) };
-            response.Headers.Add(ClusterReconciliationSignature.PeerHeader, identity.PeerId.ToString("D"));
+            response.Headers.Add(ClusterReconciliationSignature.PeerHeader, signer.PeerId.ToString("D"));
             response.Headers.Add(ClusterReconciliationSignature.TimeHeader, timestamp);
-            response.Headers.Add(ClusterReconciliationSignature.SignatureHeader, ClusterReconciliationSignature.Create(identity, timestamp, body));
+            response.Headers.Add(ClusterReconciliationSignature.SignatureHeader, ClusterReconciliationSignature.Create(signer, timestamp, body));
             return response;
         }
 
         public async ValueTask DisposeAsync()
         {
             identity.Dispose();
+            remote.Dispose();
             keys.Dispose();
             await Database.DisposeAsync();
             if (Directory.Exists(root)) Directory.Delete(root, true);

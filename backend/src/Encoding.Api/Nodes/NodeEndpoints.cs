@@ -55,7 +55,7 @@ public static class NodeEndpoints
             {
                 if (request.ClusterPeerId is { } peerId && request.ClusterPeerPublicKey is { } publicKey)
                     await peerAdmissions.CreateDirectApprovalGrantAsync(node.Id, peerId, publicKey, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(request.ClusterPeerReconciliationUrl))
+                if (request.ClusterPeerId is not null && request.ClusterPeerPublicKey is not null && !string.IsNullOrWhiteSpace(request.ClusterPeerReconciliationUrl))
                     await reconciliationRepository.AddPeerEndpointAsync(request.ClusterPeerReconciliationUrl, "enroll", cancellationToken);
                 return Results.Ok(node with { ClusterBootstrap = await peerAdmissions.GetBootstrapForNodeAsync(node.Id, cancellationToken) });
             }

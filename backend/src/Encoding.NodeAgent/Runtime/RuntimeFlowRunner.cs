@@ -13,6 +13,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         using var commandCapture=RuntimeCommandCapture.Begin();
         using var job=CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         using var leaseGate=new SemaphoreSlim(1,1);
+        var publicationConfirmed = false;
+        string? activeBlock = null;
         var revision=lease.Revision; var cancelled=false; var lost=false;
         var directory=Path.Combine(options.DataDirectory,"executions",lease.ExecutionId.ToString("D"),lease.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)); Directory.CreateDirectory(directory);
         async Task<RuntimeLeaseStatus> RenewAsync(CancellationToken ct)
@@ -21,7 +23,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             try
             {
                 using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
-                var status=(await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch),timeout.Token))!;
+                var status=(await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch, commandCapture.ForHeartbeat()),timeout.Token))!;
                 Volatile.Write(ref revision,status.Revision);
                 if(status.CancelRequested) { cancelled=true; job.Cancel(); }
                 return status;
@@ -47,7 +49,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             var extension=Path.GetExtension(lease.MediaPath); if(string.IsNullOrWhiteSpace(extension)) extension=".mkv";
             var original=directRead?SafeMediaPaths.Resolve(lease.SourceRoot!,lease.MediaPath):Path.Combine(directory,"source"+extension);
             if (lease.VerifyPublicationAccess && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null)
-                await LibraryAccessVerifier.VerifyPublicationAsync(lease.SourceRoot, job.Token);
+                await LibraryAccessVerifier.VerifyPublicationAsync(lease.SourceRoot, job.Token, lease.VerifyReplacementAccess ? lease.MediaPath : null);
             var observed=directRead?MediaFileStamp.Read(original):null;
             RuntimeContext context=lease.Checkpoint?.Context??new(sourceSha??"",extension,new Dictionary<string,JsonElement>(),null,null,[],
                 DirectSource:observed is null?null:new(observed.Bytes,observed.LastWriteUtcTicks));
@@ -57,6 +59,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 else context=context with { CurrentSha256=sourceSha!,DirectSource=null };
             }
             var variables=new Dictionary<string,JsonElement>(context.Variables);
+            publicationConfirmed = variables.ContainsKey("runtime.published");
             var next=lease.Checkpoint?.NextNodeId;
             if(lease.Checkpoint is null) next=lease.EntryNodeId;
             var terminal=lease.Checkpoint?.TerminalResult; var lastOutput=lease.Checkpoint?.OutputId;
@@ -144,6 +147,18 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token);
                 decodedSha=context.CurrentSha256;
             }
+            async Task EnsurePublicationIntegrityAsync()
+            {
+                if (!MediaIntegrityPolicy.IsExplicit(lease.Flow)) { await EnsureDecodedAsync(); return; }
+                await EnsureFilesAsync();
+                if (await SafeMediaPaths.DigestAsync(current, job.Token) != context.CurrentSha256)
+                    throw new IOException("Le résultat a changé après son contrôle ; publication refusée.");
+                if (!variables.TryGetValue(MediaIntegrityPolicy.ReceiptVariable, out var value)
+                    || value.Deserialize<MediaIntegrityReport>(new JsonSerializerOptions(JsonSerializerDefaults.Web)) is not { Output: "valid" } receipt
+                    || receipt.Sha256 != context.CurrentSha256)
+                    throw new IOException("Contrôle média explicite manquant ou invalide pour le résultat courant.");
+                await scanner.ValidateAsync(current, lease.Flow.MediaType, context.BeforeMetadata, job.Token);
+            }
             async Task ApplyOutcomeAsync(MediaActionOutcome outcome,string node)
             {
                 var artifactIndex = 0;
@@ -169,6 +184,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             while(next is not null)
             {
                 job.Token.ThrowIfCancellationRequested(); var node=lease.Flow.Nodes.Single(n=>n.Id==next);
+                activeBlock = node.Id;
                 var started=(await client.PostAsync<StartedRuntimeStep>($"executions/{lease.ExecutionId:D}/steps/start",new StartRuntimeStep(lease.Epoch,node.Id),job.Token))!;
                 if(started.Completed is { } completed)
                 {
@@ -275,6 +291,28 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(context.CurrentMetadata is null) await EnsureScanAsync();
                         output=MediaConditionEvaluator.Evaluate(node.Component.ComponentId,c,context.CurrentMetadata);
                     }
+                    else if (node.Component.PluginId == "probe" && id == MediaIntegrityPolicy.Component)
+                    {
+                        await EnsureScanAsync();
+                        await EnsureFilesAsync();
+                        var mode = MediaActions.Text(c, "mode", "quick");
+                        var acceleration = MediaActions.Text(c, "acceleration", "auto");
+                        var cacheKey = "integrity." + context.CurrentSha256 + "." + mode + "." + acceleration;
+                        MediaIntegrityReport report;
+                        if (variables.TryGetValue(cacheKey, out var saved)
+                            && saved.Deserialize<MediaIntegrityReport>(new JsonSerializerOptions(JsonSerializerDefaults.Web)) is { Output: "valid" } cached
+                            && await SafeMediaPaths.DigestAsync(current, job.Token) == context.CurrentSha256) report = cached;
+                        else report = await new MediaIntegrityChecker(tools, scanner).CheckAsync(current, context.CurrentSha256,
+                            lease.Flow.MediaType, mode, acceleration, await capabilities.DiscoverAsync(job.Token), job.Token);
+                        output = report.Output;
+                        var serialized = JsonSerializer.SerializeToElement(report, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                        variables[MediaIntegrityPolicy.ReceiptVariable] = serialized;
+                        if (report.Output == "valid")
+                        {
+                            variables[cacheKey] = serialized;
+                            if (mode == "deep") decodedSha = context.CurrentSha256;
+                        }
+                    }
                     else if(node.Component.PluginId is "base" or "probe" && id!="probe-validate-output"
                         && (id.StartsWith("base-probe-",StringComparison.Ordinal)||id.StartsWith("probe-",StringComparison.Ordinal) && !id.StartsWith("probe-inspect-",StringComparison.Ordinal) && id!="probe-export-report"))
                     {
@@ -372,7 +410,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(context.CurrentSha256==sourceSha) output="unchanged";
                         else
                         {
-                            await EnsureDecodedAsync();
+                            await EnsurePublicationIntegrityAsync();
                             var playback=await guards.CheckForStepAsync(lease.ExecutionId,lease.Epoch,lease.MediaPath,lease.LibraryId,lease.Guards,true,job.Token);
                             if(!playback.Allowed) throw new PublishResultException(playback.Detail??"Lecture en cours ; le résultat n'a pas été publié.");
                             // Rejouable après une reprise (ADR 0004) : une publication déjà demandée ou faite pour ce même résultat est adoptée, jamais refaite.
@@ -383,6 +421,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                                     "Résultat validé ; publication demandée par le flow.",context.CurrentSha256,context.Extension,context.BeforeMetadata,context.CurrentMetadata,null,commandCapture.Pending(),true),job.Token);
                             RuntimePublicationState published;
                             while(!(published=await client.PublicationStateAsync(lease.ExecutionId,lease.Epoch,job.Token)).Published) await Task.Delay(TimeSpan.FromSeconds(2),job.Token);
+                            publicationConfirmed = true;
                             variables["runtime.published"]=JsonSerializer.SerializeToElement(new { path=published.Path,sha256=context.CurrentSha256 });
                             await RenewAsync(job.Token);
                             logger.LogInformation("Publication {Node} confirmée : {Path}.",node.Id,published.Path);
@@ -735,7 +774,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=(publishedSha??sourceSha??"");
             if(changed && publishedSha is not null) throw new IOException("Le média a été modifié après sa publication ; ce résultat ne peut pas être publié une seconde fois.");
             if(changed && variables.ContainsKey("runtime.inPlaceEdited")) throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
-            if(changed) await EnsureDecodedAsync();
+            if(changed) await EnsurePublicationIntegrityAsync();
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),failed?"failed":terminal=="deferred"?"deferred":"succeeded",
                 failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null,
                 commandCapture.Pending()),job.Token);
@@ -761,7 +800,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             // ne pourra rien modifier.
             logger.LogWarning(exception,"Complétion de l’exécution {ExecutionId} refusée par le cluster ; tentative de clôture en échec.",lease.ExecutionId);
             lost=true;
-            await FailureAsync("failed","Le cluster a refusé une étape ou une complétion de l’exécution.");
+            await FailureAsync("failed","cluster_refused : Le cluster a refusé une étape ou une complétion de l’exécution.");
         }
         catch(HttpRequestException exception) when(exception.StatusCode is null || (int)exception.StatusCode>=500)
         {
@@ -780,7 +819,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             if(refused)
             {
                 logger.LogWarning("Exécution {ExecutionId} : le serveur a refusé une étape alors que le bail est valide ; échec.",lease.ExecutionId);
-                await FailureAsync("failed","Le serveur a refusé le résultat d’une étape ; l’exécution est en échec.");
+                await FailureAsync("failed","cluster_refused : Le serveur a refusé le résultat d’une étape ; l’exécution est en échec.");
             }
             else
             {
@@ -791,7 +830,19 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         catch(Exception exception)
         {
             logger.LogWarning("Exécution {ExecutionId} interrompue : {Type}",lease.ExecutionId,exception.GetType().Name);
-            if(!lost) await FailureAsync("failed",exception is MediaToolException or FlowArtifactReferenceException or LibraryAccessException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
+            if (!lost)
+            {
+                var code = exception switch {
+                    LibraryAccessException or UnauthorizedAccessException => "permission_denied",
+                    MediaToolException => "media_tool_failed",
+                    OperationCanceledException or TimeoutException => "operation_timeout",
+                    _ => lease.Flow.Nodes.FirstOrDefault(node => node.Id == activeBlock)?.Component.PluginId is "plex" or "sonarr" or "radarr" or "jellyfin" ? "integration_infrastructure_failed" : "execution_infrastructure_failed"
+                };
+                var detail = exception is MediaToolException or FlowArtifactReferenceException or LibraryAccessException
+                    ? exception.Message : "Vérifiez les outils, accès et intégrations de cette étape.";
+                await FailureAsync("failed", $"{code} : bloc {activeBlock ?? "préparation"}. "
+                    + (publicationConfirmed ? "Publication média confirmée ; échec d’une étape ultérieure. " : "Aucune nouvelle confirmation de publication obtenue. ") + detail);
+            }
         }
         finally { job.Cancel(); await renewal; }
 

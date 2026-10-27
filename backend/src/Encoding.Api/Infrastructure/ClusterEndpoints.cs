@@ -50,6 +50,12 @@ public static class ClusterEndpoints
                 : Results.Conflict(new { title = "Ce nœud est autonome : créez d’abord un cluster." });
         }).WithTags("Cluster").WithName("RenameCluster");
 
+        app.MapGet(route + "/join-collisions", async (ClusterJoinCollisionRepository collisions, CancellationToken ct) =>
+            Results.Ok(await collisions.ListAsync(ct))).RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        app.MapPost(route + "/join-collisions/{id:guid}/resolve", async (Guid id, ResolveJoinUserCollision request, ClusterJoinCollisionRepository collisions, CancellationToken ct) =>
+            await collisions.ResolveAsync(id, request, ct) ? Results.NoContent() : (IResult)Results.Conflict(new { title = "Le nom est réservé, invalide, ou le compte a changé. Actualisez la proposition." }))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+
         // L'agent local peut aligner l'identité de sa base SQLite après l'approbation du cluster d'accueil.
         app.MapPost(route + "/join", async (
             ClusterJoinRequest request,
@@ -58,6 +64,7 @@ public static class ClusterEndpoints
             ClusterIdentityRepository repository,
             ClusterPeerAdmissionRepository admissions,
             ClusterReconciliationRepository reconciliationRepository,
+            ClusterJoinCollisionRepository collisions,
             CancellationToken cancellationToken) =>
         {
             if (!LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], http.Request.Headers[LocalEnrollment.HeaderName].ToString()))
@@ -67,7 +74,13 @@ public static class ClusterEndpoints
             if (request.NodeId == Guid.Empty || request.Bootstrap is null || request.Bootstrap.ClusterId != request.ClusterId
                 || !string.Equals(request.Bootstrap.ClusterName, request.ClusterName, StringComparison.Ordinal))
                 return Results.BadRequest(new { title = "La preuve d’admission du cluster est absente ou incohérente." });
-            try { await admissions.ImportBootstrapAsync(request.Bootstrap, request.NodeId, cancellationToken); }
+            try
+            {
+                admissions.ValidateJoinBootstrap(request.Bootstrap, request.NodeId);
+                if (!await collisions.PrepareAsync(request.Bootstrap, cancellationToken))
+                    return Results.Conflict(new { code = "join_username_resolution_required", title = "Résolvez les collisions de comptes dans Paramètres > Utilisateurs. Un cluster ancien doit être mis à jour pour fournir la liste signée des comptes." });
+                await admissions.ImportBootstrapAsync(request.Bootstrap, request.NodeId, cancellationToken);
+            }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FormatException or System.Security.Cryptography.CryptographicException or KeyNotFoundException)
             {
                 return Results.BadRequest(new { title = "La signature ou la clé de données du cluster est invalide." });

@@ -19,4 +19,8 @@ public sealed record ClusterJoinBootstrap(
     Guid ClusterId,
     string ClusterName,
     Guid PeerId,
-    IReadOnlyList<ClusterPeerAdmissionGrant> Grants);
+    IReadOnlyList<ClusterPeerAdmissionGrant> Grants, ClusterUserNameSnapshot? UserNames = null);
+
+public sealed record ClusterUserName(Guid Id, string Username);
+public sealed record ClusterUserNameSnapshot(Guid IssuerPeerId, string Timestamp,
+    IReadOnlyList<ClusterUserName> Users, string Signature);

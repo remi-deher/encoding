@@ -80,6 +80,14 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         pending.Parameters.AddWithValue("id",request.Node.Id); if((long)(await pending.ExecuteScalarAsync(cancellationToken))! >= maxPending) return PairingRequestResult.TooMany;
         var pairingKeyHash = HashSecret(request.PairingKey);
         var nodeTokenHash = HashSecret(request.Node.NodeToken);
+        await using (var existingNode = dataSource.CreateCommand("SELECT node_token_hash FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL"))
+        {
+            existingNode.Parameters.AddWithValue("id",request.Node.Id);
+            var existing = await existingNode.ExecuteScalarAsync(cancellationToken);
+            if (existing is DBNull || existing is byte[] known && !CryptographicOperations.FixedTimeEquals(known,nodeTokenHash))
+                return PairingRequestResult.Conflict;
+        }
+
         const string sql = """
             INSERT INTO node_enrollment_requests
                 (node_id, pairing_key_hash, node_token_hash, peer_id, peer_public_key, name, roles, max_concurrent_tasks, capabilities, inventory, display_name, expires_at)
@@ -103,7 +111,8 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
             RETURNING node_id
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = Sql.Command(sql, connection);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var command = Sql.Command(sql, connection, transaction);
         AddNodeParameters(command, request.Node.Id, new NodeHeartbeatRequest(
             request.Node.Name,
             request.Node.Roles,
@@ -115,7 +124,19 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         command.Parameters.AddWithValue("node_token_hash", SqlKind.Bytes, nodeTokenHash);
         command.Parameters.AddWithValue("peer_id", (object?)request.Node.ClusterPeerId ?? DBNull.Value);
         command.Parameters.AddWithValue("peer_public_key", (object?)request.Node.ClusterPeerPublicKey ?? DBNull.Value);
-        return await command.ExecuteScalarAsync(cancellationToken) is not null ? PairingRequestResult.Created : PairingRequestResult.Conflict;
+        if (await command.ExecuteScalarAsync(cancellationToken) is null) return PairingRequestResult.Conflict;
+        await using (var clearUrl = Sql.Command("DELETE FROM node_peer_reconciliation_urls WHERE node_id=@id", connection, transaction))
+        {
+            clearUrl.Parameters.AddWithValue("id", request.Node.Id); await clearUrl.ExecuteNonQueryAsync(cancellationToken);
+        }
+        if (request.Node.ClusterPeerId is { } peer && ClusterReconciliationRepository.TryNormalizePeerUrl(request.Node.ClusterPeerReconciliationUrl) is { } url)
+        {
+            await using var saveUrl = Sql.Command("INSERT INTO node_peer_reconciliation_urls(node_id,peer_id,url) VALUES(@id,@peer,@url)", connection, transaction);
+            saveUrl.Parameters.AddWithValue("id", request.Node.Id); saveUrl.Parameters.AddWithValue("peer", peer); saveUrl.Parameters.AddWithValue("url", url);
+            await saveUrl.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return PairingRequestResult.Created;
     }
 
     public async Task<IReadOnlyList<PendingNodeEnrollmentResponse>> ListPendingPairingRequestsAsync(CancellationToken cancellationToken)
@@ -227,6 +248,13 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
 
         if (peerId.HasValue && peerPublicKey is not null && peerAdmissions is not null)
             await peerAdmissions.CreateApprovalGrantAsync(connection, transaction, nodeId, peerId.Value, peerPublicKey, cancellationToken);
+
+        if (peerId.HasValue && peerPublicKey is not null && peerAdmissions is not null)
+        {
+            await using var approveUrl = Sql.Command("UPDATE node_peer_reconciliation_urls SET approved=1 WHERE node_id=@id AND peer_id=@peer", connection, transaction);
+            approveUrl.Parameters.AddWithValue("id",nodeId); approveUrl.Parameters.AddWithValue("peer",peerId.Value);
+            await approveUrl.ExecuteNonQueryAsync(cancellationToken);
+        }
 
         await using (var deleteCommand = Sql.Command(
             "DELETE FROM node_enrollment_requests WHERE node_id = @id", connection, transaction))

@@ -356,8 +356,20 @@ public sealed class ClusterPeerAdmissionRepository(
         var grants = await ListGrantsAsync(cluster.Id, ct);
         if (grants.FirstOrDefault(grant => grant.NodeId == nodeId && grant.RevokedAt is null) is not { } admission
             || string.IsNullOrWhiteSpace(admission.WrappedDataKey)) return null;
-        return new ClusterJoinBootstrap(cluster.Id, cluster.Name, admission.PeerId, grants);
+        var users = new List<ClusterUserName>();
+        await using (var command = dataSource.CreateCommand("SELECT id,username FROM users ORDER BY id"))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+            while (await reader.ReadAsync(ct)) users.Add(new(reader.GetGuid(0), reader.GetString(1)));
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var signature = ClusterReconciliationSignature.Create(localIdentity, timestamp, UserNameSigningBytes(cluster.Id, admission.PeerId, users));
+        return new ClusterJoinBootstrap(cluster.Id, cluster.Name, admission.PeerId, grants,
+            new(localIdentity.PeerId, timestamp, users, signature));
     }
+
+    private static byte[] UserNameSigningBytes(Guid cluster, Guid recipient, IReadOnlyList<ClusterUserName> users) =>
+        JsonSerializer.SerializeToUtf8Bytes(new { cluster, recipient, users }, JsonOptions);
+
+    public void ValidateJoinBootstrap(ClusterJoinBootstrap bootstrap, Guid nodeId) => ValidateBootstrap(bootstrap, nodeId);
 
     public async Task ImportBootstrapAsync(ClusterJoinBootstrap bootstrap, Guid expectedNodeId, CancellationToken ct)
     {
@@ -428,6 +440,17 @@ public sealed class ClusterPeerAdmissionRepository(
             || (expectedNodeId.HasValue && ownGrant.NodeId != expectedNodeId.Value) || ownGrant.RevokedAt is not null
             || string.IsNullOrWhiteSpace(ownGrant.WrappedDataKey))
             throw new ArgumentException("La chaîne de signatures du cluster est incomplète ou invalide.", nameof(bootstrap));
+        if (bootstrap.UserNames is { } names)
+        {
+            if (names.Users is null || names.Users.Count > 10000
+                || names.Users.Select(user => user.Id).Distinct().Count() != names.Users.Count
+                || names.Users.Select(user => user.Username).Distinct(StringComparer.OrdinalIgnoreCase).Count() != names.Users.Count
+                || names.Users.Any(user => user.Id == Guid.Empty || !Encoding.Api.Auth.AuthService.IsValidUsername(user.Username))
+                || !byPeer.TryGetValue(names.IssuerPeerId, out var issuer) || issuer.RevokedAt is not null
+                || !ClusterReconciliationSignature.Verify(issuer.PublicKey, names.IssuerPeerId, names.Timestamp, names.Signature,
+                    UserNameSigningBytes(bootstrap.ClusterId, bootstrap.PeerId, names.Users)))
+                throw new ArgumentException("La liste des identités du cluster n’est pas authentifiée.");
+        }
         var dataKey = localIdentity.UnwrapDataKey(Convert.FromBase64String(ownGrant.WrappedDataKey));
         if (dataKey.Length != 32 || !string.Equals(Fingerprint(dataKey), ownGrant.KeyFingerprint, StringComparison.Ordinal))
             throw new ArgumentException("La clé de données reçue est invalide.", nameof(bootstrap));

@@ -44,6 +44,29 @@ public sealed class LibraryAccessVerifierTests
         }
     }
 
+    [NonRootUnixFact]
+    public async Task ReplacementChecksSourceDirectoryEvenWhenPublicationDirectoryIsWritable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "encoding-source-access-" + Guid.NewGuid());
+        var parent = Path.Combine(root,"nested");
+        Directory.CreateDirectory(parent);
+        var media = Path.Combine(parent,"synthetic.txt");
+        await File.WriteAllTextAsync(media,"untouched");
+        try
+        {
+            if (OperatingSystem.IsWindows()) return;
+            File.SetUnixFileMode(parent,UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            await LibraryAccessVerifier.VerifyPublicationAsync(root,default);
+            await Assert.ThrowsAsync<LibraryAccessException>(() => LibraryAccessVerifier.VerifyPublicationAsync(root,default,"nested/synthetic.txt"));
+            Assert.Equal("untouched",await File.ReadAllTextAsync(media));
+        }
+        finally
+        {
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(parent,UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Directory.Delete(root,true);
+        }
+    }
+
     [Fact]
     public async Task RefusesAnUnavailableMountWithoutCreatingIt()
     {

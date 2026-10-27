@@ -1,3 +1,4 @@
+import { MatExpansionModule } from '@angular/material/expansion';
 import { HttpClient } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -64,6 +65,7 @@ interface NodeAccessControls {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-library-node-access-form',
   imports: [
+    MatExpansionModule,
     MatButtonModule,
     MatCheckboxModule,
     MatFormFieldModule,
@@ -330,6 +332,26 @@ interface NodeAccessControls {
                       >
                       <mat-checkbox formControlName="canWrite">Écrire les résultats</mat-checkbox>
                     </div>
+                    <mat-expansion-panel>
+                      <mat-expansion-panel-header
+                        >Accès personnalisé par montage ou ACL</mat-expansion-panel-header
+                      >
+                      <p>
+                        Si les droits par défaut ne suffisent pas, préparez sur l’hôte un montage ou
+                        une ACL propre à cette bibliothèque, puis choisissez son chemin ci-dessus
+                        pour ce nœud. Le processus utilisera réellement ce point d’accès.
+                      </p>
+                      <p>
+                        Les cases Lecture et Écriture déclarent les besoins ; elles n’accordent
+                        aucun droit système. Avant traitement, le nœud vérifie les droits effectifs
+                        dans un dossier temporaire dédié.
+                      </p>
+                      <p>
+                        Un groupe ajouté au conteneur s’applique à tout le processus. Pour limiter
+                        l’accès par bibliothèque, utilisez des ACL ou montages distincts sur l’hôte.
+                        Aucun UID/GID saisi ne peut remplacer cette configuration.
+                      </p>
+                    </mat-expansion-panel>
                   } @else if (controls.controls.mode.value === 'transfer') {
                     <p class="mode-help">
                       Le worker encode une copie locale temporaire. Le nœud source conserve le

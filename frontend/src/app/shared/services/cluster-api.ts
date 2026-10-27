@@ -8,6 +8,8 @@ import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models
 import { ClusterIdentity } from '../models/local-node';
 
 export interface ClusterReconciliationPeerHealth {
+  readonly authenticatedPeerId?: string | null;
+  readonly catchUpConfirmed?: boolean;
   readonly url: string;
   readonly configured: boolean;
   readonly discovered: boolean;

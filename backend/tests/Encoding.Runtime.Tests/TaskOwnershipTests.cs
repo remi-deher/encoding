@@ -42,6 +42,35 @@ public sealed class TaskOwnershipTests
         public async ValueTask DisposeAsync(){Identity.Dispose();await Db.DisposeAsync();if(Directory.Exists(root)) Directory.Delete(root,true);}
     }
     [Fact]
+    public async Task KnownOwnershipPreventsRecreatingWorkBeforeExecutionHistoryArrives()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var id = await f.AddAsync();
+        await using (var history = f.Db.Db.CreateCommand("DELETE FROM execution_work WHERE execution_id=@id; DELETE FROM executions WHERE id=@id; UPDATE task_ownership SET media_key='A.MKV',owner_peer_id=@remote WHERE execution_id=@id"))
+        {
+            history.Parameters.AddWithValue("id", id); history.Parameters.AddWithValue("remote", Guid.NewGuid());
+            await history.ExecuteNonQueryAsync();
+        }
+        await using var c = await f.Db.Db.OpenConnectionAsync();
+        await using var tx = await c.BeginTransactionAsync();
+        var flow = new Encoding.Contracts.Flows.FlowDefinition(1, Guid.NewGuid(), 1, "Synthetic", "video", [], []);
+        Assert.False(await RuntimeRepository.EnqueueInTransactionAsync(new(Guid.NewGuid(), f.Library, "a.mkv", flow.Id, 1), flow, c, tx, default));
+    }
+
+    [Fact]
+    public async Task QuarantinedHistoryIsPreservedWithoutCountingItAsQueuedWork()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var id = await f.AddAsync();
+        await using (var update = f.Db.Db.CreateCommand("UPDATE task_ownership SET state='quarantined' WHERE execution_id=@id"))
+        { update.Parameters.AddWithValue("id",id); await update.ExecuteNonQueryAsync(); }
+        var overview = await new ExecutionRepository(f.Db.Db).OverviewAsync(default);
+        Assert.Equal(0,overview.QueuedCount);
+        Assert.Equal(1,overview.QuarantinedCount);
+        Assert.Equal(id,Assert.Single(overview.Executions).Id);
+    }
+
+    [Fact]
     public async Task CreationAndSignedPlanCommitTogether()
     {
         await using var f=await Fixture.CreateAsync();var rolledBack=await f.AddAsync(false);Assert.Null(await f.Ownership.GetAsync(rolledBack,default));

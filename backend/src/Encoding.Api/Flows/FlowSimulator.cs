@@ -72,7 +72,7 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                     variables[Text("name")] = FlowVariableValue.Parse(Text("value"));
                     detail = $"Variable « {Text("name")} » définie.";
                 }
-                else if (node.Component.PluginId == "probe" && id == "probe-validate-output")
+                else if (node.Component.PluginId == "probe" && id is "probe-validate-output" or MediaIntegrityPolicy.Component)
                 {
                     if (request.Assumptions?.GetValueOrDefault(node.Id) is not { } result)
                         return new("waiting", "Choisissez le résultat des contrôles de sortie (Valide / Invalide / Erreur).", steps, node.Id);

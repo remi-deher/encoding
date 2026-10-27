@@ -94,13 +94,13 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         await tx.CommitAsync(ct); return true;
     }
 
-    internal static async Task<bool> EnqueueInTransactionAsync(EnqueueMediaRequest request,FlowDefinition flow,DbConnection c,DbTransaction tx,CancellationToken ct)
+    internal static async Task<bool> EnqueueInTransactionAsync(EnqueueMediaRequest request,FlowDefinition flow,DbConnection c,DbTransaction tx,CancellationToken ct, string requestOrigin = "api")
     {
         var path=NormalizePath(request.MediaPath);
         await using var library=Sql.Command("SELECT name FROM libraries WHERE id=@id AND is_active FOR UPDATE",c,tx);
         library.Parameters.AddWithValue("id",request.LibraryId);
         if(await library.ExecuteScalarAsync(ct) is not string name) return false;
-        await using var duplicate=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.library_id=@library AND w.media_key=@key AND e.state IN ('queued','running','cancelling'))",c,tx);
+        await using var duplicate=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.library_id=@library AND w.media_key=@key AND e.state IN ('queued','running','cancelling')) OR EXISTS(SELECT 1 FROM task_ownership o LEFT JOIN executions e ON e.id=o.execution_id WHERE o.cluster_id=(SELECT id FROM cluster_identity WHERE singleton=true) AND o.library_id=@library AND o.media_key=@key AND o.state IN ('active','frozen','received','transferred') AND (e.id IS NULL OR e.state IN ('queued','running','cancelling')))",c,tx);
         duplicate.Parameters.AddWithValue("library",request.LibraryId); duplicate.Parameters.AddWithValue("key",path.ToUpperInvariant());
         if((await duplicate.ScalarBoolAsync(ct))) return false;
         var creation=new CreateExecutionRequest(request.Id,path,name,flow.Name,flow.Version,JsonSerializer.SerializeToElement(flow,Json));
@@ -108,7 +108,12 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         await using var work=Sql.Command("INSERT INTO execution_work(execution_id,library_id,media_path,media_key) VALUES(@id,@library,@path,@key)",c,tx);
         work.Parameters.AddWithValue("id",request.Id); work.Parameters.AddWithValue("library",request.LibraryId);
         work.Parameters.AddWithValue("path",path); work.Parameters.AddWithValue("key",path.ToUpperInvariant());
-        await work.ExecuteNonQueryAsync(ct); return true;
+        await work.ExecuteNonQueryAsync(ct);
+        var origin = requestOrigin is "surveillance" or "trigger" or "manual" ? requestOrigin : "api";
+        await using var audit = Sql.Command("UPDATE executions SET detail=@detail WHERE id=@id; UPDATE execution_events SET detail=@detail WHERE execution_id=@id AND revision=0", c, tx);
+        audit.Parameters.AddWithValue("id", request.Id); audit.Parameters.AddWithValue("detail", "Demande créée : " + origin + ".");
+        await audit.ExecuteNonQueryAsync(ct);
+        return true;
     }
 
     public static string NormalizePath(string? path)=>Encoding.Contracts.Libraries.MediaPathRules.Normalize(path);
@@ -276,6 +281,13 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             }
             Guid source=item.Source??worker; string? root=null;
             var needsWrite=item.Flow.Nodes.Any(n=>components.Resolve(n.Component)!.RequiresWriteAccess);
+            bool replacementAccess = false;
+            if (needsWrite)
+            await using (var policy = Sql.Command("SELECT w.media_policy<>'beside' AND EXISTS(SELECT 1 FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled) FROM execution_work w WHERE w.execution_id=@id", c, tx))
+            {
+                policy.Parameters.AddWithValue("id", item.Id);
+                replacementAccess = await policy.ScalarBoolAsync(ct);
+            }
             var needsDirect=sourceEditResume || eligibility.RequiresDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
             var prefersDirect=eligibility.PrefersDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
             if(item.Probe is null)
@@ -404,7 +416,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 await prepare.ExecuteNonQueryAsync(ct);
             }
             if(ownership is not null) await ownership.SaveCheckpointAsync(item.Id,c,tx,ct);
-            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,SourceWriteGuardsSupported:sourceWrites is not null,VerifyPublicationAccess:needsWrite));
+            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,SourceWriteGuardsSupported:sourceWrites is not null,VerifyPublicationAccess:needsWrite,VerifyReplacementAccess:replacementAccess));
         }
         return new(null, candidates.Count == CandidatePageSize
             ? new(candidates[^1].QueuedAt, candidates[^1].Id) : null);
@@ -438,11 +450,12 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         cmd.Parameters.AddWithValue("id",id); await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<RuntimeLeaseStatus?> RenewAsync(Guid id,Guid worker,long epoch,CancellationToken ct)
+    public async Task<RuntimeLeaseStatus?> RenewAsync(Guid id,Guid worker,long epoch,CancellationToken ct, IReadOnlyList<RuntimeStepCommand>? commands = null)
     {
         using var priority = Encoding.Api.Infrastructure.Data.Sqlite.SqliteWriter.Prioritize();
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await FenceAsync(id,worker,epoch,c,tx,ct)) return null;
+        if (!await RuntimeCommandJournal.StoreAsync(id, commands, c, tx, ct)) return null;
         await using var update=Sql.Command("""
           UPDATE execution_work SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
           UPDATE media_reservations SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
@@ -637,6 +650,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         }
         var detail=handoff is null?$"Étape terminée : {node.Name??component.Name}.":handoff.Mode=="node"
             ?$"Relais en attente vers le nœud {handoff.TargetNodeId:D}.":"Relais en attente d'un autre worker éligible.";
+        if (node.Component.ComponentId == MediaIntegrityPolicy.Component && ExecutionRepository.ReadIntegrityDiagnostic(cp) is { } diagnostic)
+            detail += " " + diagnostic.Code + " : " + diagnostic.Message;
         if(wait is not null) detail=ExecutionWaitRepository.Describe(wait);
         if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,detail),c,tx,ct)) return false;
         if(handoff is not null)
@@ -657,7 +672,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     }
 
     internal static bool ValidCommandLog(RuntimeCommandLog command) =>
-        command.Id!=Guid.Empty && command.Command is not null && command.Command.Length<=16384
+        (command.ProgressPercent is null or >= 0 and <= 100) && command.Id!=Guid.Empty && command.Command is not null && command.Command.Length<=16384
         && command.StandardOutput is not null && command.StandardOutput.Length<=32768
         && command.StandardError is not null && command.StandardError.Length<=32768
         && (command.FinishedAt is null || command.FinishedAt>=command.StartedAt);

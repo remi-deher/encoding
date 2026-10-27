@@ -26,6 +26,7 @@ public sealed partial class ClusterEntityReconciliation
                 cause switch {
                     "immutable_snapshot_conflict" => "Comparer les instantanés et résoudre explicitement le conflit ; aucun écrasement autorisé.",
                     "username_conflict" => "Renommer explicitement le compte entrant en conservant son identité et ses credentials.",
+                    "constraint_conflict" => "Résoudre explicitement le conflit de contrainte de cette entité ; le journal est conservé.",
                     "dependency_missing" => "Attendre la projection des dépendances du journal.",
                     _ => "Vérifier la disponibilité du stockage et le diagnostic du nœud."
                 }));

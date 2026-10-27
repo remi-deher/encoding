@@ -2,7 +2,7 @@ import { IconComponent } from './icon.component';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { ChangeDetectionStrategy, Component, input, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { ExecutionPipelineStep, RuntimeCommandLog } from '../models/execution';
+import { ExecutionPipelineStep, RuntimeCommandLog, executionPhaseLabel } from '../models/execution';
 import { FileDownload } from '../services/file-download';
 import { NotificationService } from '../services/notification.service';
 
@@ -55,6 +55,9 @@ import { NotificationService } from '../services/notification.service';
         </div>
       </header>
 
+      @if (phaseLabel(phase()); as label) {
+        <p role="status">{{ label }}</p>
+      }
       @if (feedback()) {
         <p class="pipeline-logs__feedback" role="status">{{ feedback() }}</p>
       } @else if (steps().length === 0) {
@@ -71,6 +74,9 @@ import { NotificationService } from '../services/notification.service';
                   </div>
                   <span class="pipeline-step__kind">{{ kindLabel(step.componentKind) }}</span>
                 </header>
+                @if (step.diagnostic; as diagnostic) {
+                  <p role="status">{{ diagnostic.message }}</p>
+                }
                 @if (step.outputLabel) {
                   <p class="pipeline-step__decision">
                     <strong
@@ -92,9 +98,20 @@ import { NotificationService } from '../services/notification.service';
                             <code class="pipeline-command__line">{{ command.command }}</code>
                             <p class="pipeline-command__status">
                               @if (command.exitCode === null) {
-                                Processus interrompu ou code de sortie indisponible
+                                {{
+                                  command.finishedAt === null &&
+                                  (step.status === 'running' || step.status === 'cancelling')
+                                    ? 'Commande en cours'
+                                    : 'Processus interrompu ou code de sortie indisponible'
+                                }}
                               } @else {
                                 Code de sortie : {{ command.exitCode }}
+                              }
+                              @if (
+                                command.progressPercent !== null &&
+                                command.progressPercent !== undefined
+                              ) {
+                                · Contrôle : {{ command.progressPercent.toFixed(1) }} %
                               }
                               @if (command.truncated) {
                                 · Sortie tronquée
@@ -308,6 +325,8 @@ export class ExecutionPipelineLogsComponent {
   readonly executionId = input('execution');
   readonly steps = input<readonly ExecutionPipelineStep[]>([]);
   readonly feedback = input('');
+  readonly phase = input<string | null>(null);
+  protected readonly phaseLabel = executionPhaseLabel;
   protected readonly viewMode = signal<'simple' | 'detailed'>('simple');
   private readonly downloads = inject(FileDownload);
   private readonly notifications = inject(NotificationService);

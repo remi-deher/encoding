@@ -50,6 +50,7 @@ public sealed class RuntimeEligibility(
 
     public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null)
     {
+        if (MediaIntegrityPolicy.IsExplicit(flow) && !capabilities.Any(c => c.ToolId == MediaIntegrityPolicy.Capability)) return false;
         if(context?.DirectSource is not null && !capabilities.Any(capability=>capability.ToolId==RuntimeSourceObservation.Capability)) return false;
         if(!(resumed ? validator.ValidateContinuation(flow) : validator.Validate(flow)).IsValid) return false;
         if(!resumed && activation is not null)

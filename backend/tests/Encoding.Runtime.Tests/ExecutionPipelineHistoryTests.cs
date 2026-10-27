@@ -19,8 +19,8 @@ public sealed class ExecutionPipelineHistoryTests
         await using (var insert = db.Db.CreateCommand("""
             INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt)
             VALUES(@id,'synthetic.mkv','Synthetic','Partial',1,'{}',@state,1);
-            INSERT INTO execution_steps(execution_id,node_id,invocation_id,idempotent,command_logs)
-            VALUES(@id,'unavailable-block',@invocation,true,'null')
+            INSERT INTO execution_steps(execution_id,node_id,invocation_id,idempotent,command_logs,checkpoint)
+            VALUES(@id,'unavailable-block',@invocation,true,'null','{}')
             """))
         {
             insert.Parameters.AddWithValue("id", id);
@@ -28,6 +28,7 @@ public sealed class ExecutionPipelineHistoryTests
             insert.Parameters.AddWithValue("invocation", Guid.NewGuid());
             await insert.ExecuteNonQueryAsync();
         }
+        Assert.NotNull(await new ExecutionRepository(db.Db).GetAsync(id, default));
         var step = Assert.Single(await new ExecutionRepository(db.Db).PipelineAsync(id, CancellationToken.None));
         Assert.Equal("unavailable-block", step.NodeId);
         Assert.Empty(step.Commands);

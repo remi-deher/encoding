@@ -19,10 +19,12 @@ public sealed partial class AuthService(UserRepository users, AuthOptions option
     [GeneratedRegex("^[A-Za-z0-9._@-]{1,64}$")]
     private static partial Regex UsernamePattern();
 
+    public static bool IsValidUsername(string? username) => UsernamePattern().IsMatch(username?.Trim() ?? string.Empty);
+
     public static Dictionary<string, string[]> ValidateNewUser(string? username, string? password)
     {
         var errors = new Dictionary<string, string[]>();
-        if (!UsernamePattern().IsMatch(username?.Trim() ?? string.Empty))
+        if (!IsValidUsername(username))
             errors["username"] = ["Le nom d’utilisateur compte de 1 à 64 caractères : lettres, chiffres, point, tiret, tiret bas ou @."];
         foreach (var (key, value) in ValidatePassword("password", password)) errors[key] = value;
         return errors;

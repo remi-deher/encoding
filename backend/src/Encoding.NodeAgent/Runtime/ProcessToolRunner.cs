@@ -21,7 +21,7 @@ public sealed class ProcessToolRunner
 
     public async Task<ToolResult> RunAsync(string executable, IEnumerable<string> arguments, string workingDirectory,
         TimeSpan timeout, CancellationToken ct, string? input = null, int outputLimit = 2 * 1024 * 1024,
-        bool sandbox = false, IReadOnlyList<string>? readOnlyPaths = null)
+        bool sandbox = false, IReadOnlyList<string>? readOnlyPaths = null, bool trackProgress = false, double? progressDurationSeconds = null)
     {
         var argumentList = arguments.ToList();
         if (sandbox)
@@ -52,12 +52,22 @@ public sealed class ProcessToolRunner
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(timeout);
         using var process = Process.Start(info) ?? throw new IOException("Le processus ne peut pas démarrer.");
+        var commandId = Guid.NewGuid();
+        RuntimeCommandCapture.Record(executable, argumentList, "", "", null, startedAt, null, false, input is not null, commandId);
         var outputLog = new StringBuilder();
         var errorLog = new StringBuilder();
         var truncated = false;
         int? exitCode = null;
         Task<string>? output = null;
         Task<string>? errors = null;
+
+        decimal? Progress()
+        {
+            if (!trackProgress || progressDurationSeconds is not > 0) return null;
+            var matches = System.Text.RegularExpressions.Regex.Matches(outputLog.ToString(), @"(?:^|\n)out_time_us=(\d+)");
+            if (matches.Count == 0 || !double.TryParse(matches[^1].Groups[1].Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var microseconds)) return null;
+            return (decimal)Math.Clamp(microseconds / 1000000 / progressDurationSeconds.Value * 100, 0, 100);
+        }
 
         async Task<string> ReadAsync(StreamReader reader, bool collectOutput, StringBuilder captured)
         {
@@ -69,6 +79,16 @@ public sealed class ProcessToolRunner
                 var take = Math.Min(count, Math.Max(0, CapturedLogLimit - captured.Length));
                 if (take > 0) captured.Append(buffer, 0, take);
                 if (take < count) truncated = true;
+                if (trackProgress && collectOutput)
+                {
+                    if (captured.Length >= CapturedLogLimit)
+                    {
+                        captured.Append(buffer, 0, count);
+                        if (captured.Length > CapturedLogLimit) captured.Remove(0, captured.Length - CapturedLogLimit);
+                    }
+                    RuntimeCommandCapture.Record(executable, argumentList, captured.ToString(), "", null, startedAt, null, truncated, input is not null, commandId, Progress());
+                    continue;
+                }
                 if (!collectOutput) continue;
                 if (result.Length + count > outputLimit)
                 {
@@ -105,7 +125,7 @@ public sealed class ProcessToolRunner
             try { await Task.WhenAll(new[] { output, errors }.Where(task => task is not null).Select(task => task!)); }
             catch (Exception) when (deadline.IsCancellationRequested) { }
             RuntimeCommandCapture.Record(executable, argumentList, outputLog.ToString(), errorLog.ToString(),
-                exitCode, startedAt, process.HasExited ? DateTimeOffset.UtcNow : null, truncated, input is not null);
+                exitCode, startedAt, process.HasExited ? DateTimeOffset.UtcNow : null, truncated, input is not null, commandId, Progress());
         }
     }
 

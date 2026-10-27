@@ -1,6 +1,11 @@
 export type ExecutionState =
   'queued' | 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled' | 'deferred';
 export interface ExecutionResponse {
+  readonly failure?: {
+    readonly code: string;
+    readonly stepId: string | null;
+    readonly publicationConfirmed: boolean | null;
+  } | null;
   readonly ownership?: {
     readonly executionId: string;
     readonly ownerPeerId: string;
@@ -31,12 +36,14 @@ export interface ExecutionResponse {
     readonly streams?: readonly unknown[];
   } | null;
   readonly publishedPath?: string | null;
+  readonly currentPhase?: string | null;
   readonly videoEncodings?: readonly ResolvedVideoEncoding[] | null;
   readonly libraryId?: string | null;
   readonly updatedAt: string;
 }
 
 export interface RuntimeCommandLog {
+  readonly progressPercent?: number | null;
   readonly id: string;
   readonly command: string;
   readonly standardOutput: string;
@@ -48,6 +55,7 @@ export interface RuntimeCommandLog {
 }
 
 export interface ExecutionPipelineStep {
+  readonly diagnostic?: { readonly code: string; readonly message: string } | null;
   readonly nodeId: string;
   readonly nodeName: string;
   readonly invocationId: string;
@@ -90,6 +98,7 @@ export interface ExecutionEventResponse {
 export interface ExecutionOverviewResponse {
   readonly executions: readonly ExecutionResponse[];
   readonly queuedCount: number;
+  readonly quarantinedCount?: number;
   readonly activeCount: number;
   readonly failedCount: number;
   readonly cancelledCount: number;
@@ -145,4 +154,16 @@ export function executionStateLabel(execution: ExecutionResponse): string {
     default:
       return EXECUTION_STATE_LABELS[execution.state];
   }
+}
+
+export function executionPhaseLabel(phase: string | null | undefined): string {
+  return (
+    (
+      {
+        publication: 'Publication en cours',
+        source_transfer: 'Préparation et transfert de la source',
+        waiting_handoff: 'Attente du nœud de relais',
+      } as Record<string, string>
+    )[phase ?? ''] ?? ''
+  );
 }

@@ -14,12 +14,26 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
  e.id,e.media,e.library_name,e.flow_name,e.flow_version,e.state,e.node_id,n.name,
  e.progress,e.detail,e.attempt,e.revision,e.queued_at,e.started_at,e.finished_at,e.updated_at,w.before_metadata::text,w.after_metadata::text,w.published_path
  ,(SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),COALESCE(w.library_id,o.library_id),o.owner_peer_id,o.epoch,o.state
+ ,(SELECT s.node_id FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NULL ORDER BY s.started_at DESC LIMIT 1)
+ ,CASE WHEN e.state NOT IN ('running','cancelling') THEN NULL
+       WHEN w.publication_requested AND w.published_path IS NULL THEN 'publication'
+       WHEN w.source_preparation_requested AND w.source_sha IS NULL THEN 'source_transfer'
+       WHEN w.handoff_pending THEN 'waiting_handoff' ELSE NULL END
  """;
     private static ExecutionResponse Read(DbDataReader r) => new(
     r.GetGuid(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4), r.GetString(5),
     r.IsDBNull(6) ? null : r.GetGuid(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetDecimal(8),
     r.GetString(9), r.GetInt32(10), r.GetInt32(11), r.GetFieldValue<DateTimeOffset>(12),
-    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18),ReadVideoEncodings(r,19),r.IsDBNull(20)?null:r.GetGuid(20),r.IsDBNull(21)?null:new TaskOwnershipStatus(r.GetGuid(0),r.GetGuid(21),r.GetInt64(22),r.GetString(23)));
+    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18),ReadVideoEncodings(r,19),r.IsDBNull(20)?null:r.GetGuid(20),r.IsDBNull(21)?null:new TaskOwnershipStatus(r.GetGuid(0),r.GetGuid(21),r.GetInt64(22),r.GetString(23)), ReadFailure(r), r.IsDBNull(25) ? null : r.GetString(25));
+    private static ExecutionFailureInfo? ReadFailure(DbDataReader reader)
+    {
+        if (reader.GetString(5) != "failed") return null;
+        var prefix = reader.GetString(9).Split(':', 2)[0].Trim();
+        var code = prefix is "permission_denied" or "media_tool_failed" or "operation_timeout" or "execution_infrastructure_failed"
+            or "integration_infrastructure_failed" or "plugin_configuration_missing" or "publication_failed" or "source_transfer_failed" or "cluster_refused" ? prefix : "execution_failed";
+        return new(code, reader.IsDBNull(24) ? null : reader.GetString(24), reader.IsDBNull(18) ? null : true);
+    }
+
     private static System.Text.Json.JsonElement? ReadMetadata(DbDataReader reader,int index) => reader.IsDBNull(index)?null:System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(reader.GetString(index));
     private static IReadOnlyList<ResolvedVideoEncoding> ReadVideoEncodings(DbDataReader reader,int index)
     {
@@ -27,7 +41,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         try
         {
             var checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>(reader.GetString(index),new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            return checkpoint?.Context.VideoEncodings??[];
+            return checkpoint?.Context?.VideoEncodings??[];
         }
         catch(JsonException) { return []; }
     }
@@ -41,7 +55,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(System.Data.IsolationLevel.Snapshot, ct);
         var counts = new Dictionary<string, int>();
-        await using (var cmd = Sql.Command("SELECT state,count(*)::integer FROM executions GROUP BY state", c, tx))
+        await using (var cmd = Sql.Command("SELECT CASE WHEN e.state='queued' AND o.state='quarantined' THEN 'quarantined' ELSE e.state END,count(*)::integer FROM executions e LEFT JOIN task_ownership o ON o.execution_id=e.id GROUP BY 1", c, tx))
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) counts[r.GetString(0)] = r.GetInt32(1); }
 
         var predicates = new List<string>();
@@ -89,7 +103,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) activity.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetFieldValue<DateTimeOffset>(5))); }
         await tx.CommitAsync(ct);
         int Count(string s) => counts.GetValueOrDefault(s);
-        return new(list, Count("queued"), Count("running") + Count("cancelling"), Count("failed"), Count("cancelled"), Count("succeeded"), DateTimeOffset.UtcNow, activity, Count("deferred"), totalCount, limit, offset);
+        return new(list, Count("queued"), Count("running") + Count("cancelling"), Count("failed"), Count("cancelled"), Count("succeeded"), DateTimeOffset.UtcNow, activity, Count("deferred"), totalCount, limit, offset, Count("quarantined"));
     }
 
     public async Task<ExecutionResponse?> GetAsync(Guid id, CancellationToken ct)
@@ -154,10 +168,19 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
             };
             var logs=JsonSerializer.Deserialize<IReadOnlyList<RuntimeCommandLog>>(r.GetString(5),new JsonSerializerOptions(JsonSerializerDefaults.Web))??[];
             result.Add(new(nodeId,node?.Name??descriptor?.Name??nodeId,r.GetGuid(1),descriptor?.Kind??"unknown",status,
-                r.GetFieldValue<DateTimeOffset>(2),completedAt,outputId,outputLabel,checkpoint?.NextNodeId,logs));
+                r.GetFieldValue<DateTimeOffset>(2),completedAt,outputId,outputLabel,checkpoint?.NextNodeId,logs, node?.Component.ComponentId == MediaIntegrityPolicy.Component ? ReadIntegrityDiagnostic(checkpoint) : null));
         }
         return result;
     }
+    internal static RuntimeStepDiagnostic? ReadIntegrityDiagnostic(RuntimeCheckpoint? checkpoint)
+    {
+        if (checkpoint?.Context?.Variables is not { } variables
+            || !variables.TryGetValue(MediaIntegrityPolicy.ReceiptVariable, out var report) || report.ValueKind != JsonValueKind.Object
+            || !report.TryGetProperty("reason", out var reason) || reason.ValueKind != JsonValueKind.String
+            || MediaIntegrityPolicy.DescribeFailure(reason.GetString()) is not { } message) return null;
+        return new(reason.GetString()!, message);
+    }
+
     internal static async Task<bool> CreateInTransactionAsync(CreateExecutionRequest request,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
         await using var cmd = Sql.Command("""

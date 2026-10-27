@@ -47,6 +47,9 @@ public sealed class ClusterPeerSecurityTests
             var forged = bootstrap with { Grants = bootstrap.Grants.Select(grant => grant.PeerId == ownGrant.PeerId ? invalidGrant : grant).ToArray() };
             await Assert.ThrowsAsync<ArgumentException>(() => joiningAdmissions.ImportBootstrapAsync(forged, nodeId, CancellationToken.None));
 
+            Assert.NotNull(bootstrap.UserNames);
+            var forgedUsers = bootstrap with { UserNames = bootstrap.UserNames with { Users = [new(Guid.NewGuid(), "forged")] } };
+            await Assert.ThrowsAsync<ArgumentException>(() => joiningAdmissions.ImportBootstrapAsync(forgedUsers, nodeId, CancellationToken.None));
             await joiningAdmissions.ImportBootstrapAsync(bootstrap, nodeId, CancellationToken.None);
             await new ClusterIdentityRepository(joining.Db).AdoptAsync(clusterId, "Media", CancellationToken.None);
 
@@ -148,15 +151,21 @@ public sealed class ClusterPeerSecurityTests
                     [],
                     Convert.ToBase64String(RandomNumberGenerator.GetBytes(48)),
                     ClusterPeerId: joiningIdentity.PeerId,
-                    ClusterPeerPublicKey: joiningIdentity.PublicKey),
+                    ClusterPeerPublicKey: joiningIdentity.PublicKey,
+                    ClusterPeerReconciliationUrl: "http://joining-node.test:8090/"),
                 "0123456789ABCDEF");
 
             Assert.Equal(Encoding.Api.Nodes.PairingRequestResult.Created,
                 await nodeRepo.CreatePairingRequestAsync(joiningRequest, 10, CancellationToken.None));
 
+            Assert.DoesNotContain("http://joining-node.test:8090/", await new ClusterReconciliationRepository(founderDb.Db).GetPeerEndpointsAsync(default));
             // Approval must succeed without throwing "La clé de données du cluster n’a pas encore été installée sur ce serveur".
             var approved = await nodeRepo.ApprovePairingRequestAsync(joiningNodeId, CancellationToken.None);
             Assert.NotNull(approved);
+            Assert.Contains("http://joining-node.test:8090/", await new ClusterReconciliationRepository(founderDb.Db).GetPeerEndpointsAsync(default));
+            var forgedRequest = joiningRequest with { Node = joiningRequest.Node with { NodeToken = "unrelated-synthetic-token", ClusterPeerReconciliationUrl = "http://unapproved.test/" } };
+            Assert.Equal(Encoding.Api.Nodes.PairingRequestResult.Conflict, await nodeRepo.CreatePairingRequestAsync(forgedRequest,10,default));
+            Assert.DoesNotContain("http://unapproved.test/", await new ClusterReconciliationRepository(founderDb.Db).GetPeerEndpointsAsync(default));
             Assert.True(newFounderKeyStore.HasKey(clusterId));
 
             // 4. Node .50 fetches bootstrap and imports it into its local server.

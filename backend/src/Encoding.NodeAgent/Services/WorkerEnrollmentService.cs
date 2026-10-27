@@ -258,6 +258,8 @@ public sealed class WorkerEnrollmentService(
         };
         message.Headers.Add(LocalEnrollment.HeaderName, secret);
         using var response = await client.SendAsync(message, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            throw new HttpRequestException("Rattachement suspendu : validez le renommage des comptes entrants dans Paramètres > Utilisateurs, puis réessayez le rattachement. Si aucune collision n’est affichée, mettez à jour le cluster d’accueil pour obtenir sa liste signée des comptes.");
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"Le nœud a rejoint {bootstrap.ClusterName}, mais le serveur local n'a pas adopté son identité de cluster (HTTP {(int)response.StatusCode}).");
     }

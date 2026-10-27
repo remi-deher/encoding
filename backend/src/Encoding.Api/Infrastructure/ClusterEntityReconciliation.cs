@@ -30,12 +30,13 @@ public sealed partial class ClusterEntityReconciliation(
     private static readonly HashSet<string> BooleanColumns = new(StringComparer.Ordinal)
     {
         "singleton", "idempotent", "is_active", "draining", "quarantined", "can_read", "can_write", "is_enabled",
-        "watch_enabled", "schedule_enabled", "enabled", "has_more"
+        "watch_enabled", "schedule_enabled", "enabled", "has_more", "approved"
     };
     private static readonly EntityTable[] Tables =
     [
         new("cluster_nodes", ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "last_seen_at", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"], ["id"], ["capabilities", "labels", "inventory"], ["roles", "desired_roles"], ["node_token_hash"], ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"]),
         new("node_enrollment_requests", ["node_id", "pairing_key_hash", "node_token_hash", "peer_id", "peer_public_key", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "expires_at", "inventory", "display_name"], ["node_id"], ["capabilities", "inventory"], ["roles"], ["pairing_key_hash", "node_token_hash"]),
+        new("node_peer_reconciliation_urls", ["node_id", "peer_id", "url", "approved"], ["node_id"]),
         new("cluster_peer_admissions", ["cluster_id", "peer_id", "node_id", "public_key", "approved_by_peer_id", "wrapped_data_key", "key_fingerprint", "issued_at", "revoked_at", "signature"], ["cluster_id", "peer_id"], immutable: false, detectDeletes: false),
         new("node_groups", ["id", "name", "description", "mode", "criteria", "labels", "created_at", "updated_at"], ["id"], ["criteria", "labels"]),
         new("node_directory_browse_requests", ["id", "node_id", "path", "state", "entries", "has_more", "error", "created_at", "updated_at", "expires_at", "claim_until"], ["id"], ["entries"]),

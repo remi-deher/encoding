@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { ExecutionResponse, executionStateLabel } from '../models/execution';
+import { ExecutionResponse, executionStateLabel, executionPhaseLabel } from '../models/execution';
 import { StatusBadgeComponent, StatusTone } from './status-badge.component';
 
 @Component({
@@ -26,6 +26,12 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
         />
       </header>
 
+      @if (execution().failure?.publicationConfirmed) {
+        <p>Média publié ; une étape ultérieure a échoué.</p>
+      }
+      @if (phaseLabel(execution().currentPhase); as phase) {
+        <p role="status">{{ phase }}</p>
+      }
       <p class="execution-card__detail">{{ execution().detail }}</p>
 
       <div class="execution-card__facts">
@@ -171,6 +177,7 @@ export class ExecutionCardComponent {
   readonly showPipelineAction = input(false);
   readonly pipelineRequested = output<void>();
   protected readonly stateLabel = executionStateLabel;
+  protected readonly phaseLabel = executionPhaseLabel;
 
   protected stateTone(state: ExecutionResponse['state']): StatusTone {
     switch (state) {

@@ -6,11 +6,23 @@ public sealed class LibraryAccessException(string operation, string path)
 /// <summary>Tests effective process permissions using only dedicated, randomly named temporary files.</summary>
 public static class LibraryAccessVerifier
 {
-    public static async Task VerifyPublicationAsync(string root, CancellationToken ct)
+    public static async Task VerifyPublicationAsync(string root, CancellationToken ct, string? replacementMediaPath = null)
     {
         if (!Directory.Exists(root)) throw new LibraryAccessException("montage indisponible", root);
         var results = SafeMediaPaths.Resolve(root, ".encoding-results");
         var parent = Directory.Exists(results) ? results : root;
+        await VerifyDirectoryAsync(parent, ct);
+        if (replacementMediaPath is not null)
+        {
+            var source = SafeMediaPaths.Resolve(root, replacementMediaPath);
+            var sourceParent = Path.GetDirectoryName(source)!;
+            if (!Directory.Exists(sourceParent)) throw new LibraryAccessException("dossier source indisponible", sourceParent);
+            if (!string.Equals(sourceParent, parent, StringComparison.Ordinal)) await VerifyDirectoryAsync(sourceParent, ct);
+        }
+    }
+
+    private static async Task VerifyDirectoryAsync(string parent, CancellationToken ct)
+    {
         var check = SafeMediaPaths.Resolve(parent, ".encoding-access-check-" + Guid.NewGuid().ToString("N"));
         var operation = "création du répertoire temporaire";
         var created = false;

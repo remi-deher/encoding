@@ -24,6 +24,7 @@ public sealed class ClusterReconciliationService(
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly ConcurrentDictionary<string, Guid> discoveredPeers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> selfEndpoints = new(StringComparer.OrdinalIgnoreCase);
     private MdnsBrowser? browser;
     private volatile bool backlog;
     internal TimeSpan NextCycleDelay=>backlog?TimeSpan.FromMilliseconds(300+Random.Shared.Next(200)):TimeSpan.FromSeconds(15);
@@ -112,7 +113,7 @@ public sealed class ClusterReconciliationService(
                 var dynamicPeers = await repository.GetPeerEndpointsAsync(stoppingToken);
                 var discoveredUrls = discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key)
                     .Concat(dynamicPeers.Select(Normalize).Where(url => url is not null).Cast<string>());
-                health.SetPeers(configuredUrls, discoveredUrls);
+                health.SetPeers(configuredUrls.Where(url => !IsSelfEndpoint(url)), discoveredUrls.Where(url => !IsSelfEndpoint(url)));
                 backlog=false;
                 await ReconcilePeersAsync(clusterId, peerUrls, stoppingToken);
                 await Task.Delay(NextCycleDelay, stoppingToken);
@@ -131,6 +132,7 @@ public sealed class ClusterReconciliationService(
         foreach (var peerUrl in peerUrls)
         {
             stoppingToken.ThrowIfCancellationRequested();
+            if (IsSelfEndpoint(peerUrl)) continue;
             health.BeginAttempt(peerUrl);
             try
             {
@@ -146,7 +148,7 @@ public sealed class ClusterReconciliationService(
                         || clock.GetElapsedTime(started) >= CatchUpBudget
                         || transferred + 2L * ClusterReconciliationSignature.MaximumBodyBytes > MaximumBytesPerPeer) break;
                 }
-                health.Succeed(peerUrl);
+                if (!IsSelfEndpoint(peerUrl)) health.Succeed(peerUrl);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
             catch (Exception exception)
@@ -175,11 +177,14 @@ public sealed class ClusterReconciliationService(
         return configured.Concat(dynamicPeers)
             .Concat(discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key))
             .Select(Normalize)
-            .Where(url => url is not null && !string.Equals(url, advertisedApiBaseUrl, StringComparison.OrdinalIgnoreCase))
+            .Where(url => url is not null && !IsSelfEndpoint(url))
             .Cast<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
+
+    private bool IsSelfEndpoint(string url) => selfEndpoints.ContainsKey(url)
+        || string.Equals(url, advertisedApiBaseUrl, StringComparison.OrdinalIgnoreCase);
 
     private sealed record ExchangeProgress(bool HasMore, bool MadeProgress, long Bytes);
 
@@ -241,6 +246,12 @@ public sealed class ClusterReconciliationService(
                 responseBody))
         {
             throw new InvalidOperationException("La signature de la réponse du pair est invalide.");
+        }
+        if (responsePeerId == localIdentity.PeerId)
+        {
+            selfEndpoints[peerUrl] = 0;
+            health.ExcludeEndpoint(peerUrl);
+            return new(false, false, (long)requestBody.Length + responseBody.Length);
         }
         var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeResponse>(responseBody, JsonOptions);
         if (exchange is null || exchange.ProtocolVersion != ClusterReconciliationEndpoints.ProtocolVersion || exchange.ClusterId != currentClusterId)

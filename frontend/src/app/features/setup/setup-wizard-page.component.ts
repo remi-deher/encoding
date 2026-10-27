@@ -1,3 +1,4 @@
+import { JoinUserCollisionsComponent } from '../settings/tabs/join-user-collisions.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import {
   ChangeDetectionStrategy,
@@ -31,7 +32,14 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-setup-wizard-page',
   providers: [LocalNodeController],
-  imports: [IconComponent, CommonModule, FormsModule, MatButtonModule, AccessTemplateComponent],
+  imports: [
+    JoinUserCollisionsComponent,
+    IconComponent,
+    CommonModule,
+    FormsModule,
+    MatButtonModule,
+    AccessTemplateComponent,
+  ],
   template: `
     <app-access-template
       view="setup"
@@ -585,6 +593,9 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               </div>
             }
 
+            @if (accountCreated()) {
+              <app-join-user-collisions />
+            }
             <div class="workbench-actions">
               <button
                 matButton="filled"
