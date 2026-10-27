@@ -64,11 +64,11 @@
 
 .node-overview-head_local {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) minmax(220px, 0.52fr) auto;
+  grid-template-columns:
+    52px minmax(0, 1fr) minmax(190px, 0.38fr) minmax(170px, 0.32fr) auto;
   grid-template-areas:
-    'symbol identity admission menu'
-    'symbol identity capacity menu'
-    'symbol identity meta menu';
+    'symbol identity capacity admission menu'
+    'symbol identity capacity meta menu';
   align-items: stretch;
   gap: var(--space-3) var(--space-4);
   padding: var(--space-4);
@@ -77,11 +77,11 @@
 }
 
 .node-overview-head_local.has-select {
-  grid-template-columns: auto 52px minmax(0, 1fr) minmax(220px, 0.52fr) auto;
+  grid-template-columns:
+    auto 52px minmax(0, 1fr) minmax(190px, 0.38fr) minmax(170px, 0.32fr) auto;
   grid-template-areas:
-    'select symbol identity admission menu'
-    'select symbol identity capacity menu'
-    'select symbol identity meta menu';
+    'select symbol identity capacity admission menu'
+    'select symbol identity capacity meta menu';
 }
 
 .node-overview-head_with-capacity:not(.node-overview-head_local) {
@@ -243,6 +243,10 @@
 .node-overview-head_local .node-overview-task-capacity,
 .node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-task-capacity {
   grid-area: capacity;
+}
+
+.node-overview-head_local .node-overview-task-capacity {
+  align-self: center;
 }
 
 .node-overview-task-capacity-values {
