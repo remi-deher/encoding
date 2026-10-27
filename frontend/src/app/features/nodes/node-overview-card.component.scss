@@ -84,6 +84,52 @@
     'select symbol identity meta menu';
 }
 
+.node-overview-head_with-capacity:not(.node-overview-head_local) {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) minmax(210px, 0.42fr) auto;
+  grid-template-areas:
+    'symbol identity capacity menu'
+    'symbol identity meta menu';
+  align-items: stretch;
+  gap: var(--space-3) var(--space-4);
+}
+
+.node-overview-head_with-capacity:not(.node-overview-head_local).has-select {
+  grid-template-columns: auto 40px minmax(0, 1fr) minmax(210px, 0.42fr) auto;
+  grid-template-areas:
+    'select symbol identity capacity menu'
+    'select symbol identity meta menu';
+}
+
+.node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-symbol {
+  grid-area: symbol;
+}
+
+.node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-select {
+  grid-area: select;
+  align-self: start;
+}
+
+.node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-identity {
+  grid-area: identity;
+}
+
+.node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-meta-control {
+  display: grid;
+  min-width: 0;
+  grid-area: meta;
+  align-content: start;
+}
+
+.node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-meta {
+  margin: 0;
+}
+
+.node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-menu-button {
+  grid-area: menu;
+  align-self: start;
+}
+
 .node-overview-head_local .node-overview-select {
   grid-area: select;
   align-self: start;
@@ -184,15 +230,19 @@
   grid-area: meta;
 }
 
-.node-overview-head_local .node-overview-task-capacity {
+.node-overview-task-capacity {
   display: grid;
   min-width: 0;
-  grid-area: capacity;
   align-content: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--surface-container);
+}
+
+.node-overview-head_local .node-overview-task-capacity,
+.node-overview-head_with-capacity:not(.node-overview-head_local) .node-overview-task-capacity {
+  grid-area: capacity;
 }
 
 .node-overview-task-capacity-values {
@@ -665,6 +715,22 @@
       'select capacity capacity'
       'select meta meta'
       'select menu menu';
+  }
+
+  .node-overview-head_with-capacity:not(.node-overview-head_local) {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'symbol identity menu'
+      'capacity capacity capacity'
+      'meta meta meta';
+  }
+
+  .node-overview-head_with-capacity:not(.node-overview-head_local).has-select {
+    grid-template-columns: auto 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'select symbol identity menu'
+      'select capacity capacity capacity'
+      'select meta meta meta';
   }
 
   .node-overview-meta {

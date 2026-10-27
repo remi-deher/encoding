@@ -73,6 +73,7 @@ import { NodeOverviewCardComponent } from './node-overview-card.component';
 import type {
   NodeOverviewLibrary,
   NodeOverviewRoleSwitch,
+  NodeOverviewTaskCapacity,
 } from './node-overview-card.component';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -174,6 +175,7 @@ interface MemberCard {
   readonly roleSwitches: readonly NodeOverviewRoleSwitch[];
   readonly admissionEnabled: boolean | null;
   readonly admissionDisabled: boolean;
+  readonly taskCapacity: NodeOverviewTaskCapacity;
   readonly meta: string;
   readonly sections: readonly ResourceSheetSection[];
   readonly libraries: readonly NodeOverviewLibrary[];
@@ -1369,6 +1371,7 @@ export class NodeCatalogPageComponent {
         roleSwitches: this.memberRoleSwitches(node),
         admissionEnabled: this.admissionEnabledFor(node),
         admissionDisabled: this.admissionBusy().has(node.id),
+        taskCapacity: this.memberTaskCapacity(node),
         meta: `Dernier signal : ${record.lastSignal}`,
         sections: memberNodeOverviewSections(
           node,
@@ -1381,6 +1384,24 @@ export class NodeCatalogPageComponent {
       };
     }),
   );
+  private memberTaskCapacity(node: NodeResponse): NodeOverviewTaskCapacity {
+    const workerEnabled = node.roles.includes('worker');
+    const accepted = this.activityKnown() ? (this.activeTasks()[node.id] ?? 0) : null;
+    const maximum = workerEnabled ? node.maxConcurrentTasks : null;
+    const remaining =
+      workerEnabled && accepted !== null && maximum !== null
+        ? Math.max(0, maximum - accepted)
+        : null;
+    let note = '';
+    if (!workerEnabled) note = 'Fonction Worker désactivée.';
+    else if (accepted === null) note = 'Comptage des tâches indisponible.';
+    else if (nodeLifecycle(node) === 'draining')
+      note = 'Admission suspendue : les places libres ne sont pas attribuées.';
+    else if (nodeLifecycle(node) !== 'online')
+      note = 'Nœud indisponible pour recevoir des tâches.';
+
+    return { accepted, remaining, maximum, note };
+  }
   protected memberRoleSwitches(node: NodeResponse): readonly NodeOverviewRoleSwitch[] {
     if (!this.isAdmin()) return [];
     const requested = node.desiredRoles ?? node.roles;

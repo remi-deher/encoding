@@ -61,6 +61,7 @@ export interface NodeOverviewTaskCapacity {
       <header
         class="node-overview-head"
         [class.node-overview-head_local]="layout() === 'local'"
+        [class.node-overview-head_with-capacity]="taskCapacity() !== null"
         [class.has-select]="selectable()"
       >
         @if (selectable()) {
@@ -191,33 +192,31 @@ export interface NodeOverviewTaskCapacity {
               }
             </div>
           }
-          @if (layout() === 'local') {
-            @if (taskCapacity(); as capacity) {
-              <section
-                class="node-overview-task-capacity"
-                aria-label="Tâches acceptées et places restantes"
-              >
-                <span class="node-overview-control-label">CAPACITÉ DE TRAITEMENT</span>
-                <dl class="node-overview-task-capacity-values">
-                  <div>
-                    <dt>Tâches acceptées</dt>
-                    <dd>{{ capacity.accepted ?? '—' }}</dd>
-                  </div>
-                  <div>
-                    <dt>Places restantes</dt>
-                    <dd>{{ capacity.remaining ?? '—' }}</dd>
-                  </div>
-                </dl>
-                @if (capacity.maximum !== null) {
-                  <span class="node-overview-task-capacity-total">
-                    Sur {{ capacity.maximum }} place(s) simultanée(s)
-                  </span>
-                }
-                @if (capacity.note) {
-                  <span class="node-overview-task-capacity-note">{{ capacity.note }}</span>
-                }
-              </section>
-            }
+          @if (taskCapacity(); as capacity) {
+            <section
+              class="node-overview-task-capacity"
+              aria-label="Tâches acceptées et places restantes"
+            >
+              <span class="node-overview-control-label">CAPACITÉ DE TRAITEMENT</span>
+              <dl class="node-overview-task-capacity-values">
+                <div>
+                  <dt>Tâches acceptées</dt>
+                  <dd>{{ capacity.accepted ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt>Places restantes</dt>
+                  <dd>{{ capacity.remaining ?? '—' }}</dd>
+                </div>
+              </dl>
+              @if (capacity.maximum !== null) {
+                <span class="node-overview-task-capacity-total">
+                  Sur {{ capacity.maximum }} place(s) simultanée(s)
+                </span>
+              }
+              @if (capacity.note) {
+                <span class="node-overview-task-capacity-note">{{ capacity.note }}</span>
+              }
+            </section>
           }
           @if (meta()) {
             <div class="node-overview-meta-control">
