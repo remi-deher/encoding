@@ -19,8 +19,8 @@ internal static partial class Harness
             await tools.CheckedAsync("ffmpeg",["-v","error","-y","-f","lavfi","-i","testsrc=size=128x72:duration=0.4:rate=5","-c:v",failFirst?"ffv1":"mpeg4",source],directory,CancellationToken.None);
             FlowNodeDefinition Condition(string id,int width) => Node(registry,id,"conditions-match",new(){["rules"]=ConditionTree.Serialize(new ConditionGroup("all",[
                 new ConditionRule("video.width","eq",J(width)),new ConditionRule("video.width","eq",J(128),Scope:"source")]))});
-            var first=Node(registry,"setting1",failFirst?"video-remux-media":"video-resize",failFirst
-                ?new(){["container"]=J("mp4"),["processingMode"]=J("direct")}
+            var first=Node(registry,"setting1",failFirst?"video-transcode":"video-resize",failFirst
+                ?new(){["videoCodec"]=J("hevc"),["processingMode"]=J("direct")}
                 :new(){["width"]=J(64),["height"]=J(36),["processingMode"]=J("direct")});
             var second=Node(registry,"setting2",failFirst?"video-remux-media":"video-resize",failFirst
                 ?new(){["container"]=J("mkv")}
@@ -41,7 +41,7 @@ internal static partial class Harness
             var(id,lease,_)=await EnqueueAsync(flow,bytes);
             using var client=Client(a);
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(45));
-            await Runner("builder",out _).RunAsync(lease,client,deadline.Token);
+            await Runner("builder",out _,failFirst?new FixedProbe():null).RunAsync(lease,client,deadline.Token);
             var result=(await executions.GetAsync(id,CancellationToken.None))!;
             Check(result.State=="succeeded",$"Builder sequence finishes: {result.Detail}");
             Check(artifactDownloads==1,"The source/current identity needs only one verified download, not two HTTP transfers.");

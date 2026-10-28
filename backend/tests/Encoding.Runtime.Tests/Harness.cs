@@ -665,7 +665,8 @@ internal static partial class Harness
         {
             options=NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Node:DataDirectory"]=Path.Combine(directory,name) }).Build());
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
-            return new(options,scanner,new MediaActions(tools,scanner,new Probe()),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),capabilities??new Probe(),NullLogger<RuntimeFlowRunner>.Instance);
+            var probe=capabilities??new Probe();
+            return new(options,scanner,new MediaActions(tools,scanner,probe),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),probe,NullLogger<RuntimeFlowRunner>.Instance);
         }
         public async Task ConflictDuringCheckpointFailsExecutionAsync()
         {

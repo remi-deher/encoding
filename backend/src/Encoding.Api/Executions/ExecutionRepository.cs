@@ -152,7 +152,11 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
             executionState=reader.GetString(1);
         }
         // A partial replicated flow must not make durable step history unreadable.
-        var flowNodes=(flow?.Nodes ?? []).ToDictionary(node=>node.Id,StringComparer.Ordinal);
+        // Reconciliation can expose malformed or partially projected historical definitions. Keep the
+        // diagnostic endpoint readable even if duplicate node IDs are present: the first serialized
+        // occurrence is the deterministic descriptor for that ID, and the durable step row remains authoritative.
+        var flowNodes=(flow?.Nodes ?? []).GroupBy(node=>node.Id,StringComparer.Ordinal)
+            .ToDictionary(group=>group.Key,group=>group.First(),StringComparer.Ordinal);
         await using var cmd=dataSource.CreateCommand("""
           SELECT s.node_id,s.invocation_id,s.started_at,s.completed_at,s.checkpoint::text,s.command_logs::text
           FROM execution_steps s WHERE s.execution_id=@id ORDER BY s.started_at,s.node_id
