@@ -150,6 +150,37 @@ internal static partial class Harness
         /// <summary>Service de reprise complet (règles d'éligibilité et de présence), comme en production.</summary>
         private RuntimeRecoveryService FullRecovery()=>new(db,NullLogger<RuntimeRecoveryService>.Instance,new NodeGroupRepository(db),eligibility,new NodePresenceOptions(TimeSpan.FromHours(1)));
 
+        /// <summary>ADR 0024 : une exécution neuve qu'aucun nœud ne pourra jamais faire échoue tôt et explicitement ; une exécution possible reste en file.</summary>
+        public async Task FreshExecutionWithoutAnyCapableNodeFailsEarlyAsync()
+        {
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            await ResetNodesAsync();
+            async Task<Guid> QueueAsync(FlowDefinition flow)
+            {
+                var library=Guid.NewGuid(); var id=Guid.NewGuid();
+                await using(var command=db.CreateCommand("""
+                    INSERT INTO libraries(id,name) VALUES(@library,@name);
+                    INSERT INTO library_node_accesses(library_id,node_id,mode,local_path,can_read,can_write) VALUES(@library,@a,'direct',@root,true,true);
+                    """))
+                {
+                    command.Parameters.AddWithValue("library",library); command.Parameters.AddWithValue("name",library.ToString());
+                    command.Parameters.AddWithValue("root",directory); command.Parameters.AddWithValue("a",a);
+                    await command.ExecuteNonQueryAsync();
+                }
+                Check(await runtime.EnqueueAsync(new(id,library,"source.mkv",flow.Id,flow.Version),flow,CancellationToken.None),"Enqueue fixture.");
+                await using var aged=db.CreateCommand("UPDATE executions SET queued_at=clock_timestamp()-interval '10 minutes' WHERE id=@id");
+                aged.Parameters.AddWithValue("id",id); await aged.ExecuteNonQueryAsync();
+                return id;
+            }
+            var impossible=await QueueAsync(Chain(Node(registry,"entry","base-input-file"),Node(registry,"need","nodes-require-capability",new(){["toolId"]=J("outil-introuvable")}),Node(registry,"end","base-complete-flow")));
+            var possible=await QueueAsync(Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow")));
+            await FullRecovery().ProcessOnceAsync(CancellationToken.None);
+            var failed=await executions.GetAsync(impossible,CancellationToken.None);
+            Check(failed!.State=="failed","Une exécution qu'aucun nœud ne peut faire échoue tôt.");
+            Check((await executions.GetAsync(possible,CancellationToken.None))!.State=="queued","Une exécution possible reste en file.");
+            Check(await executions.CancelAsync(possible,CancellationToken.None),"Nettoyage.");
+        }
+
         public async Task WorkerLossFailoverAsync()
         {
             await ResetNodesAsync();
@@ -297,7 +328,7 @@ internal static partial class Harness
             await RecoverCancellationAsync(id);
 
             var resumedId=await executions.ResumeAsync(id,CancellationToken.None)??throw new InvalidOperationException("A cancelled execution must create a fresh resumed attempt.");
-            var resumed=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("A worker must claim the resumed attempt.");
+            var resumed=await runtime.ClaimAsync(a,CancellationToken.None)??throw new InvalidOperationException("A worker must claim the resumed attempt.");
             Check(resumed.ExecutionId==resumedId && resumed.ExecutionId!=id && resumed.Attempt==lease.Attempt+1,"Resume creates a new execution and increments the attempt.");
             Check(resumed.Checkpoint is null && resumed.EntryNodeId=="entry","Resume starts over from the original source and flow entry.");
             Check(await ScalarAsync<Guid>("SELECT retry_of FROM executions WHERE id=@id",("id",resumedId))==id,"The resumed attempt links back to the interrupted execution.");

@@ -551,6 +551,35 @@ internal static partial class Harness
             var aClaim = await runtime.ClaimAsync(a, CancellationToken.None);
             Check(aClaim is not null && aClaim.ExecutionId == id, "Worker A (direct access) claims the segment requiring direct access.");
         }
+        /// <summary>ADR 0024 : sans bloc de placement, le worker à accès direct fait le travail ; un worker par transfert n'intervient que si aucun worker direct n'en est capable.</summary>
+        public async Task DefaultPlacementPrefersCapableDirectWorkerAsync()
+        {
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            await ResetNodesAsync();
+            var library = Guid.NewGuid(); var id = Guid.NewGuid();
+            await using(var command = db.CreateCommand("""
+                INSERT INTO libraries(id,name) VALUES(@library,@name);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,local_path,can_read,can_write)
+                  VALUES(@library,@a,'direct',@root,true,true);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,can_read,can_write,transfer_source_node_id)
+                  VALUES(@library,@b,'transfer',true,true,@a);
+                """))
+            {
+                command.Parameters.AddWithValue("library", library); command.Parameters.AddWithValue("name", library.ToString());
+                command.Parameters.AddWithValue("root", directory); command.Parameters.AddWithValue("a", a); command.Parameters.AddWithValue("b", b);
+                await command.ExecuteNonQueryAsync();
+            }
+            var flow = Chain(Node(registry, "entry", "base-input-file"), Node(registry, "end", "base-complete-flow"));
+            Check(await runtime.EnqueueAsync(new(id, library, "source.mkv", flow.Id, flow.Version), flow, CancellationToken.None), "Enqueue fixture.");
+            Check(await runtime.ClaimAsync(b, CancellationToken.None) is null, "Le worker par transfert laisse la main au worker direct capable.");
+            // Le worker direct perd ses capacités : le worker par transfert prend alors le relais, sans attente indéfinie.
+            await using(var strip = db.CreateCommand("UPDATE cluster_nodes SET capabilities='[]'::jsonb WHERE id=@a")) { strip.Parameters.AddWithValue("a", a); await strip.ExecuteNonQueryAsync(); }
+            var claim = await runtime.ClaimAsync(b, CancellationToken.None);
+            await ResetNodesAsync();
+            await using(var restore = db.CreateCommand("UPDATE cluster_nodes SET capabilities=@caps WHERE id=@a"))
+            { restore.Parameters.AddWithValue("a", a); restore.Parameters.AddWithValue("caps", SqlKind.Json, JsonSerializer.Serialize(Capabilities(true), Json)); await restore.ExecuteNonQueryAsync(); }
+            Check(claim is not null && claim.ExecutionId == id, "Sans worker direct capable, le worker par transfert réclame.");
+        }
         public async Task ConcurrentRelayAsync()
         {
             var(id,lease,context)=await EnqueueAsync(RelayFlow("eligible"));

@@ -9,6 +9,8 @@ public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, l
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
     RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false, bool VerifyPublicationAccess=false, bool VerifyReplacementAccess=false);
 public sealed record RuntimeFence(long Epoch, IReadOnlyList<RuntimeStepCommand>? Commands = null);
+/// <summary>Métadonnées d'origine publiées dès que le worker a sondé la source, sans attendre la fin d'une étape.</summary>
+public sealed record ReportSourceMetadata(long Epoch, JsonElement Metadata);
 public sealed record RuntimeAiSubtitleItem(string Id, string Text);
 public sealed record RuntimeAiSubtitleTranslationRequest(long Epoch, Guid InvocationId, string FlowNodeId,
     int BatchIndex, IReadOnlyList<RuntimeAiSubtitleItem> Items);

@@ -338,7 +338,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await AddEvent(c, tx, id, update.EventId, revision, update.State, update.Detail, ct); return true;
     }
     private static readonly HashSet<string> AllowedStates = ["running", "succeeded", "failed", "cancelled", "deferred"];
-    private static async Task AddEvent(DbConnection c, DbTransaction tx, Guid id, Guid eventId, int revision, string state, string detail, CancellationToken ct)
+    internal static async Task AddEvent(DbConnection c, DbTransaction tx, Guid id, Guid eventId, int revision, string state, string detail, CancellationToken ct)
     {
         await using var cmd = Sql.Command("INSERT INTO execution_events(id,execution_id,revision,state,detail) VALUES(@event,@id,@revision,@state,@detail)", c, tx);
         cmd.Parameters.AddWithValue("event", eventId); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("revision", revision); cmd.Parameters.AddWithValue("state", state); cmd.Parameters.AddWithValue("detail", detail); await cmd.ExecuteNonQueryAsync(ct);
