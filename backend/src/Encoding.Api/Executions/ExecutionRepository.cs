@@ -130,6 +130,15 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         while (await r.ReadAsync(ct)) list.Add(new(r.GetGuid(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetFieldValue<DateTimeOffset>(4)));
         return list;
     }
+    public async Task<FlowDefinition?> FlowAsync(Guid id, CancellationToken ct)
+    {
+        await using var cmd = dataSource.CreateCommand("SELECT flow_definition::text FROM executions WHERE id = @id");
+        cmd.Parameters.AddWithValue("id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct) || reader.IsDBNull(0)) return null;
+        return JsonSerializer.Deserialize<FlowDefinition>(reader.GetString(0), Json);
+    }
+
     public async Task<IReadOnlyList<ExecutionPipelineStepResponse>> PipelineAsync(Guid id,CancellationToken ct)
     {
         FlowDefinition flow;

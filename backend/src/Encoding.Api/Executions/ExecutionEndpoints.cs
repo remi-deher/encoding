@@ -119,6 +119,12 @@ public static class ExecutionEndpoints
                 : Results.Ok(await repository.PipelineAsync(id, ct)))
             .WithName("GetExecutionPipeline");
 
+        executions.MapGet("/{id:guid}/flow", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
+        {
+            var flow = await repository.FlowAsync(id, ct);
+            return flow is null ? ApiProblem.NotFound() : Results.Ok(flow);
+        }).WithName("GetExecutionFlow");
+
         executions.MapPost("", () => ApiProblem.Gone("Lancez les traitements depuis les fichiers détectés de la bibliothèque."))
             .WithName("CreateExecutionDeprecated");
 

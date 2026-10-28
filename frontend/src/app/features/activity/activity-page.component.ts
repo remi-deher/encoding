@@ -1,3 +1,7 @@
+import { ActivityExecutionSummaryComponent } from './components/activity-execution-summary.component';
+import { ActivityFlowTraceComponent } from './components/activity-flow-trace.component';
+import { ActivityMetadataViewerComponent } from './components/activity-metadata-viewer.component';
+import { ExecutionPipelineStep } from '../../shared/models/execution';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -137,6 +141,9 @@ function baseName(path: string): string {
     SubnavTemplateComponent,
     StatusBadgeComponent,
     DataTableComponent,
+    ActivityExecutionSummaryComponent,
+    ActivityFlowTraceComponent,
+    ActivityMetadataViewerComponent,
   ],
   templateUrl: './activity-page.component.html',
   styleUrl: './activity-page.component.scss',
@@ -300,6 +307,7 @@ export class ActivityPageComponent {
     initialValue: { message: '', steps: [] },
   });
 
+  protected readonly drawerHeaderActions = viewChild<TemplateRef<unknown>>('detailHeaderActions');
   protected readonly drawerContent = viewChild<TemplateRef<unknown>>('detailContent');
   protected readonly drawerFooter = viewChild<TemplateRef<unknown>>('detailFooter');
   protected readonly drawerTitle = computed(() => {
@@ -765,6 +773,112 @@ export class ActivityPageComponent {
         .retry(id)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({ next: succeed, error: fail });
+  }
+
+  protected downloadExecutionLog(): void {
+    const execution = this.selectedExecution();
+    if (!execution) return;
+    const steps = this.pipelineState().steps;
+    const content = this.serializeExecutionLogs(execution, steps);
+    const fileName =
+      'execution-' +
+      execution.id.slice(0, 8) +
+      '-' +
+      baseName(execution.media).replace(/[^a-zA-Z0-9._-]/g, '_') +
+      '.log';
+    this.downloads.save(new Blob([content], { type: 'text/plain;charset=utf-8' }), fileName);
+    this.notifications.show('Journal de traitement téléchargé.');
+  }
+
+  private executionDuration(execution: ExecutionResponse): string {
+    if (!execution.startedAt) return '—';
+    const end = execution.finishedAt ? Date.parse(execution.finishedAt) : Date.now();
+    const elapsed = Math.max(0, end - Date.parse(execution.startedAt));
+    const seconds = Math.floor(elapsed / 1000);
+    if (seconds < 60) return seconds + ' s';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return minutes + ' min ' + remainingSeconds + ' s';
+  }
+
+  private stepDuration(step: ExecutionPipelineStep): string {
+    if (!step.startedAt) return '—';
+    const end = step.completedAt ? Date.parse(step.completedAt) : Date.now();
+    const elapsed = Math.max(0, end - Date.parse(step.startedAt));
+    if (elapsed < 1000) return elapsed + ' ms';
+    const seconds = Math.floor(elapsed / 1000);
+    return seconds + ' s';
+  }
+
+  private serializeExecutionLogs(
+    execution: ExecutionResponse,
+    steps: readonly ExecutionPipelineStep[],
+  ): string {
+    const lines: string[] = [
+      '================================================================================',
+      "Encoding — Journal d'exécution",
+      '================================================================================',
+      'Identifiant : ' + execution.id,
+      'Fichier     : ' + execution.media,
+      'Bibliothèque: ' + execution.library,
+      'Flow        : ' + execution.flow + ' (v' + execution.flowVersion + ')',
+      'Worker      : ' + (execution.node ?? '—'),
+      'État        : ' + executionStateLabel(execution),
+      'Progression : ' + (execution.progress != null ? execution.progress + '%' : '—'),
+      'Démarré     : ' + (execution.startedAt ? formatFullDateTime(execution.startedAt) : '—'),
+      'Terminé     : ' + (execution.finishedAt ? formatFullDateTime(execution.finishedAt) : '—'),
+      'Durée       : ' + this.executionDuration(execution),
+      'Sortie      : ' + (execution.publishedPath ?? '—'),
+      '================================================================================\n',
+    ];
+
+    if (steps.length === 0) {
+      lines.push('Aucune étape de pipeline enregistrée.');
+    } else {
+      steps.forEach((step, index) => {
+        lines.push(
+          '--------------------------------------------------------------------------------',
+        );
+        lines.push(
+          'Étape #' +
+            (index + 1) +
+            ' : ' +
+            (step.nodeName || step.nodeId) +
+            ' (' +
+            step.nodeId +
+            ')',
+        );
+        lines.push('Type        : ' + step.componentKind);
+        lines.push('Statut      : ' + step.status);
+        lines.push('Durée       : ' + this.stepDuration(step));
+        if (step.outputLabel) lines.push('Sortie      : ' + step.outputLabel);
+        if (step.nextNodeId) lines.push('Bloc suivant: ' + step.nextNodeId);
+        if (step.diagnostic)
+          lines.push('Diagnostic  : [' + step.diagnostic.code + '] ' + step.diagnostic.message);
+        lines.push(
+          '--------------------------------------------------------------------------------',
+        );
+        if (step.commands.length === 0) {
+          lines.push('Aucune commande système enregistrée.\n');
+        } else {
+          for (const cmd of step.commands) {
+            lines.push('> ' + cmd.command);
+            lines.push('  Sortie : code ' + (cmd.exitCode ?? '—'));
+            if (cmd.standardOutput) {
+              lines.push('  --- stdout ---');
+              lines.push(cmd.standardOutput);
+            }
+            if (cmd.standardError) {
+              lines.push('  --- stderr ---');
+              lines.push(cmd.standardError);
+            }
+            lines.push('');
+          }
+        }
+      });
+    }
+
+    return lines.join('\n');
   }
 
   protected metadataSize(metadata: ExecutionResponse['beforeMetadata'] | undefined): string {

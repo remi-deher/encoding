@@ -397,3 +397,38 @@ path {
     cursor: default;
   }
 }
+
+.canvas-node.canvas-node-dimmed {
+  opacity: 0.35;
+  filter: grayscale(40%);
+}
+
+.canvas-node.canvas-node-executed {
+  box-shadow:
+    0 0 0 2px var(--accent-strong),
+    var(--elevation-2);
+}
+
+.wire.wire-active {
+  stroke: var(--accent-strong);
+  stroke-width: 3.5;
+  opacity: 1;
+}
+
+.canvas-execution-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+  margin-top: 2px;
+}
+
+.exec-duration {
+  font-weight: 700;
+}
+
+.exec-output {
+  color: var(--text-secondary);
+}

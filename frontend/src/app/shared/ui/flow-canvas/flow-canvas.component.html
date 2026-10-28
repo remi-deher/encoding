@@ -56,13 +56,17 @@
             <path
               class="wire"
               [class.highlighted]="
-                selectedNodeId() === edge.sourceNodeId || selectedNodeId() === edge.targetNodeId
+                selectedNodeId() === edge.sourceNodeId ||
+                selectedNodeId() === edge.targetNodeId ||
+                (executedConnectionIds()?.has(edge.id) ?? false)
               "
               [class.muted]="
-                selectedNodeId() &&
-                selectedNodeId() !== edge.sourceNodeId &&
-                selectedNodeId() !== edge.targetNodeId
+                (selectedNodeId() &&
+                  selectedNodeId() !== edge.sourceNodeId &&
+                  selectedNodeId() !== edge.targetNodeId) ||
+                (executedConnectionIds() !== null && !executedConnectionIds()!.has(edge.id))
               "
+              [class.wire-active]="executedConnectionIds()?.has(edge.id) ?? false"
               [attr.d]="path(edge)"
             />
             <path
@@ -88,6 +92,10 @@
           draggable="false"
           [class.selected]="selectedNodeId() === node.id"
           [class.dragging]="liveDrag()?.id === node.id"
+          [class.canvas-node-executed]="executedNodeIds()?.has(node.id) ?? false"
+          [class.canvas-node-dimmed]="
+            executedNodeIds() !== null && !executedNodeIds()!.has(node.id)
+          "
           [attr.data-node-id]="node.id"
           [style.left.px]="dragPosition(node).x"
           [style.top.px]="dragPosition(node).y"
@@ -135,6 +143,16 @@
               <span class="canvas-plugin"
                 >{{ node.component.pluginName }} · {{ kindLabels[node.component.kind] }}</span
               >
+              @if (nodeExecutionDetails()?.get(node.id); as execDetail) {
+                <span class="canvas-execution-badge">
+                  @if (execDetail.duration) {
+                    <strong class="exec-duration">{{ execDetail.duration }}</strong>
+                  }
+                  @if (execDetail.output) {
+                    <span class="exec-output">· {{ execDetail.output }}</span>
+                  }
+                </span>
+              }
             </div>
             <app-flow-simulation-status
               [compact]="true"
