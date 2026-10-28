@@ -173,6 +173,7 @@
     [opened]="selectedFile() !== null"
     [modal]="true"
     size="wide"
+    bodyLayout="fill"
     [title]="drawerTitle()"
     [description]="drawerDescription()"
     [content]="drawerContent()"
@@ -211,101 +212,102 @@
 </ng-template>
 
 <ng-template #detailContent>
-  @if (selectedFile()) {
-    <app-detail-field-list [fields]="fileFields()" />
-    @if (executionLoading()) {
-      <p class="detail-empty" role="status">Chargement des options avancées…</p>
-    } @else if (selectedExecution(); as execution) {
-      <mat-tab-group
-        class="detail-tabs"
-        aria-label="Options avancées du fichier"
-        [selectedIndex]="selectedDetailTab()"
-        (selectedIndexChange)="selectedDetailTab.set($event)"
-      >
-        <mat-tab label="Information">
-          <div class="detail-tab">
-            <app-activity-execution-summary
-              [execution]="execution"
-              [file]="selectedFile()"
-              [steps]="pipelineState().steps"
-              [loading]="executionLoading()"
-            />
-          </div>
-        </mat-tab>
-        <mat-tab label="Éléments de Flow exécutés">
-          <div class="detail-tab detail-tab-flow">
-            <app-activity-flow-trace
-              [executionId]="execution.id"
-              [steps]="pipelineState().steps"
-              [executionState]="execution.state"
-            />
-          </div>
-        </mat-tab>
-        <mat-tab label="Métadonnées">
-          <div class="detail-tab">
-            <app-activity-metadata-viewer
-              [beforeMetadata]="execution.beforeMetadata"
-              [afterMetadata]="execution.afterMetadata"
-            />
-          </div>
-        </mat-tab>
-        <mat-tab label="Pipeline">
-          <div class="detail-tab">
+  @if (selectedFile(); as file) {
+    <mat-tab-group
+      class="detail-tabs activity-detail-tabs"
+      aria-label="Options avancées du fichier"
+      [selectedIndex]="selectedDetailTab()"
+      (selectedIndexChange)="selectedDetailTab.set($event)"
+    >
+      <mat-tab label="Information">
+        <div class="detail-tab-pane">
+          <app-activity-execution-summary
+            [execution]="selectedExecution()"
+            [file]="file"
+            [steps]="pipelineState().steps"
+            [loading]="executionLoading()"
+          />
+        </div>
+      </mat-tab>
+      <mat-tab label="Éléments de Flow exécutés">
+        <div class="detail-tab-pane detail-tab-pane-flow">
+          <app-activity-flow-trace
+            [executionId]="file.executionId"
+            [steps]="pipelineState().steps"
+            [executionState]="selectedExecution()?.state ?? file.executionState"
+          />
+        </div>
+      </mat-tab>
+      <mat-tab label="Métadonnées">
+        <div class="detail-tab-pane">
+          <app-activity-metadata-viewer
+            [beforeMetadata]="selectedExecution()?.beforeMetadata"
+            [afterMetadata]="selectedExecution()?.afterMetadata"
+          />
+        </div>
+      </mat-tab>
+      <mat-tab label="Pipeline">
+        <div class="detail-tab-pane">
+          @if (selectedExecution(); as execution) {
             <app-execution-pipeline-logs
               [executionId]="execution.id"
               [phase]="execution.currentPhase ?? null"
               [steps]="pipelineState().steps"
               [feedback]="pipelineState().message"
             />
-          </div>
-        </mat-tab>
-        <mat-tab label="Événements">
-          <div class="detail-tab">
-            <h3>Historique de l’exécution</h3>
-            @if (eventState().message) {
-              <p role="status">{{ eventState().message }}</p>
-            }
+          } @else if (executionLoading()) {
+            <p class="detail-empty" role="status">Chargement des données du pipeline…</p>
+          } @else {
+            <p class="detail-empty">Aucune exécution enregistrée pour ce fichier.</p>
+          }
+        </div>
+      </mat-tab>
+      <mat-tab label="Événements">
+        <div class="detail-tab-pane">
+          <h3>Historique de l’exécution</h3>
+          @if (eventState().message) {
+            <p role="status">{{ eventState().message }}</p>
+          }
+          <app-data-table
+            [columns]="eventColumns"
+            [rows]="eventState().rows"
+            emptyMessage="Aucun événement enregistré."
+          />
+        </div>
+      </mat-tab>
+      <mat-tab label="Résultats">
+        <div class="detail-tab-pane">
+          @if (artifactsState().message) {
+            <p role="status">{{ artifactsState().message }}</p>
+          }
+          @if (artifactsState().rows.length) {
+            <h3>Fichiers produits</h3>
             <app-data-table
-              [columns]="eventColumns"
-              [rows]="eventState().rows"
-              emptyMessage="Aucun événement enregistré."
+              [columns]="artifactColumns"
+              [rows]="artifactsState().rows"
+              [rowActions]="artifactActions"
+              (rowAction)="downloadArtifact($event.row)"
+              emptyMessage="Aucun fichier produit."
             />
-          </div>
-        </mat-tab>
-        <mat-tab label="Résultats">
-          <div class="detail-tab">
-            @if (artifactsState().message) {
-              <p role="status">{{ artifactsState().message }}</p>
-            }
-            @if (artifactsState().rows.length) {
-              <h3>Fichiers produits</h3>
-              <app-data-table
-                [columns]="artifactColumns"
-                [rows]="artifactsState().rows"
-                [rowActions]="artifactActions"
-                (rowAction)="downloadArtifact($event.row)"
-                emptyMessage="Aucun fichier produit."
-              />
-            }
-            @if (videoEncodingRows().length) {
-              <h3>Configuration vidéo retenue</h3>
-              <app-data-table
-                [columns]="videoEncodingColumns"
-                [rows]="videoEncodingRows()"
-                emptyMessage="Aucun encodeur vidéo résolu pour cette exécution."
-              />
-            }
-            @if (
-              !artifactsState().rows.length &&
-              !artifactsState().message &&
-              !videoEncodingRows().length
-            ) {
-              <p class="detail-empty">Aucun fichier ou réglage vidéo enregistré.</p>
-            }
-          </div>
-        </mat-tab>
-      </mat-tab-group>
-    }
+          }
+          @if (videoEncodingRows().length) {
+            <h3>Configuration vidéo retenue</h3>
+            <app-data-table
+              [columns]="videoEncodingColumns"
+              [rows]="videoEncodingRows()"
+              emptyMessage="Aucun encodeur vidéo résolu pour cette exécution."
+            />
+          }
+          @if (
+            !artifactsState().rows.length &&
+            !artifactsState().message &&
+            !videoEncodingRows().length
+          ) {
+            <p class="detail-empty">Aucun fichier ou réglage vidéo enregistré.</p>
+          }
+        </div>
+      </mat-tab>
+    </mat-tab-group>
   }
 </ng-template>
 

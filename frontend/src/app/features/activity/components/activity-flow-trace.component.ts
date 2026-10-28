@@ -283,7 +283,7 @@ export class ActivityFlowTraceComponent {
 
   readonly executionId = input<string | null>(null);
   readonly steps = input<readonly ExecutionPipelineStep[]>([]);
-  readonly executionState = input<ExecutionState | null>(null);
+  readonly executionState = input<ExecutionState | string | null>(null);
 
   protected readonly flowDocument = signal<FlowDocument | null>(null);
   protected readonly catalog = signal<readonly FlowPluginCatalog[]>([]);
