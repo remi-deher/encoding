@@ -23,6 +23,7 @@ import {
   ExecutionResponse,
   ExecutionState,
 } from '../models/execution';
+import { FlowDocument } from '../models/flow-validation';
 
 export interface ExecutionTrackingState {
   readonly status: 'loading' | 'ready' | 'error';
@@ -175,6 +176,11 @@ export class ExecutionTracking {
   pipeline(id: string) {
     return this.http.get<readonly ExecutionPipelineStep[]>(
       '/api/v1/executions/' + encodeURIComponent(id) + '/pipeline',
+    );
+  }
+  flow(id: string) {
+    return this.http.get<FlowDocument>(
+      '/api/v1/executions/' + encodeURIComponent(id) + '/flow',
     );
   }
   artifacts(id: string) {

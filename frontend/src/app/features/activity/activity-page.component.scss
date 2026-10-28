@@ -290,3 +290,32 @@ mat-progress-bar {
     transition: none;
   }
 }
+
+.header-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-label);
+  font-weight: 600;
+  color: var(--accent-strong);
+  padding: 0 var(--space-2);
+  height: 36px;
+  border-radius: var(--radius-md);
+
+  app-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover {
+    background: var(--surface-container-highest);
+  }
+}
+
+.detail-tab-flow {
+  height: calc(100vh - 220px);
+  min-height: 520px;
+  padding: var(--space-1) 0;
+  display: flex;
+  flex-direction: column;
+}

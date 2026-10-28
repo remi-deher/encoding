@@ -49,6 +49,11 @@ const ICONS = {
   subtitles:
     'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm2 6h4m2 0h4M7 15h2m3 0h5',
   sell: 'M20 11.5 12.5 4H4v8.5L11.5 20 20 11.5ZM8 8h.01',
+  download: 'M12 3v13m-5-5 5 5 5-5M4 19v2h16v-2',
+  info: 'M12 8h.01M12 12v5M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z',
+  volume: 'M11 5L6 9H2v6h4l5 4V5Zm4.5 3.5a5 5 0 0 1 0 7M19 6a9 9 0 0 1 0 12',
+  document: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6',
+  folder: 'M3 7v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-7l-2-2H5a2 2 0 0 0-2 2Z',
 } as const;
 export type IconName = keyof typeof ICONS;
 @Component({

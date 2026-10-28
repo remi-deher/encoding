@@ -46,7 +46,7 @@ export class ExecutionDetailPolling {
     return {
       events: activeDetails$.pipe(
         switchMap(([id, tab]) =>
-          id && tab === 2
+          id && tab === 4
             ? timer(0, 5000).pipe(
                 exhaustMap(() =>
                   this.tracking.events(id).pipe(
@@ -75,7 +75,7 @@ export class ExecutionDetailPolling {
       ),
       artifacts: activeDetails$.pipe(
         switchMap(([id, tab]) =>
-          id && tab === 3
+          id && tab === 5
             ? timer(0, 5000).pipe(
                 exhaustMap(() =>
                   this.tracking.artifacts(id).pipe(
@@ -98,7 +98,7 @@ export class ExecutionDetailPolling {
       ),
       pipeline: activeDetails$.pipe(
         switchMap(([id, tab]) =>
-          id && tab === 1
+          id && (tab === 0 || tab === 1 || tab === 3)
             ? timer(0, 3000).pipe(
                 exhaustMap(() =>
                   this.tracking.pipeline(id).pipe(
