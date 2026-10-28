@@ -90,7 +90,13 @@ function stepDuration(step: ExecutionPipelineStep): string {
                 <span class="detail-lbl">Statut :</span>
                 <app-status-badge
                   [label]="step.status"
-                  [tone]="step.status === 'completed' ? 'success' : step.status === 'failed' ? 'danger' : 'neutral'"
+                  [tone]="
+                    step.status === 'completed'
+                      ? 'success'
+                      : step.status === 'failed'
+                        ? 'danger'
+                        : 'neutral'
+                  "
                 />
               </div>
               <div class="detail-item">

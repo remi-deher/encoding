@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { formatFileSize } from '../../../shared/models/file-size';
@@ -54,7 +48,9 @@ function parseFps(rate: unknown): string | undefined {
   if (typeof rate !== 'string' || !rate) return undefined;
   if (!rate.includes('/')) {
     const num = parseFloat(rate);
-    return Number.isFinite(num) && num > 0 ? `${num.toFixed(num % 1 === 0 ? 0 : 3)} fps` : undefined;
+    return Number.isFinite(num) && num > 0
+      ? `${num.toFixed(num % 1 === 0 ? 0 : 3)} fps`
+      : undefined;
   }
   const [numStr, denStr] = rate.split('/');
   const num = parseFloat(numStr);
@@ -112,7 +108,10 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
     formatName: typeof rawFormat['format_name'] === 'string' ? rawFormat['format_name'] : undefined,
     size: sizeBytes != null && Number.isFinite(sizeBytes) ? formatFileSize(sizeBytes) : undefined,
     sizeBytes,
-    duration: durationSec != null && Number.isFinite(durationSec) ? formatDurationSeconds(durationSec) : undefined,
+    duration:
+      durationSec != null && Number.isFinite(durationSec)
+        ? formatDurationSeconds(durationSec)
+        : undefined,
     durationSeconds: durationSec,
     bitrate: formatBitrate(rawFormat['bit_rate']),
     encoder:
@@ -200,9 +199,7 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
           <mat-button-toggle value="diff" [disabled]="!canCompare()">
             Comparaison (Diff)
           </mat-button-toggle>
-          <mat-button-toggle value="after" [disabled]="!afterReport()">
-            Finales
-          </mat-button-toggle>
+          <mat-button-toggle value="after" [disabled]="!afterReport()"> Finales </mat-button-toggle>
           <mat-button-toggle value="before" [disabled]="!beforeReport()">
             Originales
           </mat-button-toggle>
@@ -212,9 +209,7 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
       <!-- DIFF VIEW -->
       @if (viewMode() === 'diff') {
         @if (!canCompare()) {
-          <p class="metadata-empty">
-            La comparaison requiert les métadonnées source et finale.
-          </p>
+          <p class="metadata-empty">La comparaison requiert les métadonnées source et finale.</p>
         } @else {
           <div class="diff-container">
             <!-- Global container difference -->
@@ -269,22 +264,32 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
                 <span>Pistes Vidéo ({{ afterReport()!.videos.length }})</span>
               </h4>
               <div class="stream-comparison-list">
-                @for (afterVideo of afterReport()!.videos; track afterVideo.index; let idx = $index) {
+                @for (
+                  afterVideo of afterReport()!.videos;
+                  track afterVideo.index;
+                  let idx = $index
+                ) {
                   @let beforeVideo = beforeReport()!.videos[idx];
                   <div class="stream-diff-card">
                     <div class="stream-diff-header">
                       <span class="stream-num">Piste Vidéo #{{ idx + 1 }}</span>
-                      <span class="stream-badge-codec">{{ afterVideo.codecName.toUpperCase() }}</span>
+                      <span class="stream-badge-codec">{{
+                        afterVideo.codecName.toUpperCase()
+                      }}</span>
                     </div>
                     <div class="stream-diff-body">
                       <div class="diff-prop">
                         <span class="prop-label">Codec & Profil :</span>
                         <span class="prop-val">
                           {{ beforeVideo?.codecName?.toUpperCase() ?? '—' }}
-                          @if (beforeVideo?.profile) { ({{ beforeVideo?.profile }}) }
+                          @if (beforeVideo?.profile) {
+                            ({{ beforeVideo?.profile }})
+                          }
                           →
                           <strong>{{ afterVideo.codecName.toUpperCase() }}</strong>
-                          @if (afterVideo.profile) { ({{ afterVideo.profile }}) }
+                          @if (afterVideo.profile) {
+                            ({{ afterVideo.profile }})
+                          }
                         </span>
                       </div>
                       <div class="diff-prop">
@@ -298,14 +303,17 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
                         <span class="prop-label">Format pixel & Profondeur :</span>
                         <span class="prop-val">
                           {{ beforeVideo?.pixFmt ?? '—' }} ({{ beforeVideo?.bitDepth ?? '—' }}) →
-                          <strong>{{ afterVideo.pixFmt ?? '—' }}</strong> ({{ afterVideo.bitDepth ?? '—' }})
+                          <strong>{{ afterVideo.pixFmt ?? '—' }}</strong> ({{
+                            afterVideo.bitDepth ?? '—'
+                          }})
                         </span>
                       </div>
                       @if (afterVideo.fps || beforeVideo?.fps) {
                         <div class="diff-prop">
                           <span class="prop-label">Images par seconde :</span>
                           <span class="prop-val">
-                            {{ beforeVideo?.fps ?? '—' }} → <strong>{{ afterVideo.fps ?? '—' }}</strong>
+                            {{ beforeVideo?.fps ?? '—' }} →
+                            <strong>{{ afterVideo.fps ?? '—' }}</strong>
                           </span>
                         </div>
                       }
@@ -313,7 +321,8 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
                         <div class="diff-prop">
                           <span class="prop-label">Débit :</span>
                           <span class="prop-val">
-                            {{ beforeVideo?.bitrate ?? '—' }} → <strong>{{ afterVideo.bitrate ?? '—' }}</strong>
+                            {{ beforeVideo?.bitrate ?? '—' }} →
+                            <strong>{{ afterVideo.bitrate ?? '—' }}</strong>
                           </span>
                         </div>
                       }
@@ -327,7 +336,10 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
             <section class="diff-section">
               <h4 class="section-title">
                 <app-icon name="volume" />
-                <span>Pistes Audio ({{ beforeReport()!.audios.length }} → {{ afterReport()!.audios.length }})</span>
+                <span
+                  >Pistes Audio ({{ beforeReport()!.audios.length }} →
+                  {{ afterReport()!.audios.length }})</span
+                >
               </h4>
               <div class="stream-comparison-list">
                 @for (audio of afterReport()!.audios; track audio.index; let idx = $index) {
@@ -351,7 +363,8 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
                       <div class="diff-prop">
                         <span class="prop-label">Canaux :</span>
                         <span class="prop-val">
-                          {{ beforeAudio?.channels ?? '—' }} → <strong>{{ audio.channels ?? '—' }}</strong>
+                          {{ beforeAudio?.channels ?? '—' }} →
+                          <strong>{{ audio.channels ?? '—' }}</strong>
                         </span>
                       </div>
                       @if (audio.sampleRate) {
@@ -557,7 +570,9 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
                 <div class="attachments-grid">
                   @for (att of report.attachments; track att.index) {
                     <div class="attachment-pill">
-                      <span class="att-name">{{ att.filename || att.title || 'Pièce jointe #' + att.index }}</span>
+                      <span class="att-name">{{
+                        att.filename || att.title || 'Pièce jointe #' + att.index
+                      }}</span>
                       @if (att.mimetype) {
                         <span class="att-mime">{{ att.mimetype }}</span>
                       }

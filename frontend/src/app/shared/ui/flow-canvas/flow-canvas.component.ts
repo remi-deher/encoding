@@ -100,7 +100,10 @@ export class FlowCanvasComponent {
   readonly autoLayoutRequest = input(0);
   readonly executedNodeIds = input<ReadonlySet<string> | null>(null);
   readonly executedConnectionIds = input<ReadonlySet<string> | null>(null);
-  readonly nodeExecutionDetails = input<ReadonlyMap<string, { duration?: string; output?: string; status?: string }> | null>(null);
+  readonly nodeExecutionDetails = input<ReadonlyMap<
+    string,
+    { duration?: string; output?: string; status?: string }
+  > | null>(null);
   readonly selectedNodeId = input<string | null>(null);
   readonly selectNode = output<string>();
   readonly configure = output<string>();

@@ -404,7 +404,9 @@ path {
 }
 
 .canvas-node.canvas-node-executed {
-  box-shadow: 0 0 0 2px var(--accent-strong), var(--elevation-2);
+  box-shadow:
+    0 0 0 2px var(--accent-strong),
+    var(--elevation-2);
 }
 
 .wire.wire-active {

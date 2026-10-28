@@ -19,7 +19,9 @@ function parseFps(rate) {
   if (typeof rate !== 'string' || !rate) return undefined;
   if (!rate.includes('/')) {
     const num = parseFloat(rate);
-    return Number.isFinite(num) && num > 0 ? `${num.toFixed(num % 1 === 0 ? 0 : 3)} fps` : undefined;
+    return Number.isFinite(num) && num > 0
+      ? `${num.toFixed(num % 1 === 0 ? 0 : 3)} fps`
+      : undefined;
   }
   const [numStr, denStr] = rate.split('/');
   const num = parseFloat(numStr);

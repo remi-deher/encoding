@@ -93,7 +93,9 @@
           [class.selected]="selectedNodeId() === node.id"
           [class.dragging]="liveDrag()?.id === node.id"
           [class.canvas-node-executed]="executedNodeIds()?.has(node.id) ?? false"
-          [class.canvas-node-dimmed]="executedNodeIds() !== null && !executedNodeIds()!.has(node.id)"
+          [class.canvas-node-dimmed]="
+            executedNodeIds() !== null && !executedNodeIds()!.has(node.id)
+          "
           [attr.data-node-id]="node.id"
           [style.left.px]="dragPosition(node).x"
           [style.top.px]="dragPosition(node).y"

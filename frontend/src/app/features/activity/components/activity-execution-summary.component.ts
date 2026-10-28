@@ -1,14 +1,12 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  input,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { ExecutionResponse, ExecutionPipelineStep, executionStateLabel } from '../../../shared/models/execution';
+import {
+  ExecutionResponse,
+  ExecutionPipelineStep,
+  executionStateLabel,
+} from '../../../shared/models/execution';
 import { LibraryActivityFile } from '../../../shared/models/library-activity';
 import { formatFileSize } from '../../../shared/models/file-size';
 import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component';
@@ -62,13 +60,7 @@ function stepDuration(step: ExecutionPipelineStep): string {
   selector: 'app-activity-execution-summary',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    CommonModule,
-    MatButtonModule,
-    MatTooltipModule,
-    StatusBadgeComponent,
-    IconComponent,
-  ],
+  imports: [CommonModule, MatButtonModule, MatTooltipModule, StatusBadgeComponent, IconComponent],
   template: `
     <div class="summary-container">
       @if (loading()) {
@@ -234,7 +226,11 @@ function stepDuration(step: ExecutionPipelineStep): string {
                   </tr>
                 </thead>
                 <tbody>
-                  @for (step of steps(); track step.invocationId || step.nodeId + $index; let idx = $index) {
+                  @for (
+                    step of steps();
+                    track step.invocationId || step.nodeId + $index;
+                    let idx = $index
+                  ) {
                     <tr [class.is-failed]="step.status === 'failed'">
                       <td class="col-num">{{ idx + 1 }}</td>
                       <td class="col-node">

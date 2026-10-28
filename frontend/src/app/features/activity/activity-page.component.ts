@@ -780,7 +780,12 @@ export class ActivityPageComponent {
     if (!execution) return;
     const steps = this.pipelineState().steps;
     const content = this.serializeExecutionLogs(execution, steps);
-    const fileName = 'execution-' + execution.id.slice(0, 8) + '-' + baseName(execution.media).replace(/[^a-zA-Z0-9._-]/g, '_') + '.log';
+    const fileName =
+      'execution-' +
+      execution.id.slice(0, 8) +
+      '-' +
+      baseName(execution.media).replace(/[^a-zA-Z0-9._-]/g, '_') +
+      '.log';
     this.downloads.save(new Blob([content], { type: 'text/plain;charset=utf-8' }), fileName);
     this.notifications.show('Journal de traitement téléchargé.');
   }
@@ -831,15 +836,28 @@ export class ActivityPageComponent {
       lines.push('Aucune étape de pipeline enregistrée.');
     } else {
       steps.forEach((step, index) => {
-        lines.push('--------------------------------------------------------------------------------');
-        lines.push('Étape #' + (index + 1) + ' : ' + (step.nodeName || step.nodeId) + ' (' + step.nodeId + ')');
+        lines.push(
+          '--------------------------------------------------------------------------------',
+        );
+        lines.push(
+          'Étape #' +
+            (index + 1) +
+            ' : ' +
+            (step.nodeName || step.nodeId) +
+            ' (' +
+            step.nodeId +
+            ')',
+        );
         lines.push('Type        : ' + step.componentKind);
         lines.push('Statut      : ' + step.status);
         lines.push('Durée       : ' + this.stepDuration(step));
         if (step.outputLabel) lines.push('Sortie      : ' + step.outputLabel);
         if (step.nextNodeId) lines.push('Bloc suivant: ' + step.nextNodeId);
-        if (step.diagnostic) lines.push('Diagnostic  : [' + step.diagnostic.code + '] ' + step.diagnostic.message);
-        lines.push('--------------------------------------------------------------------------------');
+        if (step.diagnostic)
+          lines.push('Diagnostic  : [' + step.diagnostic.code + '] ' + step.diagnostic.message);
+        lines.push(
+          '--------------------------------------------------------------------------------',
+        );
         if (step.commands.length === 0) {
           lines.push('Aucune commande système enregistrée.\n');
         } else {
