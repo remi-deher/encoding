@@ -622,8 +622,11 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             var snapshot=await settings.ExecuteScalarAsync(ct) as byte[];
             try { handoff=RuntimeHandoffPolicy.Resolve(node,snapshot is null?null:pluginConfigurations.ReadSnapshot(snapshot).GetValueOrDefault("nodes")); }
             catch(ArgumentException) { return false; }
-            if(handoff.Mode=="server" && (ownership is null || ownership.IsLocalPeer(handoff.TargetNodeId!.Value))) return false;
+            if(handoff.Mode=="server" && ownership is null) return false;
             if(cp.Handoff!=handoff || cp.NextNodeId is null || handoff.Mode=="node" && handoff.TargetNodeId==worker) return false;
+            // Le serveur visé est déjà le propriétaire : il n'y a rien à céder entre serveurs, seul le worker change.
+            // Le relais devient un relais vers un autre worker éligible de ce serveur (qui porte l'accès direct, par exemple).
+            if(handoff.Mode=="server" && ownership!.IsLocalPeer(handoff.TargetNodeId!.Value)) handoff=new("eligible");
         }
         else if(cp.Handoff is not null) return false;
         RuntimeWait? wait=null;
