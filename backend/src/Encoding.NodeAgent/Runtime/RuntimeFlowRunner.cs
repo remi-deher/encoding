@@ -85,17 +85,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     current=Path.Combine(directory,"current"+context.Extension);
                     context=context with { CurrentSha256=sourceSha,DirectSource=null };
                 }
-                var localSource = lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null
-                    ? SafeMediaPaths.Resolve(lease.SourceRoot, lease.MediaPath) : null;
-                if (localSource is not null && File.Exists(localSource))
-                {
-                    if (!File.Exists(original))
-                        await SafeMediaPaths.CopyVerifiedAsync(localSource, original, sourceSha!, job.Token);
-                }
-                else
-                {
-                    await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
-                }
+                await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
                 if(context.CurrentSha256==sourceSha)
                     await SafeMediaPaths.CopyVerifiedAsync(original,current,sourceSha!,job.Token);
                 else await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
