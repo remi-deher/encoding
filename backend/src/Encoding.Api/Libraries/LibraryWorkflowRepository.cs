@@ -251,7 +251,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     }
 
     /// <summary>
-    /// Un serveur ne met en file automatiquement que ce qu'il peut servir : si au moins un nœud monte la bibliothèque en direct,
+    /// Un serveur ne met en file automatiquement que ce qu'il peut servir : si au moins un nœud serveur monte la bibliothèque en direct,
     /// le nœud de ce serveur doit en faire partie. Sinon l'exécution naîtrait chez un propriétaire sans accès à la source et resterait
     /// en file, alors qu'un autre serveur, qui détient l'accès direct, la met déjà en file. Sans accès direct nulle part, tout serveur peut le faire.
     /// </summary>
@@ -259,7 +259,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     {
         if(localNode?.NodeId is not {} node) return true;
         await using var access=Sql.Command("""
-          SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id AND n.deleted_at IS NULL
+          SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id AND n.deleted_at IS NULL AND 'server'=ANY(n.roles)
                         WHERE a.library_id=@library AND a.mode='direct' AND a.is_enabled AND a.can_read),
                  EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=@library AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read)
           """,c,tx);
