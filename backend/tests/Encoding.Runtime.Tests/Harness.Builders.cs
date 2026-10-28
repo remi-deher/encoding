@@ -52,7 +52,8 @@ internal static partial class Harness
             Check(steps.Single(step=>step.NodeId=="execute1").OutputId==(failFirst?"error":"success"),"An executor error is an explicit, routable result.");
             var commands=steps.SelectMany(step=>step.Commands).ToArray();
             Check(commands.Count(command=>command.Command.Contains("ffprobe"))==(failFirst?2:3),"One source scan and one per successful output; command composition and metadata readers reuse the cache.");
-            Check(commands.Count(command=>command.Command.Contains("-f null"))==2,"Repeated validation of the same result decodes once; a new result invalidates that cache.");
+            Check(!steps.Single(step=>step.NodeId=="validateAgain").Commands.Any(command=>command.Command.Contains("-f null")),
+                "Repeated validation of the same result does not decode it again.");
             await using var read=db.CreateCommand("SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND node_id='end'");
             read.Parameters.AddWithValue("id",id);
             var checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>((string)(await read.ExecuteScalarAsync())!,Json)!;

@@ -36,4 +36,56 @@ public sealed class MediaDecodeValidationTests
         }
         finally { Directory.Delete(directory, true); }
     }
+
+    [MediaToolsFact]
+    public async Task CopiedVideoSelectiveDecodeSucceedsAndDecodesAudioInFull()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "encoding-selective-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var tools = new ProcessToolRunner();
+            var scanner = new MediaScanner(tools);
+            var mkv = Path.Combine(directory, "media.mkv");
+            await tools.CheckedAsync("ffmpeg", [
+                "-v", "error", "-y",
+                "-f", "lavfi", "-i", "testsrc=duration=6:size=128x72:rate=25",
+                "-f", "lavfi", "-i", "sine=frequency=1000:duration=6",
+                "-c:v", "libx264", "-c:a", "aac",
+                mkv
+            ], directory, CancellationToken.None);
+
+            await scanner.DecodeAsync(mkv, "video", CancellationToken.None, decodeVideo: false, duration: 6.0);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [MediaToolsFact]
+    public async Task CopiedVideoSelectiveDecodeDetectsAudioCorruption()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "encoding-selective-audio-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var tools = new ProcessToolRunner();
+            var scanner = new MediaScanner(tools);
+            var mkv = Path.Combine(directory, "media.mkv");
+            await tools.CheckedAsync("ffmpeg", [
+                "-v", "error", "-y",
+                "-f", "lavfi", "-i", "testsrc=duration=6:size=128x72:rate=25",
+                "-f", "lavfi", "-i", "sine=frequency=1000:duration=6",
+                "-c:v", "libx264", "-c:a", "aac",
+                mkv
+            ], directory, CancellationToken.None);
+
+            var corrupted = Path.Combine(directory, "corrupted.mkv");
+            var bytes = await File.ReadAllBytesAsync(mkv);
+            for (var index = bytes.Length / 2; index < bytes.Length / 2 + 500; index++) bytes[index] ^= 0xAA;
+            await File.WriteAllBytesAsync(corrupted, bytes);
+
+            await Assert.ThrowsAsync<MediaToolException>(() =>
+                scanner.DecodeAsync(corrupted, "video", CancellationToken.None, decodeVideo: false, duration: 6.0));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
 }

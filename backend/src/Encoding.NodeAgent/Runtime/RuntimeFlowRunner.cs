@@ -141,10 +141,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             async Task EnsureDecodedAsync()
             {
                 await EnsureFilesAsync();
-                if(await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256)
+                if(currentStamp?.Matches(current) != true && await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256)
                     throw new IOException("Le résultat a changé depuis sa validation ; publication refusée.");
                 if(decodedSha==context.CurrentSha256) return;
-                await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token);
+                var hasVideoEncoding = context.VideoEncodings is { Count: > 0 };
+                var duration = context.CurrentMetadata is { } meta && meta.TryGetProperty("format", out var fmt)
+                    && fmt.TryGetProperty("duration", out var dProp) && double.TryParse(dProp.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var dVal) ? dVal : (double?)null;
+                await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token,decodeVideo:hasVideoEncoding,duration:duration);
                 decodedSha=context.CurrentSha256;
             }
             async Task EnsurePublicationIntegrityAsync()
@@ -491,12 +494,9 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         var outcome=id=="base-assemble-media"
                             ? await actions.AssembleAsync(c,context.CurrentMetadata!.Value,variables.TryGetValue("tracks.origin",out var origin)?origin:null,current,directory,node.Id,job.Token,resourceFolder)
                             : await actions.AddFontsAsync(c,current,directory,node.Id,job.Token,resourceFolder);
+                        if(outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach(var note in added.EnumerateArray()) if(note.GetString() is { Length: > 0 } text) logger.LogInformation(id=="base-assemble-media"?"Assemblage média : {Note}":"{Note}",text);
                         if(outcome.Primary is null) output="unchanged";
-                        else
-                        {
-                            if(outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach(var note in added.EnumerateArray()) logger.LogInformation("Assemblage média : {Note}",note.GetString());
-                            await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
-                        }
+                        else await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                     }
                     else if(id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules")
                     {

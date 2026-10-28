@@ -10,6 +10,12 @@ public sealed record MediaFileStamp(long Bytes, long LastWriteUtcTicks)
         return new(info.Length, info.LastWriteTimeUtc.Ticks);
     }
 
+    public bool Matches(string path)
+    {
+        try { return File.Exists(path) && Read(path) == this; }
+        catch { return false; }
+    }
+
     public void Verify(string path)
     {
         if (Read(path) != this) throw new IOException("Le fichier média a changé pendant son utilisation.");

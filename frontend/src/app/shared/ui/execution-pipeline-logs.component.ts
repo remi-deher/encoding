@@ -107,6 +107,9 @@ import { NotificationService } from '../services/notification.service';
                               } @else {
                                 Code de sortie : {{ command.exitCode }}
                               }
+                              @if (commandDuration(command); as dur) {
+                                · {{ dur }}
+                              }
                               @if (
                                 command.progressPercent !== null &&
                                 command.progressPercent !== undefined
@@ -361,6 +364,16 @@ export class ExecutionPipelineLogsComponent {
     );
   }
 
+  protected commandDuration(command: RuntimeCommandLog): string | null {
+    if (!command.finishedAt) return null;
+    const elapsed = Math.max(0, Date.parse(command.finishedAt) - Date.parse(command.startedAt));
+    if (elapsed < 1000) return `${elapsed} ms`;
+    const seconds = Math.floor(elapsed / 1000);
+    return seconds >= 60
+      ? `${Math.floor(seconds / 60)} min ${seconds % 60} s`
+      : `${(elapsed / 1000).toFixed(elapsed < 10_000 ? 1 : 0)} s`;
+  }
+
   protected duration(step: ExecutionPipelineStep): string {
     const end = step.completedAt ? Date.parse(step.completedAt) : Date.now();
     const elapsed = Math.max(0, end - Date.parse(step.startedAt));
@@ -424,6 +437,7 @@ export class ExecutionPipelineLogsComponent {
       `$ ${command.command}`,
       `Début : ${new Date(command.startedAt).toLocaleString('fr-FR')}`,
       `Fin : ${command.finishedAt ? new Date(command.finishedAt).toLocaleString('fr-FR') : 'inconnue'}`,
+      `Durée : ${this.commandDuration(command) ?? 'en cours'}`,
       `Résultat : ${status}${command.truncated ? ' (sortie tronquée)' : ''}`,
       command.standardOutput ? `\n--- Sortie standard ---\n${command.standardOutput}` : '',
       command.standardError ? `\n--- Erreur standard ---\n${command.standardError}` : '',
