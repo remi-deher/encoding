@@ -13,7 +13,7 @@ using Encoding.Contracts.Libraries;
 namespace Encoding.Api.Libraries;
 
 public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefinitionValidator validator,NodePresenceOptions presence,
-    ExecutionStreamBroadcaster? broadcaster = null,TaskOwnershipRepository? ownership=null)
+    ExecutionStreamBroadcaster? broadcaster = null,TaskOwnershipRepository? ownership=null,LocalNodeRegistry? localNode=null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     public Task<LibraryWorkflowResponse> GetAsync(Guid library,CancellationToken ct)=>GetAsync(library,null,null,null,ct);
@@ -225,6 +225,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         {
             await using var enabled=Sql.Command("SELECT COALESCE((SELECT watch_enabled FROM library_processing_settings WHERE library_id=@id),true)",c,tx);
             enabled.Parameters.AddWithValue("id",library);if(!(await enabled.ScalarBoolAsync(ct)))return null;
+            if(!await ServesLibraryAutomaticallyAsync(library,c,tx,ct))return null;
         }
         var files=new List<(Guid Id,string Path,long Bytes,DateTimeOffset Modified)>();
         await using(var select=Sql.Command("SELECT m.id,m.relative_path,m.byte_length,m.modified_at FROM library_media m WHERE m.library_id=@library           AND (NOT @automatic AND m.id=ANY(@ids) AND (NOT @skipReceipted OR NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at)) OR @automatic AND m.stable_since<=clock_timestamp()-interval '30 seconds' AND m.modified_at<=clock_timestamp()-interval '30 seconds'           AND NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at) AND NOT EXISTS(SELECT 1 FROM media_replacement_marks k WHERE k.library_id=m.library_id AND k.relative_path=m.relative_path AND k.byte_length=m.byte_length AND k.modified_at=m.modified_at))           ORDER BY m.relative_path LIMIT 10000",c,tx))
@@ -247,6 +248,26 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         await tx.CommitAsync(ct);
         if(queued>0) broadcaster?.Publish();
         return(queued,files.Count-queued);
+    }
+
+    /// <summary>
+    /// Un serveur ne met en file automatiquement que ce qu'il peut servir : si au moins un nœud monte la bibliothèque en direct,
+    /// le nœud de ce serveur doit en faire partie. Sinon l'exécution naîtrait chez un propriétaire sans accès à la source et resterait
+    /// en file, alors qu'un autre serveur, qui détient l'accès direct, la met déjà en file. Sans accès direct nulle part, tout serveur peut le faire.
+    /// </summary>
+    private async Task<bool> ServesLibraryAutomaticallyAsync(Guid library,DbConnection c,DbTransaction tx,CancellationToken ct)
+    {
+        if(localNode?.NodeId is not {} node) return true;
+        await using var access=Sql.Command("""
+          SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id AND n.deleted_at IS NULL
+                        WHERE a.library_id=@library AND a.mode='direct' AND a.is_enabled AND a.can_read),
+                 EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=@library AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read)
+          """,c,tx);
+        access.Parameters.AddWithValue("library",library);access.Parameters.AddWithValue("node",node);
+        await using var r=await access.ExecuteReaderAsync(ct);
+        if(!await r.ReadAsync(ct)) return true;
+        var anyDirect=Convert.ToInt64(r.GetValue(0))!=0;var localDirect=Convert.ToInt64(r.GetValue(1))!=0;
+        return !anyDirect || localDirect;
     }
 
     private static Guid ConfirmedExecutionId(Guid confirmationId, Guid fileId)
