@@ -36,4 +36,19 @@ public sealed class MojibakeTests
         Assert.Equal("é", repaired.Nodes[0].Configuration["list"][0].GetString());
         Assert.Equal(3, repaired.Nodes[0].Configuration["count"].GetInt32());
     }
+
+    [Fact]
+    public void RepairKeepsUnchangedArraysAndNestedObjectsWithoutThrowing()
+    {
+        var config = new Dictionary<string, JsonElement>
+        {
+            ["languages"] = JsonSerializer.SerializeToElement(new[] { "fra", "jpn" }),
+            ["rules"] = JsonSerializer.SerializeToElement(new[] { new { codec = "aac", tags = new[] { "a", "b" } } }),
+        };
+        var flow = new FlowDefinition(1, Guid.NewGuid(), 1, "Flow", "video",
+            [new("n1", null, new("p", "1", "c", "1", 1), config)], []);
+        var repaired = flow.RepairText();
+        Assert.Equal("jpn", repaired.Nodes[0].Configuration["languages"][1].GetString());
+        Assert.Equal("b", repaired.Nodes[0].Configuration["rules"][0].GetProperty("tags")[1].GetString());
+    }
 }

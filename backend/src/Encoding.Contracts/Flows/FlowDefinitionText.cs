@@ -28,6 +28,11 @@ public static class FlowDefinitionText
         return Repair(node) is { } repaired ? JsonSerializer.SerializeToElement(repaired) : element;
     }
 
+    private static void Replace(JsonNode? current, JsonNode? repaired, Action<JsonNode?> assign)
+    {
+        if (!ReferenceEquals(current, repaired)) assign(repaired);
+    }
+
     private static JsonNode? Repair(JsonNode? node)
     {
         switch (node)
@@ -35,10 +40,11 @@ public static class FlowDefinitionText
             case JsonValue value when value.TryGetValue<string>(out var text):
                 return JsonValue.Create(Mojibake.Repair(text));
             case JsonObject obj:
-                foreach (var key in obj.Select(pair => pair.Key).ToList()) obj[key] = Repair(obj[key]);
+                // Réaffecter un nœud objet/tableau déjà rattaché à son parent lève une exception : seul un texte remplacé est réécrit.
+                foreach (var key in obj.Select(pair => pair.Key).ToList()) Replace(obj[key], Repair(obj[key]), repaired => obj[key] = repaired);
                 return obj;
             case JsonArray array:
-                for (var i = 0; i < array.Count; i++) array[i] = Repair(array[i]);
+                for (var i = 0; i < array.Count; i++) { var index = i; Replace(array[index], Repair(array[index]), repaired => array[index] = repaired); }
                 return array;
             default:
                 return node;
