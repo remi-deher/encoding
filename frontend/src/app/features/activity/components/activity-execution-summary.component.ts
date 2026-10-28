@@ -4,7 +4,6 @@ import {
   computed,
   inject,
   input,
-  output,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,7 +11,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ExecutionResponse, ExecutionPipelineStep, executionStateLabel } from '../../../shared/models/execution';
 import { LibraryActivityFile } from '../../../shared/models/library-activity';
 import { formatFileSize } from '../../../shared/models/file-size';
-import { formatFullDateTime } from '../../../shared/models/date-format';
 import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { NotificationService } from '../../../shared/services/notification.service';

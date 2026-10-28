@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   computed,
   effect,
   inject,
@@ -9,7 +8,6 @@ import {
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { of, catchError, firstValueFrom } from 'rxjs';
 import { ExecutionPipelineStep, ExecutionState } from '../../../shared/models/execution';
 import { FlowDocument, FlowPluginCatalog } from '../../../shared/models/flow-validation';
@@ -19,7 +17,6 @@ import { FlowGraphConnection, FlowGraphNode } from '../../../shared/models/flow-
 import { FlowCanvasComponent } from '../../../shared/ui/flow-canvas/flow-canvas.component';
 import { ExecutionTracking } from '../../../shared/services/execution-tracking';
 import { FlowValidation } from '../../../shared/services/flow-validation';
-import { IconComponent } from '../../../shared/ui/icon.component';
 import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component';
 
 function stepDuration(step: ExecutionPipelineStep): string {
@@ -277,7 +274,6 @@ function stepDuration(step: ExecutionPipelineStep): string {
 export class ActivityFlowTraceComponent {
   private readonly tracking = inject(ExecutionTracking);
   private readonly flowValidation = inject(FlowValidation);
-  private readonly destroyRef = inject(DestroyRef);
 
   readonly executionId = input<string | null>(null);
   readonly steps = input<readonly ExecutionPipelineStep[]>([]);
