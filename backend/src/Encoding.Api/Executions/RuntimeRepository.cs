@@ -289,7 +289,14 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 replacementAccess = await policy.ScalarBoolAsync(ct);
             }
             var needsDirect=sourceEditResume || eligibility.RequiresDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
-            var prefersDirect=eligibility.PrefersDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
+            // ADR 0024 : par défaut le worker à accès direct fait le travail. Un worker par transfert ne le prend que si aucun worker
+            // direct en ligne n'en est capable (capacités évaluées comme pour une réclamation) ; une passation ou un choix de nœud
+            // explicite garde la décision du flow.
+            var prefersDirect=eligibility.PrefersDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null)
+                || item.Selector is null && !eligibility.ChoosesPlacementExplicitly(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
+            var deferToDirect=false;
+            if(prefersDirect && !needsDirect && item.Probe is null && item.Checkpoint is null)
+                deferToDirect=await CapableDirectWorkerExistsAsync(item.Library,needsWrite,item,worker,c,tx,ct);
             if(item.Probe is null)
             {
                 await using(var access=Sql.Command("""
@@ -299,18 +306,12 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                   LEFT JOIN cluster_nodes sn ON sn.id=s.node_id
                   WHERE a.library_id=@library AND a.node_id=@worker AND a.is_enabled AND a.can_read
                   AND ((a.mode='direct' AND a.local_path IS NOT NULL AND (NOT @write OR a.can_write))
-                    OR (NOT @direct AND (NOT @prefer OR NOT EXISTS(
-                        SELECT 1 FROM library_node_accesses da JOIN cluster_nodes dn ON dn.id=da.node_id
-                        WHERE da.library_id=@library AND da.mode='direct' AND da.is_enabled AND da.can_read
-                          AND da.local_path IS NOT NULL AND (NOT @write OR da.can_write)
-                          AND dn.deleted_at IS NULL AND dn.last_seen_at>clock_timestamp()-@offline
-                          AND dn.accepts_work AND 'worker'=ANY(dn.roles)
-                      )) AND a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
+                    OR (NOT @direct AND NOT @defer AND a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
                         AND sn.deleted_at IS NULL AND sn.last_seen_at>clock_timestamp()-@offline))
                   """,c,tx))
                 {
                     access.Parameters.AddWithValue("offline",presence.OfflineAfter); access.Parameters.AddWithValue("library",item.Library); access.Parameters.AddWithValue("worker",worker); access.Parameters.AddWithValue("write",needsWrite);
-                    access.Parameters.AddWithValue("direct",needsDirect); access.Parameters.AddWithValue("prefer",prefersDirect);
+                    access.Parameters.AddWithValue("direct",needsDirect); access.Parameters.AddWithValue("defer",deferToDirect);
                     await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
                     source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
                 }
@@ -744,5 +745,34 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 || resolution.PresetValue!=preset) return false;
         }
         return true;
+    }
+
+    /// <summary>Lecture seule : un worker à accès direct en ligne, autre que celui qui réclame, peut-il exécuter ce segment ?</summary>
+    private async Task<bool> CapableDirectWorkerExistsAsync(Guid library,bool write,
+        (Guid Id,Guid Library,string Path,string Key,FlowDefinition Flow,int Attempt,int Revision,long Epoch,RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe,DateTimeOffset QueuedAt) item,
+        Guid claimant,DbConnection c,DbTransaction tx,CancellationToken ct)
+    {
+        var direct=new List<(Guid Id,IReadOnlyList<NodeToolCapability> Capabilities,NodeInventory? Inventory)>();
+        await using(var read=Sql.Command("""
+          SELECT dn.id,dn.capabilities::text,dn.inventory::text FROM library_node_accesses da JOIN cluster_nodes dn ON dn.id=da.node_id
+          WHERE da.library_id=@library AND da.mode='direct' AND da.is_enabled AND da.can_read AND da.local_path IS NOT NULL AND (NOT @write OR da.can_write)
+            AND dn.id<>@claimant AND dn.id IS DISTINCT FROM @previous AND dn.deleted_at IS NULL AND dn.last_seen_at>clock_timestamp()-@offline AND dn.accepts_work AND 'worker'=ANY(dn.roles)
+            -- Un worker direct saturé ne retient pas le travail : sa file ne doit pas laisser les autres nœuds inactifs.
+            AND (SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=dn.id AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling'))
+                <COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=dn.id),dn.max_concurrent_tasks)
+          """,c,tx))
+        {
+            read.Parameters.AddWithValue("library",library); read.Parameters.AddWithValue("write",write);
+            read.Parameters.AddWithValue("claimant",claimant); read.Parameters.AddWithValue("previous",item.PreviousWorker is {} previous?previous:DBNull.Value); read.Parameters.AddWithValue("offline",presence.OfflineAfter);
+            await using var r=await read.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct))
+                direct.Add((r.GetGuid(0),JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(1),Json)??[],r.IsDBNull(2)?null:JsonSerializer.Deserialize<NodeInventory>(r.GetString(2),Json)));
+        }
+        foreach(var node in direct)
+        {
+            var identity=await nodeGroups.GetNodeIdentityAsync(node.Id,ct);
+            if(identity is not null && eligibility.CanRun(item.Flow,node.Capabilities,node.Id,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,identity,node.Inventory)) return true;
+        }
+        return false;
     }
 }

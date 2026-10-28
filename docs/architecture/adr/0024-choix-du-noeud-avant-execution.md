@@ -1,7 +1,7 @@
 ---
 id: 0024
 title: Choix du nœud avant exécution, par défaut le nœud à accès direct
-status: proposed
+status: accepted
 domain: runtime
 date: 2026-10-28
 supersedes: []
@@ -32,6 +32,10 @@ Entre candidats de même niveau, départage par charge disponible. Aucun nom de 
 - Le plan est calculé en lecture seule, à la création de l'exécution et à chaque reprise ; aucune écriture supplémentaire dans le chemin de réclamation.
 - Les blocs restent la source de vérité ; aucun bloc supprimé, aucun flow existant réécrit.
 - Mise en file automatique : seul un serveur dont le nœud a l'accès direct crée l'exécution ; si aucun serveur n'a d'accès direct, tout serveur peut le faire (6826a62).
+
+## Mise en œuvre (première tranche)
+
+Réclamation : pour une exécution fraîche (sans checkpoint ni passation) dont le segment ne contient ni `nodes-run-on-node` ni `nodes-library-access`, un worker par transfert ne réclame pas tant qu'un worker à accès direct, en ligne, **capable** de tout le segment (même contrôle `CanRun` que pour une réclamation) et **disposant d'un créneau libre** existe. Un worker direct saturé ne retient pas le travail. Contrôle en lecture seule, sans écriture ajoutée. Le mode « préférer l'accès direct » du bloc existant bénéficie du même contrôle de capacités. Pas encore livré : l'échec précoce explicite quand aucun nœud ne convient, et le découpage minimal multi-nœuds.
 
 ## Acceptation
 

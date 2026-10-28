@@ -13,6 +13,7 @@ public sealed class ContractTests
         var (registry, validator, eligibility) = Harness.Services();
         await using var harness = await Harness.Fixture.CreateAsync("Data Source=:memory:", registry, validator, eligibility);
         await harness.DirectAccessRejectsTransferWorkerAsync();
+        await harness.DefaultPlacementPrefersCapableDirectWorkerAsync();
         await harness.DirectAccessConstraintAsync();
     }
 

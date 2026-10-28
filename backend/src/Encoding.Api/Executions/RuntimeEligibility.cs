@@ -35,6 +35,14 @@ public sealed class RuntimeEligibility(
                 && node.Configuration.TryGetValue("mode",out var m) && m.ValueKind==System.Text.Json.JsonValueKind.String && m.GetString()=="prefer");
     }
 
+    /// <summary>Le segment contient-il un bloc qui décide lui-même du nœud (désignation ou accès bibliothèque) ? Sinon, le placement par défaut s'applique (ADR 0024).</summary>
+    public bool ChoosesPlacementExplicitly(FlowDefinition flow,string? nextNodeId=null,bool resumed=false)
+    {
+        var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
+        return entry is not null && RuntimeHandoffPolicy.Segment(flow,entry)
+            .Any(node=>node.Component.PluginId=="nodes" && node.Component.ComponentId is "nodes-run-on-node" or "nodes-library-access");
+    }
+
     /// <summary>Une sonde n'exécute qu'une condition de plugin : seule la capacité de ce plugin est requise.</summary>
     public bool CanProbe(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,string blockNodeId,bool resumed=false)
     {
