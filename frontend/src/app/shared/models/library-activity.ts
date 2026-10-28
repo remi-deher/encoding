@@ -1,5 +1,13 @@
 export type LibraryActivityStatus = 'untreated' | 'active' | 'done' | 'failed' | 'disabled';
 
+export const ACTIVITY_STATUS_LABELS: Record<LibraryActivityStatus, string> = {
+  untreated: 'Non traité',
+  active: 'En cours',
+  done: 'Traité',
+  failed: 'En erreur',
+  disabled: 'Désactivé',
+};
+
 export interface LibraryActivityFile {
   readonly id: string;
   readonly libraryId: string;

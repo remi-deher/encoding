@@ -48,9 +48,7 @@ import {
   LibraryActivityStatus,
 } from '../../shared/models/library-activity';
 import { ExecutionResponse, executionStateLabel } from '../../shared/models/execution';
-import { formatFileSize } from '../../shared/models/file-size';
 import { formatFullDateTime, formatRelativeTime } from '../../shared/models/date-format';
-import { mediaBadges, joinBadges } from '../../shared/models/media-badges';
 import { ExecutionTracking } from '../../shared/services/execution-tracking';
 import { ExecutionDetailPolling } from '../../shared/services/execution-detail-polling';
 import { FileDownload } from '../../shared/services/file-download';
@@ -65,7 +63,6 @@ import {
   DataTableRow,
 } from '../../shared/ui/data-table.component';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
-import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeline-logs.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
@@ -128,7 +125,6 @@ function baseName(path: string): string {
   imports: [
     PageHeaderComponent,
     DetailDrawerComponent,
-    DetailFieldListComponent,
     ExecutionPipelineLogsComponent,
     IconComponent,
     MatButtonModule,
@@ -319,38 +315,6 @@ export class ActivityPageComponent {
     if (!file) return '';
     return [file.library, this.statusLabel(file.status), file.flow].filter(Boolean).join(' · ');
   });
-  protected readonly fileFields = computed<readonly DetailField[]>(() => {
-    const file = this.selectedFile();
-    if (!file) return [];
-    return [
-      { section: 'Fichier', label: 'Chemin relatif', value: file.relativePath, copiable: true },
-      { section: 'Fichier', label: 'Taille', value: formatFileSize(file.bytes) },
-      { section: 'Fichier', label: 'Modifié le', value: formatFullDateTime(file.modifiedAt) },
-      { section: 'Bibliothèque', label: 'Nom', value: file.library },
-      {
-        section: 'Bibliothèque',
-        label: 'État du traitement',
-        value: this.statusLabel(file.status),
-      },
-      {
-        section: 'Traitement',
-        label: 'Flow attribué',
-        value: file.flow ? `${file.flow} · v${file.flowVersion}` : 'Aucun flow attribué',
-      },
-      { section: 'Traitement', label: 'Nœud', value: file.node ?? '—' },
-      {
-        section: 'Traitement',
-        label: 'Détail',
-        value: file.detail ?? 'Aucun détail supplémentaire.',
-      },
-      {
-        section: 'Traitement',
-        label: 'Identifiant d’exécution',
-        value: file.executionId ?? 'Aucune exécution',
-        copiable: Boolean(file.executionId),
-      },
-    ];
-  });
   protected readonly canCancel = computed(() =>
     ['queued', 'running'].includes(this.selectedExecution()?.state ?? ''),
   );
@@ -395,72 +359,6 @@ export class ActivityPageComponent {
       profile: `${encoding.profileName} · v${encoding.profileVersion}`,
     })),
   );
-  protected readonly executionFields = computed<readonly DetailField[]>(() => {
-    const execution = this.selectedExecution();
-    if (!execution) return [];
-    const duration = execution.startedAt
-      ? Math.max(
-          0,
-          Math.floor(
-            (Date.parse(execution.finishedAt ?? execution.updatedAt) -
-              Date.parse(execution.startedAt)) /
-              1000,
-          ),
-        ) + ' s'
-      : '—';
-    return [
-      { section: 'Exécution', label: 'Identifiant', value: execution.id, copiable: true },
-      { section: 'Exécution', label: 'État', value: executionStateLabel(execution) },
-      {
-        section: 'Exécution',
-        label: 'Progression',
-        value: execution.progress === null ? '—' : execution.progress + ' %',
-      },
-      { section: 'Exécution', label: 'Étape ou résultat', value: execution.detail || '—' },
-      {
-        section: 'Média',
-        label: 'Caractéristiques',
-        value: joinBadges(mediaBadges(execution.beforeMetadata)) || '—',
-      },
-      {
-        section: 'Média',
-        label: 'Taille avant',
-        value: this.metadataSize(execution.beforeMetadata),
-      },
-      {
-        section: 'Média',
-        label: 'Taille après',
-        value: this.metadataSize(execution.afterMetadata),
-      },
-      {
-        section: 'Média',
-        label: 'Résultat publié',
-        value: execution.publishedPath ?? '—',
-        copiable: Boolean(execution.publishedPath),
-      },
-      { section: 'Source et traitement', label: 'Bibliothèque', value: execution.library },
-      { section: 'Source et traitement', label: 'Média', value: execution.media },
-      {
-        section: 'Source et traitement',
-        label: 'Flow',
-        value: `${execution.flow} · v${execution.flowVersion}`,
-      },
-      { section: 'Source et traitement', label: 'Worker', value: execution.node ?? '—' },
-      {
-        section: 'Chronologie',
-        label: 'Ajoutée à la file',
-        value: formatFullDateTime(execution.queuedAt),
-      },
-      { section: 'Chronologie', label: 'Démarrée', value: formatFullDateTime(execution.startedAt) },
-      {
-        section: 'Chronologie',
-        label: 'Terminée',
-        value: formatFullDateTime(execution.finishedAt),
-      },
-      { section: 'Chronologie', label: 'Durée', value: duration },
-      { section: 'Chronologie', label: 'Tentative', value: execution.attempt },
-    ];
-  });
 
   constructor() {
     effect(() => {
@@ -879,10 +777,5 @@ export class ActivityPageComponent {
     }
 
     return lines.join('\n');
-  }
-
-  protected metadataSize(metadata: ExecutionResponse['beforeMetadata'] | undefined): string {
-    const size = metadata?.format?.size;
-    return size != null ? formatFileSize(Number(size)) : '—';
   }
 }

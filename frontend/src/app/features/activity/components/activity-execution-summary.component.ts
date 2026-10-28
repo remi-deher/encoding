@@ -7,8 +7,12 @@ import {
   ExecutionPipelineStep,
   executionStateLabel,
 } from '../../../shared/models/execution';
-import { LibraryActivityFile } from '../../../shared/models/library-activity';
+import {
+  ACTIVITY_STATUS_LABELS,
+  LibraryActivityFile,
+} from '../../../shared/models/library-activity';
 import { formatFileSize } from '../../../shared/models/file-size';
+import { formatFullDateTime } from '../../../shared/models/date-format';
 import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -64,40 +68,89 @@ function stepDuration(step: ExecutionPipelineStep): string {
   template: `
     <div class="summary-container">
       @if (loading()) {
-        <p class="summary-loading" role="status">Chargement des détails de l'exécution…</p>
+        <p class="summary-loading" role="status">Chargement des détails de l’exécution…</p>
       } @else {
-        <!-- Connected M3 Container Cards -->
+        <!-- 1. Bannière de Détail / Diagnostic (mise en valeur spacieuse) -->
+        @if (detailMessage(); as detail) {
+          <div
+            class="summary-detail-banner"
+            [class.banner-danger]="statusTone() === 'danger'"
+            [class.banner-warning]="statusTone() === 'warning'"
+            [class.banner-accent]="statusTone() === 'accent'"
+            role="region"
+            aria-label="Détail du statut"
+          >
+            <div class="banner-header">
+              <span class="banner-icon">
+                <app-icon [name]="statusTone() === 'danger' ? 'warning' : 'info'" />
+              </span>
+              <span class="banner-label">Détail du statut / Diagnostic</span>
+            </div>
+            <div class="banner-body">
+              <p class="banner-text">{{ detail }}</p>
+              <button
+                type="button"
+                class="copy-chip-btn"
+                (click)="copy(detail, 'Détail')"
+                title="Copier le message de détail"
+                aria-label="Copier le message de détail"
+              >
+                <app-icon name="copy" />
+                <span>Copier</span>
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- 2. Grille de fiches connectées M3 Expressive -->
         <div class="summary-cards-grid">
-          <!-- Carte 1: Détails -->
-          <div class="summary-card">
-            <div class="card-header">
-              <span class="card-icon"><app-icon name="info" /></span>
-              <h4 class="card-title">Détails</h4>
+          <!-- Carte A : Fichier & Emplacement -->
+          <section class="summary-card" aria-label="Informations du fichier">
+            <header class="card-header">
+              <span class="card-icon"><app-icon name="folder" /></span>
+              <h4 class="card-title">Fichier & Emplacement</h4>
+            </header>
+
+            <div class="path-block">
+              <span class="block-label">Chemin relatif</span>
+              <div class="path-content">
+                <span class="path-text" [title]="fullPath()">{{ fullPath() }}</span>
+                <button
+                  type="button"
+                  class="copy-btn"
+                  (click)="copy(fullPath(), 'Chemin relatif')"
+                  title="Copier le chemin relatif"
+                  aria-label="Copier le chemin relatif"
+                >
+                  <app-icon name="copy" />
+                </button>
+              </div>
             </div>
-            <div class="card-rows">
-              <div class="card-row">
-                <span class="row-label">Fichier</span>
-                <span class="row-value file-value" [title]="fullPath()">{{ fileName() }}</span>
+
+            <div class="card-fields-grid">
+              <div class="field-item">
+                <span class="field-label">Bibliothèque</span>
+                <span class="field-value">{{ libraryName() }}</span>
               </div>
-              <div class="card-row">
-                <span class="row-label">Bibliothèque</span>
-                <span class="row-value">{{ libraryName() }}</span>
+              <div class="field-item">
+                <span class="field-label">Taille d’origine</span>
+                <span class="field-value font-numeric">{{ sourceSize() }}</span>
               </div>
-              <div class="card-row">
-                <span class="row-label">Flow</span>
-                <span class="row-value">{{ flowDescription() }}</span>
+              <div class="field-item full-row">
+                <span class="field-label">Dernière modification</span>
+                <span class="field-value">{{ modifiedAtFormatted() }}</span>
               </div>
-              @if (execution(); as exec) {
-                <div class="card-row">
-                  <span class="row-label">Identifiant</span>
-                  <div class="row-value-with-action">
-                    <span class="row-code" [title]="exec.id">{{ exec.id.slice(0, 8) }}…</span>
+              @if (publishedPath(); as pub) {
+                <div class="field-item full-row">
+                  <span class="field-label">Emplacement publié</span>
+                  <div class="path-content published-path">
+                    <span class="path-text" [title]="pub">{{ pub }}</span>
                     <button
                       type="button"
-                      class="mini-copy-btn"
-                      (click)="copy(exec.id, 'Identifiant d’exécution')"
-                      title="Copier l'identifiant"
-                      aria-label="Copier l'identifiant"
+                      class="copy-btn"
+                      (click)="copy(pub, 'Emplacement publié')"
+                      title="Copier l’emplacement publié"
+                      aria-label="Copier l’emplacement publié"
                     >
                       <app-icon name="copy" />
                     </button>
@@ -105,105 +158,99 @@ function stepDuration(step: ExecutionPipelineStep): string {
                 </div>
               }
             </div>
-          </div>
+          </section>
 
-          <!-- Carte 2: Traitement -->
-          <div class="summary-card">
-            <div class="card-header">
+          <!-- Carte B : Traitement & Exécution -->
+          <section class="summary-card" aria-label="Traitement et exécution">
+            <header class="card-header">
               <span class="card-icon"><app-icon name="play" /></span>
-              <h4 class="card-title">Traitement</h4>
-            </div>
-            <div class="card-rows">
-              <div class="card-row">
-                <span class="row-label">Statut</span>
-                <span class="row-value">
-                  @if (execution(); as exec) {
-                    <app-status-badge
-                      [label]="executionStateLabel(exec)"
-                      [tone]="stateTone(exec.state)"
-                    />
-                  } @else {
-                    <span class="text-muted">—</span>
-                  }
-                </span>
-              </div>
-              <div class="card-row">
-                <span class="row-label">Nœud / Worker</span>
-                <span class="row-value">{{ workerName() }}</span>
-              </div>
-              <div class="card-row">
-                <span class="row-label">Durée totale</span>
-                <span class="row-value duration-value">{{ totalDuration() }}</span>
-              </div>
-              <div class="card-row">
-                <span class="row-label">Progression</span>
-                <span class="row-value">
-                  @if (execution()?.progress != null) {
-                    {{ execution()!.progress }} %
-                  } @else {
-                    —
-                  }
-                </span>
-              </div>
-            </div>
-          </div>
+              <h4 class="card-title">Traitement & Exécution</h4>
+            </header>
 
-          <!-- Carte 3: Stockage & Gain -->
-          <div class="summary-card">
-            <div class="card-header">
-              <span class="card-icon"><app-icon name="library" /></span>
-              <h4 class="card-title">Stockage & Gain</h4>
-            </div>
-            <div class="card-rows">
-              <div class="card-row">
-                <span class="row-label">Taille source</span>
-                <span class="row-value">{{ sourceSize() }}</span>
+            <div class="card-fields-grid">
+              <div class="field-item">
+                <span class="field-label">Statut</span>
+                <div class="field-value">
+                  <app-status-badge [label]="statusLabel()" [tone]="statusTone()" />
+                </div>
               </div>
-              <div class="card-row">
-                <span class="row-label">Taille finale</span>
-                <span class="row-value">{{ finalSize() }}</span>
+              <div class="field-item">
+                <span class="field-label">Nœud / Worker</span>
+                <span class="field-value">{{ workerName() }}</span>
               </div>
-              <div class="card-row">
-                <span class="row-label">Variation</span>
-                <span class="row-value">
-                  @if (sizeDifference(); as diff) {
-                    <span
-                      class="diff-badge"
-                      [class.diff-reduced]="diff.reduced"
-                      [class.diff-expanded]="diff.expanded"
-                      [class.diff-neutral]="diff.neutral"
-                    >
-                      {{ diff.label }} ({{ diff.percent }})
-                    </span>
-                  } @else {
-                    <span class="text-muted">—</span>
-                  }
+              <div class="field-item full-row">
+                <span class="field-label">Flow attribué</span>
+                <span class="field-value flow-value">{{ flowDescription() }}</span>
+              </div>
+              <div class="field-item">
+                <span class="field-label">Durée totale</span>
+                <span class="field-value duration-value">{{ totalDuration() }}</span>
+              </div>
+              <div class="field-item">
+                <span class="field-label">Progression</span>
+                <span class="field-value font-numeric">
+                  {{ progress() != null ? progress() + ' %' : '—' }}
                 </span>
               </div>
-              @if (execution()?.publishedPath) {
-                <div class="card-row">
-                  <span class="row-label">Sortie</span>
-                  <div class="row-value-with-action">
-                    <span class="row-value published-value" [title]="execution()!.publishedPath!">
-                      {{ baseName(execution()!.publishedPath!) }}
-                    </span>
-                    <button
-                      type="button"
-                      class="mini-copy-btn"
-                      (click)="copy(execution()!.publishedPath!, 'Emplacement publié')"
-                      title="Copier le chemin publié"
-                      aria-label="Copier le chemin publié"
-                    >
-                      <app-icon name="copy" />
-                    </button>
-                  </div>
-                </div>
-              }
             </div>
-          </div>
+
+            @if (executionId(); as execId) {
+              <div class="execution-id-block">
+                <span class="block-label">Identifiant d’exécution</span>
+                <div class="id-content">
+                  <code class="id-code" [title]="execId">{{ execId }}</code>
+                  <button
+                    type="button"
+                    class="copy-btn"
+                    (click)="copy(execId, 'Identifiant d’exécution')"
+                    title="Copier l’identifiant d’exécution"
+                    aria-label="Copier l’identifiant d’exécution"
+                  >
+                    <app-icon name="copy" />
+                  </button>
+                </div>
+              </div>
+            }
+          </section>
         </div>
 
-        <!-- Section: Éléments de Flow exécutés -->
+        <!-- 3. Carte Stockage & Variation -->
+        <section class="summary-card storage-card" aria-label="Stockage et variation">
+          <header class="card-header">
+            <span class="card-icon"><app-icon name="library" /></span>
+            <h4 class="card-title">Stockage & Variation</h4>
+          </header>
+
+          <div class="storage-comparison">
+            <div class="storage-metric">
+              <span class="metric-label">Taille source</span>
+              <span class="metric-value font-numeric">{{ sourceSize() }}</span>
+            </div>
+            <div class="storage-arrow" aria-hidden="true">→</div>
+            <div class="storage-metric">
+              <span class="metric-label">Taille finale</span>
+              <span class="metric-value font-numeric">{{ finalSize() }}</span>
+            </div>
+            <div class="storage-separator" aria-hidden="true"></div>
+            <div class="storage-metric storage-metric-gain">
+              <span class="metric-label">Variation</span>
+              @if (sizeDifference(); as diff) {
+                <span
+                  class="diff-badge"
+                  [class.diff-reduced]="diff.reduced"
+                  [class.diff-expanded]="diff.expanded"
+                  [class.diff-neutral]="diff.neutral"
+                >
+                  {{ diff.label }} ({{ diff.percent }})
+                </span>
+              } @else {
+                <span class="metric-value text-muted">—</span>
+              }
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Section : Éléments de Flow exécutés -->
         <section class="summary-steps-section" aria-label="Éléments de Flow exécutés">
           <div class="steps-header">
             <h3>Éléments de Flow exécutés</h3>
@@ -276,7 +323,7 @@ function stepDuration(step: ExecutionPipelineStep): string {
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
-      padding: var(--space-3) 0;
+      padding: var(--space-1) 0;
     }
 
     .summary-loading {
@@ -285,10 +332,107 @@ function stepDuration(step: ExecutionPipelineStep): string {
       margin: var(--space-3) 0;
     }
 
+    /* 1. Bannière de Détail / Diagnostic */
+    .summary-detail-banner {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-xl);
+      background: var(--surface-container-high);
+      border-inline-start: 4px solid var(--accent);
+      box-shadow: var(--elevation-1);
+    }
+
+    .summary-detail-banner.banner-danger {
+      background: var(--danger-soft);
+      border-inline-start-color: var(--danger);
+      .banner-header {
+        color: var(--danger);
+      }
+    }
+
+    .summary-detail-banner.banner-warning {
+      background: var(--warning-soft);
+      border-inline-start-color: var(--warning);
+      .banner-header {
+        color: var(--warning);
+      }
+    }
+
+    .summary-detail-banner.banner-accent {
+      background: var(--accent-soft);
+      border-inline-start-color: var(--accent);
+      .banner-header {
+        color: var(--accent-strong);
+      }
+    }
+
+    .banner-header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--font-label);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .banner-icon {
+      display: inline-flex;
+      width: 18px;
+      height: 18px;
+    }
+
+    .banner-body {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    .banner-text {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: var(--font-body);
+      line-height: 1.5;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .copy-chip-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-pill);
+      background: var(--surface-container-lowest);
+      color: var(--text-secondary);
+      font-size: var(--font-label);
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color var(--motion-spring-fast);
+
+      &:hover {
+        background: var(--surface-container-highest);
+        color: var(--accent-strong);
+      }
+
+      app-icon {
+        width: 14px;
+        height: 14px;
+      }
+    }
+
+    /* 2. Grille de cartes connectées M3 */
     .summary-cards-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: var(--space-3);
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: var(--space-4);
     }
 
     .summary-card {
@@ -331,75 +475,100 @@ function stepDuration(step: ExecutionPipelineStep): string {
       letter-spacing: 0.02em;
     }
 
-    .card-rows {
+    .path-block,
+    .execution-id-block {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 4px;
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-lg);
+      background: var(--surface-container-lowest);
+      border: 1px solid var(--border-subtle);
     }
 
-    .card-row {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--space-2);
-      font-size: var(--font-label);
-    }
-
-    .row-label {
+    .block-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
       color: var(--text-muted);
-      font-weight: 500;
-      flex: 0 0 auto;
     }
 
-    .row-value {
-      color: var(--text-primary);
-      font-weight: 600;
-      text-align: end;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .file-value {
-      max-width: 220px;
-    }
-
-    .published-value {
-      max-width: 180px;
-    }
-
-    .row-value-with-action {
+    .path-content,
+    .id-content {
       display: flex;
       align-items: center;
-      gap: var(--space-1);
-      justify-content: flex-end;
+      justify-content: space-between;
+      gap: var(--space-2);
     }
 
-    .row-code {
+    .path-text {
+      font-size: var(--font-body-sm);
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.4;
+    }
+
+    .id-code {
       font-family: monospace;
       font-size: var(--font-label);
       color: var(--text-secondary);
-      background: var(--surface-container-lowest);
-      padding: 1px 6px;
-      border-radius: var(--radius-xs);
+      overflow-wrap: anywhere;
+      word-break: break-all;
     }
 
-    .mini-copy-btn {
-      display: inline-grid;
+    .copy-btn {
+      display: grid;
       place-items: center;
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       border: 0;
       background: transparent;
       color: var(--text-muted);
       border-radius: var(--radius-xs);
       cursor: pointer;
-      padding: 0;
+      flex: 0 0 28px;
 
       &:hover {
         color: var(--accent-strong);
         background: var(--surface-container-highest);
       }
+    }
+
+    .card-fields-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-3);
+    }
+
+    .field-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+
+      &.full-row {
+        grid-column: 1 / -1;
+      }
+    }
+
+    .field-label {
+      font-size: var(--font-label);
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .field-value {
+      font-size: var(--font-body-sm);
+      color: var(--text-primary);
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .flow-value {
+      line-height: 1.35;
     }
 
     .duration-value {
@@ -408,10 +577,60 @@ function stepDuration(step: ExecutionPipelineStep): string {
       font-weight: 700;
     }
 
+    .font-numeric {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 3. Carte Stockage & Variation */
+    .storage-card {
+      padding: var(--space-4);
+    }
+
+    .storage-comparison {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      padding: var(--space-2) 0 0;
+    }
+
+    .storage-metric {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .metric-label {
+      font-size: var(--font-label);
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .metric-value {
+      font-size: var(--font-title-sm);
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .storage-arrow {
+      color: var(--accent-strong);
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .storage-separator {
+      width: 1px;
+      height: 36px;
+      background: var(--border-subtle);
+      margin: 0 var(--space-2);
+    }
+
     .diff-badge {
       display: inline-flex;
       align-items: center;
-      padding: 2px 8px;
+      padding: 4px 10px;
       border-radius: var(--radius-pill);
       font-size: var(--font-label);
       font-weight: 700;
@@ -424,12 +643,12 @@ function stepDuration(step: ExecutionPipelineStep): string {
     }
 
     .diff-expanded {
-      background: var(--warning-soft);
-      color: var(--warning);
+      background: var(--danger-soft);
+      color: var(--danger);
     }
 
     .diff-neutral {
-      background: var(--surface-container-lowest);
+      background: var(--surface-container-highest);
       color: var(--text-secondary);
     }
 
@@ -437,7 +656,7 @@ function stepDuration(step: ExecutionPipelineStep): string {
       color: var(--text-muted);
     }
 
-    /* Steps table */
+    /* 4. Tableau des étapes de flow exécutées */
     .summary-steps-section {
       display: flex;
       flex-direction: column;
@@ -576,6 +795,20 @@ function stepDuration(step: ExecutionPipelineStep): string {
     .col-status {
       width: 120px;
     }
+
+    @media (max-width: 700px) {
+      .summary-cards-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .card-fields-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .storage-separator {
+        display: none;
+      }
+    }
   `,
 })
 export class ActivityExecutionSummaryComponent {
@@ -604,6 +837,41 @@ export class ActivityExecutionSummaryComponent {
     return this.execution()?.library || this.file()?.library || '—';
   });
 
+  protected readonly modifiedAtFormatted = computed(() => {
+    const date = this.file()?.modifiedAt;
+    return date ? formatFullDateTime(date) : '—';
+  });
+
+  protected readonly detailMessage = computed(() => {
+    const fileDetail = this.file()?.detail?.trim();
+    const execDetail = this.execution()?.detail?.trim();
+    return fileDetail || execDetail || null;
+  });
+
+  protected readonly statusLabel = computed(() => {
+    const exec = this.execution();
+    if (exec) {
+      return executionStateLabel(exec);
+    }
+    const st = this.file()?.status;
+    return st && ACTIVITY_STATUS_LABELS[st] ? ACTIVITY_STATUS_LABELS[st] : 'Non traité';
+  });
+
+  protected readonly statusTone = computed<'accent' | 'neutral' | 'danger' | 'success' | 'warning'>(
+    () => {
+      const exec = this.execution();
+      if (exec) {
+        return this.stateTone(exec.state);
+      }
+      const st = this.file()?.status;
+      if (st === 'failed') return 'danger';
+      if (st === 'done') return 'success';
+      if (st === 'active') return 'accent';
+      if (st === 'disabled') return 'warning';
+      return 'neutral';
+    },
+  );
+
   protected readonly flowDescription = computed(() => {
     const exec = this.execution();
     if (exec?.flow) {
@@ -619,6 +887,17 @@ export class ActivityExecutionSummaryComponent {
   protected readonly workerName = computed(() => {
     return this.execution()?.node || this.file()?.node || '—';
   });
+
+  protected readonly executionId = computed(() => {
+    return this.execution()?.id || this.file()?.executionId || null;
+  });
+
+  protected readonly progress = computed(() => {
+    const p = this.execution()?.progress ?? this.file()?.progress;
+    return p != null ? p : null;
+  });
+
+  protected readonly publishedPath = computed(() => this.execution()?.publishedPath ?? null);
 
   protected readonly totalDuration = computed(() => {
     return executionDuration(this.execution());
