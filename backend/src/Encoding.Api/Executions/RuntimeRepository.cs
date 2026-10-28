@@ -466,6 +466,20 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         var result=new RuntimeLeaseStatus(r.GetBoolean(0),r.GetInt32(1),r.GetFieldValue<DateTimeOffset>(2)); await r.DisposeAsync(); await tx.CommitAsync(ct); return result;
     }
 
+    /// <summary>Publie les métadonnées d'origine dès le sondage ; ne remplace jamais une valeur déjà enregistrée.</summary>
+    public async Task<bool> RecordSourceMetadataAsync(Guid id,Guid worker,long epoch,JsonElement metadata,CancellationToken ct)
+    {
+        using var priority = Encoding.Api.Infrastructure.Data.Sqlite.SqliteWriter.Prioritize();
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        if(!await FenceAsync(id,worker,epoch,c,tx,ct)) return false;
+        await using(var update=Sql.Command("UPDATE execution_work SET before_metadata=COALESCE(before_metadata,@before) WHERE execution_id=@id",c,tx))
+        {
+            update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("before",SqlKind.Json,metadata.GetRawText());
+            await update.ExecuteNonQueryAsync(ct);
+        }
+        await tx.CommitAsync(ct); return true;
+    }
+
     private static async Task SuspendSourceWriteAsync(Guid id,Guid worker,string node,long epoch,string reason,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
         await using var pause=Sql.Command("""

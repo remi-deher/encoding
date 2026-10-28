@@ -193,7 +193,7 @@ function parseReport(raw: unknown): MediaMetadataReport | null {
       <div class="viewer-toolbar">
         <mat-button-toggle-group
           [value]="viewMode()"
-          (change)="viewMode.set($event.value)"
+          (change)="requestedMode.set($event.value)"
           aria-label="Mode d'affichage des métadonnées"
         >
           <mat-button-toggle value="diff" [disabled]="!canCompare()">
@@ -968,13 +968,21 @@ export class ActivityMetadataViewerComponent {
   readonly beforeMetadata = input<Record<string, unknown> | null | undefined>(null);
   readonly afterMetadata = input<Record<string, unknown> | null | undefined>(null);
 
-  protected readonly viewMode = signal<'diff' | 'before' | 'after'>('diff');
+  protected readonly requestedMode = signal<'diff' | 'before' | 'after'>('diff');
 
   protected readonly beforeReport = computed(() => parseReport(this.beforeMetadata()));
   protected readonly afterReport = computed(() => parseReport(this.afterMetadata()));
 
   protected readonly canCompare = computed(() => {
     return Boolean(this.beforeReport() && this.afterReport());
+  });
+
+  /** Les métadonnées d'origine sont affichées dès qu'elles existent, sans attendre les finales. */
+  protected readonly viewMode = computed<'diff' | 'before' | 'after'>(() => {
+    const mode = this.requestedMode();
+    if (mode === 'diff' && !this.canCompare() && this.beforeReport()) return 'before';
+    if (mode === 'after' && !this.afterReport() && this.beforeReport()) return 'before';
+    return mode;
   });
 
   protected readonly currentReport = computed(() => {

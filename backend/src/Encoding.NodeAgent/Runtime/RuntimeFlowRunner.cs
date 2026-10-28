@@ -66,6 +66,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             var current=directRead?original:Path.Combine(directory,"current"+context.Extension);
             var materialized=false;
             MediaFileStamp? currentStamp=null;
+            if(directRead && context.BeforeMetadata is null)
+            {
+                // Source lisible en place : le sondage ne coûte aucune copie, on publie donc les métadonnées d'origine tout de suite.
+                try { observed!.Verify(original); context=context with { BeforeMetadata=await scanner.ScanAsync(original,job.Token) }; observed.Verify(original); }
+                catch(Exception) when(!job.IsCancellationRequested) { context=context with { BeforeMetadata=null }; }
+                await ReportSourceMetadataAsync();
+            }
 
             async Task EnsureFilesAsync()
             {
@@ -100,6 +107,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 currentStamp=MediaFileStamp.Read(current);
             }
 
+            // Les métadonnées d'origine sont visibles dans l'activité dès le sondage, sans attendre la fin d'une étape.
+            async Task ReportSourceMetadataAsync()
+            {
+                if(context.BeforeMetadata is not {} metadata) return;
+                try { await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source-metadata",new ReportSourceMetadata(lease.Epoch,metadata),job.Token); }
+                catch(Exception) when(!job.IsCancellationRequested) { }
+            }
             async Task EnsureScanAsync()
             {
                 if(directRead) observed!.Verify(original);
@@ -107,6 +121,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 if(context.BeforeMetadata is null)
                 {
                     context=context with { BeforeMetadata=await scanner.ScanAsync(original,job.Token) };
+                    await ReportSourceMetadataAsync();
                 }
                 if(context.CurrentMetadata is null) context=context with { CurrentMetadata=current==original || context.CurrentSha256==sourceSha?context.BeforeMetadata:await scanner.ScanAsync(current,job.Token) };
                 if(directRead) observed!.Verify(original);
