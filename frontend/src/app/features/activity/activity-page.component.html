@@ -172,13 +172,43 @@
   <app-detail-drawer
     [opened]="selectedFile() !== null"
     [modal]="true"
+    size="wide"
     [title]="drawerTitle()"
     [description]="drawerDescription()"
     [content]="drawerContent()"
+    [headerActions]="drawerHeaderActions()"
     [footerActions]="drawerFooter()"
     (closed)="close()"
   />
 </div>
+
+<ng-template #detailHeaderActions>
+  @if (selectedExecution(); as execution) {
+    <button
+      matButton="text"
+      type="button"
+      class="header-action-btn"
+      (click)="downloadExecutionLog()"
+      title="Télécharger le journal de l’exécution (.log)"
+    >
+      <app-icon name="download" />
+      <span>Télécharger le journal</span>
+    </button>
+    @if (canRetry()) {
+      <button
+        matButton="text"
+        type="button"
+        class="header-action-btn"
+        [disabled]="actionBusy()"
+        (click)="retrySelected()"
+        title="Créer une nouvelle tentative"
+      >
+        <app-icon name="refresh" />
+        <span>Re-traiter</span>
+      </button>
+    }
+  }
+</ng-template>
 
 <ng-template #detailContent>
   @if (selectedFile()) {
@@ -186,32 +216,38 @@
     @if (executionLoading()) {
       <p class="detail-empty" role="status">Chargement des options avancées…</p>
     } @else if (selectedExecution(); as execution) {
-      <div class="detail-comparison" aria-label="Comparaison média et worker">
-        <div class="comparison-card">
-          <span class="comparison-label">Taille source</span>
-          <strong>{{ metadataSize(execution.beforeMetadata) }}</strong>
-        </div>
-        <div class="comparison-arrow" aria-hidden="true"><app-icon name="forward" /></div>
-        <div class="comparison-card">
-          <span class="comparison-label">Taille finale</span>
-          <strong>{{ metadataSize(execution.afterMetadata) }}</strong>
-        </div>
-        <div class="comparison-card">
-          <span class="comparison-label">Worker et progression</span>
-          <strong
-            >{{ execution.node ?? '—' }} ·
-            {{ execution.progress === null ? '—' : execution.progress + ' %' }}</strong
-          >
-        </div>
-      </div>
       <mat-tab-group
         class="detail-tabs"
         aria-label="Options avancées du fichier"
         [selectedIndex]="selectedDetailTab()"
         (selectedIndexChange)="selectedDetailTab.set($event)"
       >
-        <mat-tab label="Détails">
-          <div class="detail-tab"><app-detail-field-list [fields]="executionFields()" /></div>
+        <mat-tab label="Information">
+          <div class="detail-tab">
+            <app-activity-execution-summary
+              [execution]="execution"
+              [file]="selectedFile()"
+              [steps]="pipelineState().steps"
+              [loading]="executionLoading()"
+            />
+          </div>
+        </mat-tab>
+        <mat-tab label="Éléments de Flow exécutés">
+          <div class="detail-tab detail-tab-flow">
+            <app-activity-flow-trace
+              [executionId]="execution.id"
+              [steps]="pipelineState().steps"
+              [executionState]="execution.state"
+            />
+          </div>
+        </mat-tab>
+        <mat-tab label="Métadonnées">
+          <div class="detail-tab">
+            <app-activity-metadata-viewer
+              [beforeMetadata]="execution.beforeMetadata"
+              [afterMetadata]="execution.afterMetadata"
+            />
+          </div>
         </mat-tab>
         <mat-tab label="Pipeline">
           <div class="detail-tab">
