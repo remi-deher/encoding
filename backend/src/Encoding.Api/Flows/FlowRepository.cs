@@ -50,6 +50,7 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
     }
     public async Task<FlowDraftResponse?> SaveDraftAsync(SaveFlowDraftRequest request,CancellationToken ct)
     {
+        request=request with { Definition=request.Definition.RepairText() };
         await using var connection=await dataSource.OpenConnectionAsync(ct); await using var tx=await connection.BeginTransactionAsync(ct);
         await using var command=Sql.Command(
           "INSERT INTO flows(id) VALUES(@id) ON CONFLICT DO NOTHING; SELECT current_version FROM flows WHERE id=@id FOR UPDATE",connection,tx);
@@ -126,7 +127,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
 
     private static async Task<int?> SaveCoreAsync(SaveFlowRequest request, bool restore, DbConnection connection, DbTransaction tx, CancellationToken ct, bool skipUnchanged = false)
     {
-        var definition = request.Definition;
+        var definition = request.Definition.RepairText();
+        request = request with { Definition = definition };
         await using (var insert = Sql.Command("INSERT INTO flows(id) VALUES(@id) ON CONFLICT DO NOTHING",connection,tx))
         { insert.Parameters.AddWithValue("id",definition.Id); await insert.ExecuteNonQueryAsync(ct); }
         int current;

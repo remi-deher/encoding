@@ -648,7 +648,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             metadata.Parameters.AddWithValue("after",SqlKind.Json,(object?)cp.Context.CurrentMetadata?.GetRawText()??DBNull.Value);
             await metadata.ExecuteNonQueryAsync(ct);
         }
-        var detail=handoff is null?$"Étape terminée : {node.Name??component.Name}.":handoff.Mode=="node"
+        var detail=handoff is null?$"Étape terminée : {Encoding.Contracts.Text.Mojibake.Repair(node.Name??component.Name)}.":handoff.Mode=="node"
             ?$"Relais en attente vers le nœud {handoff.TargetNodeId:D}.":"Relais en attente d'un autre worker éligible.";
         if (node.Component.ComponentId == MediaIntegrityPolicy.Component && ExecutionRepository.ReadIntegrityDiagnostic(cp) is { } diagnostic)
             detail += " " + diagnostic.Code + " : " + diagnostic.Message;
