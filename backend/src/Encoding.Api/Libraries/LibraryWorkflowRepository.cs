@@ -57,6 +57,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     {
         if(request.ExpectedRevision<0 || request.ExpectedRevision==int.MaxValue || (request.FlowId is null)!=(request.Version is null)) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        var retargeted=false;
         if(!await LockLibraryAsync(library,c,tx,ct)) return false;
         await using var current=Sql.Command("SELECT flow_assignment_revision FROM libraries WHERE id=@id",c,tx);
         current.Parameters.AddWithValue("id",library);
@@ -69,6 +70,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
             await using var save=Sql.Command("INSERT INTO library_flow_assignments(library_id,flow_id,flow_version,revision) VALUES(@id,@flow,@version,@revision) ON CONFLICT(library_id) DO UPDATE SET flow_id=@flow,flow_version=@version,revision=@revision",c,tx);
             save.Parameters.AddWithValue("id",library); save.Parameters.AddWithValue("flow",flow); save.Parameters.AddWithValue("version",request.Version.Value); save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);
             await save.ExecuteNonQueryAsync(ct);
+            retargeted=await RetargetPendingAsync(library,JsonSerializer.Deserialize<FlowDefinition>(document,Json)!,document,c,tx,ct);
         }
         else
         {
@@ -77,7 +79,28 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         }
         await using var advance=Sql.Command("UPDATE libraries SET flow_assignment_revision=flow_assignment_revision+1 WHERE id=@id",c,tx);
         advance.Parameters.AddWithValue("id",library); await advance.ExecuteNonQueryAsync(ct);
-        await tx.CommitAsync(ct); return true;
+        await tx.CommitAsync(ct);
+        if(retargeted) broadcaster?.Publish();
+        return true;
+    }
+    /// <summary>
+    /// Changer le flow d'une bibliothèque ne relance rien : les exécutions encore en file (jamais démarrées) passent au nouveau flow,
+    /// et les fichiers déjà traités gardent leur état (reçus recopiés vers le nouveau flow pour que la surveillance ne les remette pas en file).
+    /// </summary>
+    private async Task<bool> RetargetPendingAsync(Guid library,FlowDefinition flow,string document,DbConnection c,DbTransaction tx,CancellationToken ct)
+    {
+        var moved=new List<(Guid Id,int Revision)>();
+        await using(var update=Sql.Command($"UPDATE executions SET flow_name=@name,flow_version=@version,flow_definition=@definition,detail=@detail,updated_at=clock_timestamp(),revision=revision+1 WHERE state='queued' AND (flow_name<>@name OR flow_version<>@version) AND flow_definition->>'mediaType'=@mediaType AND id IN(SELECT execution_id FROM execution_work WHERE library_id=@library) AND NOT EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=executions.id) AND {TaskOwnershipRepository.ActiveSql("executions.id")} RETURNING id,revision",c,tx))
+        {
+            update.Parameters.AddWithValue("name",flow.Name); update.Parameters.AddWithValue("version",flow.Version); update.Parameters.AddWithValue("definition",SqlKind.Json,document);
+            update.Parameters.AddWithValue("detail","Flow de la bibliothèque modifié : "+flow.Name+" v"+flow.Version+"."); update.Parameters.AddWithValue("mediaType",flow.MediaType); update.Parameters.AddWithValue("library",library);
+            await using var r=await update.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) moved.Add((r.GetGuid(0),r.GetInt32(1)));
+        }
+        foreach(var (id,revision) in moved) await ExecutionRepository.AddEvent(c,tx,id,Guid.NewGuid(),revision,"queued","Flow de la bibliothèque modifié : "+flow.Name+" v"+flow.Version+".",ct);
+        await using var inherit=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) SELECT DISTINCT r.library_id,r.file_id,@flow,@version,r.byte_length,r.modified_at,r.execution_id FROM library_processing_receipts r JOIN library_media m ON m.id=r.file_id AND m.byte_length=r.byte_length AND m.modified_at=r.modified_at WHERE r.library_id=@library AND NOT EXISTS(SELECT 1 FROM library_processing_receipts n WHERE n.library_id=r.library_id AND n.file_id=r.file_id AND n.flow_id=@flow AND n.flow_version=@version AND n.byte_length=r.byte_length AND n.modified_at=r.modified_at) ON CONFLICT DO NOTHING",c,tx);
+        inherit.Parameters.AddWithValue("flow",flow.Id); inherit.Parameters.AddWithValue("version",flow.Version); inherit.Parameters.AddWithValue("library",library);
+        await inherit.ExecuteNonQueryAsync(ct);
+        return moved.Count>0;
     }
     private static async Task<bool> LockLibraryAsync(Guid id,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
