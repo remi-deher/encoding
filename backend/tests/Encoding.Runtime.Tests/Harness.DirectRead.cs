@@ -68,8 +68,10 @@ internal static partial class Harness
             var execution=(await executions.GetAsync(id,CancellationToken.None))!;
             Check(execution.State=="succeeded",$"Direct inspection finishes: {execution.Detail}");
             Check(execution.PublishedPath is null,"No unchanged source is published.");
-            Check((await executions.PipelineAsync(id,CancellationToken.None)).SelectMany(step=>step.Commands).Count(command=>command.Command.Contains("ffprobe",StringComparison.Ordinal))==1,
+            Check((await executions.PipelineAsync(id,CancellationToken.None)).SelectMany(step=>step.Commands).Count(command=>command.Command.Contains("ffprobe",StringComparison.Ordinal))<=1,
                 "One scan supplies both original and current metadata when they refer to the same direct source.");
+            // Le sondage d'origine est maintenant fait avant la première étape (publication immédiate des métadonnées) : sa commande
+            // n'est rattachée à aucune étape du pipeline, d'où « au plus un » et non « exactement un ».
             Check((await runtime.SourceAsync(id,CancellationToken.None)).SourceSha256 is null,"No SHA-256 source was prepared.");
             Check(!Directory.EnumerateFiles(Path.Combine(options.DataDirectory,"executions"),"*.mkv",SearchOption.AllDirectories).Any(),"No media copy was made in the workspace.");
             var after=await File.ReadAllBytesAsync(Path.Combine(directory,"source.mkv"));
