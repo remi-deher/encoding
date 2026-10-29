@@ -56,7 +56,7 @@ public sealed class RuntimeEligibility(
             && (c.Version==node.Component.PluginVersion || c.Version==registry.RuntimePluginVersion(node.Component)));
     }
 
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null,IReadOnlyDictionary<string,Guid>? placements=null)
     {
         if (MediaIntegrityPolicy.IsExplicit(flow) && !capabilities.Any(c => c.ToolId == MediaIntegrityPolicy.Capability)) return false;
         if(context?.DirectSource is not null && !capabilities.Any(capability=>capability.ToolId==RuntimeSourceObservation.Capability)) return false;
@@ -64,13 +64,16 @@ public sealed class RuntimeEligibility(
         if(!resumed && activation is not null)
             capabilities=activation.EnabledCapabilities(capabilities,capability=>capability.ToolId);
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
+        if(entry is not null && placements?.TryGetValue(entry,out var assignedWorker)==true && assignedWorker!=workerId) return false;
         // « Bibliothèque sur ce nœud » avec « et encodeur du profil » : un worker sans encodeur utilisable répond « non » (voir le runner),
         // donc la branche « oui » ne lui est pas demandée.
         var canEncode=MediaCodecPolicy.ProfileEncoderUsable(flow,capabilities.FirstOrDefault(capability=>capability.ToolId=="ffmpeg"));
         var nodesById=flow.Nodes.ToDictionary(node=>node.Id,StringComparer.Ordinal);
         bool Follow(FlowConnectionDefinition edge)=>canEncode || edge.SourceOutputId!="yes"
             || !(nodesById[edge.SourceNodeId] is { Component: { PluginId: "nodes", ComponentId: "nodes-library-access" } } access && RuntimeHandoffPolicy.LibraryAccessNeedsEncoder(access));
-        var segment=entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry,Follow);
+        bool FollowPlanned(FlowConnectionDefinition edge) => Follow(edge)
+            && (placements is null || !placements.TryGetValue(edge.TargetNodeId,out var target) || target==workerId);
+        var segment=entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry,FollowPlanned);
         var planned=(context?.Plan??[]).Select((step,index)=> {
             var refTarget = registry.FindReference(step.ComponentId)
                 ?? new FlowComponentReference("base","1.0.0",step.ComponentId,"1.0.0",1);

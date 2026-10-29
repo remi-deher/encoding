@@ -717,6 +717,12 @@ internal static partial class Harness
         }
         public async Task LibraryAccessBlockBranchesOnDirectAccessAsync()
         {
+            var advertised=Capabilities(true).Select(capability=>capability.ToolId=="ffmpeg"
+                ? capability with { AccelerationTypes=[..capability.AccelerationTypes,"qsv"],Encoders=[..capability.Encoders??[],"hevc_qsv"],
+                    EncoderChecks=[..capability.EncoderChecks??[],new NodeEncoderCapability("hevc_qsv","usable")] }
+                : capability).ToArray();
+            await using(var announce=db.CreateCommand("UPDATE cluster_nodes SET capabilities=@caps"))
+            { announce.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(advertised,Json)); await announce.ExecuteNonQueryAsync(); }
             foreach(var direct in new[]{true,false})
             {
                 var flow=new FlowDefinition(1,Guid.NewGuid(),1,"Library access","video",

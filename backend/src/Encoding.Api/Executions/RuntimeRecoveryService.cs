@@ -152,12 +152,12 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     {
         if(nodeGroups is null || eligibility is null) return 0;
         var targets=new List<(Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,
-            Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated)>();
+            Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated,FlowPlacementPlan? Plan)>();
         await using(var c=await dataSource.OpenConnectionAsync(ct))
         await using(var cmd=Sql.Command($"""
           SELECT e.id,e.node_id,e.revision,e.state,e.flow_definition::text,COALESCE(w.handoff_selector::text,''),
             w.previous_worker_node_id,w.library_id,w.source_node_id,
-            (SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),e.updated_at
+            (SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),e.updated_at,w.placement_plan::text
           FROM executions e JOIN execution_work w ON w.execution_id=e.id
           WHERE {TaskOwnershipRepository.ActiveSql("e.id")} AND w.worker_node_id IS NULL AND w.available_at<=clock_timestamp()
             AND (w.handoff_selector IS NOT NULL AND w.handoff_selector->>'mode'<>'server'
@@ -169,7 +169,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         {
         cmd.Parameters.AddWithValue("freshGrace",FreshPlacementGrace.TotalSeconds);
         await using var r=await cmd.ExecuteReaderAsync(ct);
-        { while(await r.ReadAsync(ct)) targets.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetString(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetGuid(7),r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:r.GetString(9),r.GetFieldValue<DateTimeOffset>(10))); }
+        { while(await r.ReadAsync(ct)) targets.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetString(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetGuid(7),r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:r.GetString(9),r.GetFieldValue<DateTimeOffset>(10),r.IsDBNull(11)?null:JsonSerializer.Deserialize<FlowPlacementPlan>(r.GetString(11),Json))); }
         }
 
         var failed=0;
@@ -186,7 +186,8 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             if(await HasEligibleWorkerAsync(item,flow,selector,checkpoint,fresh,ct)) continue;
 
             await using var c=await dataSource.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
-            var detail=fresh?"Aucun worker du cluster ne peut exécuter ce flow (capacité absente, désignation de nœud impossible ou aucun accès à la bibliothèque) ; l’exécution échoue plutôt que d’attendre sans fin.":selector.IsResume?"Aucun worker éligible n’a pu reprendre cette tâche après la perte de son worker (capacités, accès au média ou limites) ; l’exécution échoue.":"Aucun worker en ligne ne correspond à la destination de ce relais ou de cette relance ; l’exécution échoue.";
+            var detail=fresh?"placement_impossible: "+(item.Plan?.Reason??"Aucun worker du cluster ne peut exécuter ce flow (capacité absente, désignation de nœud impossible ou aucun accès à la bibliothèque)."):
+                selector.IsResume?"Aucun worker éligible n’a pu reprendre cette tâche après la perte de son worker (capacités, accès au média ou limites) ; l’exécution échoue.":"Aucun worker en ligne ne correspond à la destination de ce relais ou de cette relance ; l’exécution échoue.";
             if(await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",item.Actor,null,detail),c,tx,ct))
             {
                 await RuntimeRepository.ReleaseAsync(item.Id,c,tx,ct);
@@ -199,7 +200,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     }
 
     private async Task<bool> HasEligibleWorkerAsync(
-        (Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated) item,
+        (Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated,FlowPlacementPlan? Plan) item,
         FlowDefinition flow,RuntimeHandoffSelector selector,RuntimeCheckpoint? checkpoint,bool fresh,CancellationToken ct)
     {
         // Exécution neuve : un nœud momentanément hors ligne, en drainage ou hors plage horaire reste un destinataire possible.
@@ -224,16 +225,19 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         }
         // Aucun worker déclaré : le cluster n'est pas encore configuré, ce n'est pas une impossibilité du flow.
         if(fresh && candidates.Count==0) return true;
+        if(item.Plan?.Strategy==FlowPlacementPlan.StrategyImpossible) return false;
         var entry=checkpoint?.NextNodeId??flow.Nodes.Single(node=>node.Component.PluginId=="base" && node.Component.ComponentId.StartsWith("base-input-",StringComparison.Ordinal)).Id;
         var needsWrite=eligibility!.RequiresWriteAccess(flow,entry,checkpoint is not null);
         foreach(var candidate in candidates)
         {
+            var plannedTarget=item.Plan?.NodeAssignments?.TryGetValue(entry,out var nodeTarget)==true?nodeTarget:item.Plan?.AssignedNodeId;
+            if(plannedTarget is not null && candidate.Id!=plannedTarget.Value) continue;
             if(candidate.Id==item.Previous && !selector.IsResume || candidate.Capacity<=0) continue;
             var identity=await nodeGroups!.GetNodeIdentityAsync(candidate.Id,ct);
             if(!selector.Accepts(candidate.Id,item.Previous??Guid.Empty,identity)) continue;
             if(!fresh && candidate.ScheduleEnabled && candidate.Timezone is not null && candidate.Slots is not null
                 && !new NodeSchedule(true,candidate.Timezone,candidate.Slots).IsOpen(DateTimeOffset.UtcNow)) continue;
-            if(!eligibility.CanRun(flow,candidate.Capabilities,candidate.Id,entry,checkpoint is not null,checkpoint?.Context,identity,candidate.Inventory)) continue;
+            if(!eligibility.CanRun(flow,candidate.Capabilities,candidate.Id,entry,checkpoint is not null,checkpoint?.Context,identity,candidate.Inventory,item.Plan?.NodeAssignments)) continue;
             // Un worker occupé (baux actifs au maximum de sa capacité) reste un destinataire valide : il prend la tâche en file dès qu'il se libère.
             await using var c=await dataSource.OpenConnectionAsync(ct);
             await using(var access=Sql.Command("""

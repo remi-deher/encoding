@@ -30,7 +30,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         if (reader.GetString(5) != "failed") return null;
         var prefix = reader.GetString(9).Split(':', 2)[0].Trim();
         var code = prefix is "permission_denied" or "media_tool_failed" or "operation_timeout" or "execution_infrastructure_failed"
-            or "integration_infrastructure_failed" or "plugin_configuration_missing" or "publication_failed" or "source_transfer_failed" or "cluster_refused" ? prefix : "execution_failed";
+            or "integration_infrastructure_failed" or "plugin_configuration_missing" or "publication_failed" or "source_transfer_failed" or "cluster_refused" or "placement_impossible" ? prefix : "execution_failed";
         return new(code, reader.IsDBNull(24) ? null : reader.GetString(24), reader.IsDBNull(18) ? null : true);
     }
 
@@ -263,8 +263,8 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         }
         await AddEvent(c, tx, next, Guid.NewGuid(), 0, "queued", detail, ct);
         await using (var work = Sql.Command("""
-            INSERT INTO execution_work(execution_id,library_id,media_path,media_key,available_at)
-            SELECT @next,library_id,media_path,media_key,clock_timestamp()
+            INSERT INTO execution_work(execution_id,library_id,media_path,media_key,available_at,placement_plan)
+            SELECT @next,library_id,media_path,media_key,clock_timestamp(),NULL
             FROM execution_work WHERE execution_id=@id
             """, c, tx))
         {
@@ -295,8 +295,8 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         }
         await AddEvent(c,tx,next,Guid.NewGuid(),0,"queued",detail,ct);
         await using(var work=Sql.Command("""
-          INSERT INTO execution_work(execution_id,library_id,media_path,media_key,handoff_selector,previous_worker_node_id)
-          SELECT @next,library_id,media_path,media_key,@selector,@previous FROM execution_work WHERE execution_id=@id
+          INSERT INTO execution_work(execution_id,library_id,media_path,media_key,handoff_selector,previous_worker_node_id,placement_plan)
+          SELECT @next,library_id,media_path,media_key,@selector,@previous,NULL FROM execution_work WHERE execution_id=@id
           """,c,tx))
         {
             work.Parameters.AddWithValue("next",next);work.Parameters.AddWithValue("id",id);
