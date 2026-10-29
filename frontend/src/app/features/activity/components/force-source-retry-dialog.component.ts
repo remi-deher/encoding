@@ -42,9 +42,9 @@ export interface ForceSourceRetryAttestation {
     >
       <mat-dialog-content class="app-dialog-body">
         <p>
-          La tentative « {{ data.media }} » repartira du fichier source après un délai de grâce de
-          135 secondes à compter de l’attestation. Cette décision neutralise le serveur propriétaire
-          pour tout le cluster.
+          Une nouvelle tentative pour « {{ data.media }} » repartira du fichier source après le
+          délai de grâce de 135 secondes à compter de l’attestation. Cette décision neutralise le
+          serveur propriétaire pour tout le cluster.
         </p>
         <p>
           N’utilisez cette action que si l’installation distante et tous ses workers sont réellement
