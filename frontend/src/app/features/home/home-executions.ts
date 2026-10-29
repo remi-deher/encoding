@@ -35,13 +35,13 @@ export class HomeExecutions {
     exhaustMap(() =>
       forkJoin({
         running: this.tracking.overview({ state: 'running', limit: 3 }),
-        cancelling: this.tracking.overview({ state: 'cancelling', limit: 3 }),
         succeeded: this.tracking.overview({ state: 'succeeded', limit: 5 }),
       }).pipe(
         timeout(8000),
-        map(({ running, cancelling, succeeded }): HomeExecutionState => ({
+        map(({ running, succeeded }): HomeExecutionState => ({
           status: 'ready',
-          active: [...(running.executions ?? []), ...(cancelling.executions ?? [])]
+          active: (running.executions ?? [])
+            .filter((execution) => execution.isActivelyProcessing === true)
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .slice(0, 3),
           publications: succeeded.executions ?? [],

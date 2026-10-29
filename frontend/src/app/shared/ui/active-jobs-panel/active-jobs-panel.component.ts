@@ -132,13 +132,13 @@ import { StatusBadgeComponent } from '../status-badge.component';
         }
       }
     </ul>
-    @if ((state().moreStates?.length ?? 0) > 0) {
+    @if ((state().data?.activeCount ?? 0) > jobs().length) {
       <p class="feedback">
-        {{ jobs().length }} traitements affichés. Retrouvez la suite dans Activité.
+        {{ jobs().length }} traitements actifs affichés. Retrouvez la suite dans Activité.
       </p>
     }
     <footer>
-      <span>{{ state().data?.activeCount ?? '—' }} en cours sur le cluster</span
+      <span>{{ state().data?.activeCount ?? '—' }} en cours sur ce serveur</span
       ><a
         matButton="text"
         routerLink="/activity"
@@ -155,7 +155,7 @@ export class ActiveJobsPanelComponent {
   protected readonly labels = EXECUTION_STATE_LABELS;
   protected readonly jobs = computed(() =>
     (this.state().data?.executions ?? []).filter(
-      (job) => job.state === 'running' || job.state === 'cancelling',
+      (job) => job.state === 'running' && job.isActivelyProcessing === true,
     ),
   );
   protected fileName(path: string): string {

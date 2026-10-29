@@ -205,7 +205,7 @@ export class PageSystemActionsComponent {
     toObservable(computed(() => this.jobsOpen() && !this.disabled())).pipe(
       switchMap((opened) =>
         opened
-          ? this.executionTracking.observeStates(['running', 'cancelling'])
+          ? this.executionTracking.observeStates(['running'])
           : of(INITIAL_EXECUTION_TRACKING),
       ),
     ),
