@@ -665,7 +665,8 @@ internal static partial class Harness
         {
             options=NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Node:DataDirectory"]=Path.Combine(directory,name) }).Build());
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
-            return new(options,scanner,new MediaActions(tools,scanner,new Probe()),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),capabilities??new Probe(),NullLogger<RuntimeFlowRunner>.Instance);
+            var probe=capabilities??new Probe();
+            return new(options,scanner,new MediaActions(tools,scanner,probe),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),probe,NullLogger<RuntimeFlowRunner>.Instance);
         }
         public async Task ConflictDuringCheckpointFailsExecutionAsync()
         {
@@ -716,6 +717,12 @@ internal static partial class Harness
         }
         public async Task LibraryAccessBlockBranchesOnDirectAccessAsync()
         {
+            var advertised=Capabilities(true).Select(capability=>capability.ToolId=="ffmpeg"
+                ? capability with { AccelerationTypes=[..capability.AccelerationTypes,"qsv"],Encoders=[..capability.Encoders??[],"hevc_qsv"],
+                    EncoderChecks=[..capability.EncoderChecks??[],new NodeEncoderCapability("hevc_qsv","usable")] }
+                : capability).ToArray();
+            await using(var announce=db.CreateCommand("UPDATE cluster_nodes SET capabilities=@caps"))
+            { announce.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(advertised,Json)); await announce.ExecuteNonQueryAsync(); }
             foreach(var direct in new[]{true,false})
             {
                 var flow=new FlowDefinition(1,Guid.NewGuid(),1,"Library access","video",

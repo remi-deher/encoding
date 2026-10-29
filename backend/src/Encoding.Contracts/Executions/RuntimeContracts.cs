@@ -7,7 +7,8 @@ public sealed record EnqueueMediaRequest(Guid Id, Guid LibraryId, string MediaPa
 public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, long Epoch, DateTimeOffset ExpiresAt,
     Guid SourceNodeId, string? SourceRoot, string MediaPath, string? SourceSha256, FlowDefinition Flow, RuntimeCheckpoint? Checkpoint, string EntryNodeId,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
-    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false, bool VerifyPublicationAccess=false, bool VerifyReplacementAccess=false);
+    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false, bool VerifyPublicationAccess=false, bool VerifyReplacementAccess=false,
+    FlowPlacementPlan? PlacementPlan = null);
 public sealed record RuntimeFence(long Epoch, IReadOnlyList<RuntimeStepCommand>? Commands = null);
 /// <summary>Métadonnées d'origine publiées dès que le worker a sondé la source, sans attendre la fin d'une étape.</summary>
 public sealed record ReportSourceMetadata(long Epoch, JsonElement Metadata);
@@ -45,7 +46,7 @@ public sealed record ResolvedVideoEncoding(string FlowNodeId, Guid WorkerId, str
     Guid ProfileId, int ProfileVersion, string ProfileName, int Priority, DateTimeOffset ResolvedAt);
 public sealed record RuntimePlanStep(string ComponentId, IReadOnlyDictionary<string,JsonElement> Configuration, string? FlowNodeId = null);
 public sealed record RuntimeCheckpoint(string NodeId, Guid InvocationId, string? OutputId, string? NextNodeId, RuntimeContext Context, string? TerminalResult,
-    RuntimeHandoffSelector? Handoff = null, RuntimeWait? Wait = null);
+    RuntimeHandoffSelector? Handoff = null, RuntimeWait? Wait = null, bool PlacementHandoff = false);
 public sealed record RuntimeCommandLog(Guid Id, string Command, string StandardOutput, string StandardError, int? ExitCode,
     DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, bool Truncated, decimal? ProgressPercent = null);
 public sealed record RuntimeStepCommand(string NodeId, Guid InvocationId, RuntimeCommandLog Command);

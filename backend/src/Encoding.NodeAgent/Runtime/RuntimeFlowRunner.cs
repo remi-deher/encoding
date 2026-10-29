@@ -53,6 +53,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             var observed=directRead?MediaFileStamp.Read(original):null;
             RuntimeContext context=lease.Checkpoint?.Context??new(sourceSha??"",extension,new Dictionary<string,JsonElement>(),null,null,[],
                 DirectSource:observed is null?null:new(observed.Bytes,observed.LastWriteUtcTicks));
+            var placementPlan=lease.PlacementPlan;
             if(context.DirectSource is {} prior)
             {
                 if(directRead) new MediaFileStamp(prior.Bytes,prior.LastWriteUtcTicks).Verify(original);
@@ -111,8 +112,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             async Task ReportSourceMetadataAsync()
             {
                 if(context.BeforeMetadata is not {} metadata) return;
-                try { await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source-metadata",new ReportSourceMetadata(lease.Epoch,metadata),job.Token); }
+                try
+                {
+                    placementPlan=await client.PostAsync<FlowPlacementPlan>($"executions/{lease.ExecutionId:D}/source-metadata",new ReportSourceMetadata(lease.Epoch,metadata),job.Token)??placementPlan;
+                }
                 catch(Exception) when(!job.IsCancellationRequested) { }
+                if(placementPlan?.Strategy==FlowPlacementPlan.StrategyImpossible)
+                    throw new IOException("placement_impossible: "+placementPlan.Reason);
             }
             async Task EnsureScanAsync()
             {
@@ -125,6 +131,12 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 }
                 if(context.CurrentMetadata is null) context=context with { CurrentMetadata=current==original || context.CurrentSha256==sourceSha?context.BeforeMetadata:await scanner.ScanAsync(current,job.Token) };
                 if(directRead) observed!.Verify(original);
+            }
+            if(placementPlan is not null)
+            {
+                placementPlan=await client.PostAsync<FlowPlacementPlan>($"executions/{lease.ExecutionId:D}/placement-plan",new RuntimeFence(lease.Epoch),job.Token)??placementPlan;
+                if(placementPlan.Strategy==FlowPlacementPlan.StrategyImpossible)
+                    throw new IOException("placement_impossible: "+placementPlan.Reason);
             }
             async Task<string> ExtraAsync(string path)
             {
@@ -750,7 +762,18 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 context=context with { Variables=new Dictionary<string,JsonElement>(variables) };
                 next=FlowPath.NextNodeId(lease.Flow,node.Id,output);
                 if(next is null) wait=null;
-                var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal,handoff,wait);
+                var placementHandoff=false;
+                if(handoff is null && next is not null && placementPlan?.NodeAssignments?.TryGetValue(next,out var plannedWorker)==true
+                    && plannedWorker!=client.NodeId)
+                {
+                    // A direct-read checkpoint cannot cross a worker boundary. Materialize and hash the
+                    // source under the current lease before handing the immutable artifact to its target.
+                    if(directRead) await EnsureFilesAsync();
+                    handoff=new RuntimeHandoffSelector("node",plannedWorker);
+                    placementHandoff=true;
+                }
+                context=context with { Variables=new Dictionary<string,JsonElement>(variables) };
+                var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal,handoff,wait,placementHandoff);
                 var eventId=Guid.NewGuid();
                 await leaseGate.WaitAsync(job.Token);
                 try
@@ -847,13 +870,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             logger.LogWarning("Exécution {ExecutionId} interrompue : {Type}",lease.ExecutionId,exception.GetType().Name);
             if (!lost)
             {
-                var code = exception switch {
+                var code = exception.Message.StartsWith("placement_impossible:",StringComparison.Ordinal) ? "placement_impossible" : exception switch {
                     LibraryAccessException or UnauthorizedAccessException => "permission_denied",
                     MediaToolException => "media_tool_failed",
                     OperationCanceledException or TimeoutException => "operation_timeout",
                     _ => lease.Flow.Nodes.FirstOrDefault(node => node.Id == activeBlock)?.Component.PluginId is "plex" or "sonarr" or "radarr" or "jellyfin" ? "integration_infrastructure_failed" : "execution_infrastructure_failed"
                 };
-                var detail = exception is MediaToolException or FlowArtifactReferenceException or LibraryAccessException
+                var detail = code=="placement_impossible" || exception is MediaToolException or FlowArtifactReferenceException or LibraryAccessException
                     ? exception.Message : "Vérifiez les outils, accès et intégrations de cette étape.";
                 await FailureAsync("failed", $"{code} : bloc {activeBlock ?? "préparation"}. "
                     + (publicationConfirmed ? "Publication média confirmée ; échec d’une étape ultérieure. " : "Aucune nouvelle confirmation de publication obtenue. ") + detail);

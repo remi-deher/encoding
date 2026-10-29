@@ -154,6 +154,7 @@ builder.Services.AddHostedService(services=>services.GetRequiredService<ClusterT
 builder.Services.AddHttpClient("ClusterTaskTransfer",client=>client.Timeout=TimeSpan.FromMinutes(30)).ConfigurePrimaryHttpMessageHandler(()=>new HttpClientHandler{AllowAutoRedirect=false});
 builder.Services.AddHostedService<TaskOwnershipService>();
 builder.Services.AddSingleton<PendingSourceWriteRepository>();
+builder.Services.AddSingleton<FlowPlacementPlanner>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<DiskLockRepository>();
 builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>();
