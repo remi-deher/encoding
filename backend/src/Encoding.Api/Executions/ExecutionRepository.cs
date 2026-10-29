@@ -10,7 +10,11 @@ namespace Encoding.Api.Executions;
 public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRegistry? components = null, ExecutionStreamBroadcaster? broadcaster = null,TaskOwnershipRepository? ownership=null,ClusterTaskCoordinator? coordinator=null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
-    private const string Columns = """
+    // Le bail vit dans la base du propriétaire : sans preuve locale et non expirée, l'état répliqué ne suffit pas.
+    private static string ActivelyProcessingSql(string executionAlias) =>
+        $"({executionAlias}.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until>clock_timestamp() AND {TaskOwnershipRepository.ActiveSql(executionAlias + ".id")})";
+
+    private static readonly string Columns = $"""
  e.id,e.media,e.library_name,e.flow_name,e.flow_version,e.state,e.node_id,n.name,
  e.progress,e.detail,e.attempt,e.revision,e.queued_at,e.started_at,e.finished_at,e.updated_at,w.before_metadata::text,w.after_metadata::text,w.published_path
  ,(SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),COALESCE(w.library_id,o.library_id),o.owner_peer_id,o.epoch,o.state
@@ -19,12 +23,13 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
        WHEN w.publication_requested AND w.published_path IS NULL THEN 'publication'
        WHEN w.source_preparation_requested AND w.source_sha IS NULL THEN 'source_transfer'
        WHEN w.handoff_pending THEN 'waiting_handoff' ELSE NULL END
+ ,CASE WHEN {ActivelyProcessingSql("e")} THEN TRUE ELSE FALSE END
  """;
     private static ExecutionResponse Read(DbDataReader r) => new(
     r.GetGuid(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4), r.GetString(5),
     r.IsDBNull(6) ? null : r.GetGuid(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetDecimal(8),
     r.GetString(9), r.GetInt32(10), r.GetInt32(11), r.GetFieldValue<DateTimeOffset>(12),
-    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18),ReadVideoEncodings(r,19),r.IsDBNull(20)?null:r.GetGuid(20),r.IsDBNull(21)?null:new TaskOwnershipStatus(r.GetGuid(0),r.GetGuid(21),r.GetInt64(22),r.GetString(23)), ReadFailure(r), r.IsDBNull(25) ? null : r.GetString(25));
+    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18),ReadVideoEncodings(r,19),r.IsDBNull(20)?null:r.GetGuid(20),r.IsDBNull(21)?null:new TaskOwnershipStatus(r.GetGuid(0),r.GetGuid(21),r.GetInt64(22),r.GetString(23)), ReadFailure(r), r.IsDBNull(25) ? null : r.GetString(25), r.GetBoolean(26));
     private static ExecutionFailureInfo? ReadFailure(DbDataReader reader)
     {
         if (reader.GetString(5) != "failed") return null;
@@ -57,6 +62,9 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         var counts = new Dictionary<string, int>();
         await using (var cmd = Sql.Command("SELECT CASE WHEN e.state='queued' AND o.state='quarantined' THEN 'quarantined' ELSE e.state END,count(*)::integer FROM executions e LEFT JOIN task_ownership o ON o.execution_id=e.id GROUP BY 1", c, tx))
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) counts[r.GetString(0)] = r.GetInt32(1); }
+        int activeCount;
+        await using (var cmd = Sql.Command($"SELECT count(*)::integer FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE {ActivelyProcessingSql("e")}", c, tx))
+            activeCount = await cmd.ScalarInt32Async(ct) ?? 0;
 
         var predicates = new List<string>();
         void BindFilters(DbCommand cmd)
@@ -89,7 +97,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         }
 
         var list = new List<ExecutionResponse>();
-        await using (var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id LEFT JOIN task_ownership o ON o.execution_id=e.id{whereSql} ORDER BY CASE WHEN e.state IN ('queued','running','cancelling') THEN 0 ELSE 1 END,e.updated_at DESC,e.id LIMIT @limit OFFSET @offset", c, tx))
+        await using (var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id LEFT JOIN task_ownership o ON o.execution_id=e.id{whereSql} ORDER BY CASE WHEN {ActivelyProcessingSql("e")} THEN 0 ELSE 1 END,CASE WHEN e.state IN ('queued','running','cancelling') THEN 0 ELSE 1 END,e.updated_at DESC,e.id LIMIT @limit OFFSET @offset", c, tx))
         {
             BindFilters(cmd);
             cmd.Parameters.AddWithValue("limit", limit);
@@ -103,7 +111,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) activity.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetFieldValue<DateTimeOffset>(5))); }
         await tx.CommitAsync(ct);
         int Count(string s) => counts.GetValueOrDefault(s);
-        return new(list, Count("queued"), Count("running") + Count("cancelling"), Count("failed"), Count("cancelled"), Count("succeeded"), DateTimeOffset.UtcNow, activity, Count("deferred"), totalCount, limit, offset, Count("quarantined"));
+        return new(list, Count("queued"), activeCount, Count("failed"), Count("cancelled"), Count("succeeded"), DateTimeOffset.UtcNow, activity, Count("deferred"), totalCount, limit, offset, Count("quarantined"));
     }
 
     public async Task<ExecutionResponse?> GetAsync(Guid id, CancellationToken ct)

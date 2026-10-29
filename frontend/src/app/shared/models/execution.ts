@@ -37,6 +37,8 @@ export interface ExecutionResponse {
   } | null;
   readonly publishedPath?: string | null;
   readonly currentPhase?: string | null;
+  /** True only while a running execution holds a valid lease under active ownership. */
+  readonly isActivelyProcessing?: boolean;
   readonly videoEncodings?: readonly ResolvedVideoEncoding[] | null;
   readonly libraryId?: string | null;
   readonly updatedAt: string;

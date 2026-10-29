@@ -9,6 +9,7 @@ const running = {
   flow: 'HEVC',
   flowVersion: 2,
   state: 'running',
+  isActivelyProcessing: true,
   nodeId: 'n1',
   node: 'Studio',
   progress: 100,
