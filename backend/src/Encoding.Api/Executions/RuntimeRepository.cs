@@ -328,6 +328,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 r.IsDBNull(10)?null:r.GetGuid(10),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:(byte[])r[12],
                 r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!),r.GetFieldValue<DateTimeOffset>(14),r.IsDBNull(15)?null:JsonSerializer.Deserialize<FlowPlacementPlan>(r.GetString(15),Json),r.IsDBNull(16)?null:JsonSerializer.Deserialize<JsonElement>(r.GetString(16),Json)));
         }
+        var placementCandidatesByLibrary=new Dictionary<Guid,IReadOnlyList<NodePlacementCandidate>>();
+        var placementPlans=new Dictionary<(Guid Library,Guid Flow,int Version,string Metadata),FlowPlacementPlan>();
         foreach(var item in candidates)
         {
             FlowPlacementPlan? plan = item.PlacementPlan;
@@ -336,8 +338,15 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             // hint here; persistence is intentionally deferred until source metadata is reported.
             if(item.Probe is null && plan is null)
             {
-                var nodeCandidates=await LoadPlacementCandidatesAsync(item.Library,c,tx,ct);
-                plan=planner.Plan(item.Flow,item.BeforeMetadata,nodeCandidates,DateTimeOffset.UtcNow);
+                var metadataKey=item.BeforeMetadata?.GetRawText()??string.Empty;
+                var key=(item.Library,item.Flow.Id,item.Flow.Version,metadataKey);
+                if(!placementPlans.TryGetValue(key,out plan))
+                {
+                    if(!placementCandidatesByLibrary.TryGetValue(item.Library,out var nodeCandidates))
+                        placementCandidatesByLibrary[item.Library]=nodeCandidates=await LoadPlacementCandidatesAsync(item.Library,c,tx,ct);
+                    plan=planner.Plan(item.Flow,item.BeforeMetadata,nodeCandidates,DateTimeOffset.UtcNow);
+                    placementPlans[key]=plan;
+                }
             }
             if(item.Probe is {} wanted)
             {
