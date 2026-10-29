@@ -9,6 +9,7 @@ const running = {
   flow: 'HEVC',
   flowVersion: 3,
   state: 'running',
+  isActivelyProcessing: true,
   nodeId: 'node-1',
   node: 'Studio',
   progress: 100,
@@ -21,7 +22,7 @@ const running = {
   updatedAt: now,
 };
 const counts = {
-  activeCount: 2,
+  activeCount: 1,
   queuedCount: 6000,
   succeededCount: 60,
   failedCount: 1,
@@ -147,17 +148,18 @@ test('completed jobs stay visible behind a large queue and history is paginated'
   expect(errors).toEqual([]);
 });
 
-test('jobs pill opens an accessible anchored panel with actual running and cancelling jobs', async ({
+test('jobs pill shows only accessible jobs with confirmed worker processing', async ({
   page,
 }) => {
   await page.goto('/activity');
-  const trigger = page.getByRole('button', { name: '2 jobs en cours', exact: true });
+  const trigger = page.getByRole('button', { name: '1 job en cours', exact: true });
   await trigger.click();
   const panel = page.getByRole('dialog', { name: 'Jobs en cours', exact: true });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('Épisode en cours.mkv');
   await expect(panel).toContainText('Validation avant publication');
-  await expect(panel).toContainText('Annulation demandée');
+  await expect(panel).not.toContainText('Annulation.mkv');
+  await expect(panel).not.toContainText('Annulation demandée');
   await expect(panel).toContainText('En cours');
   await expect(panel.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
   const accessibility = await new AxeBuilder({ page })
