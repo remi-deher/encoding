@@ -179,9 +179,14 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
                 "cancelling"=>"cancelling",
                 _=>"running"
             };
-            var logs=JsonSerializer.Deserialize<IReadOnlyList<RuntimeCommandLog>>(r.GetString(5),new JsonSerializerOptions(JsonSerializerDefaults.Web))??[];
+            var logsReadable=RuntimeCommandLogCodec.TryDeserialize(r.GetString(5),out var logs);
+            RuntimeStepDiagnostic? diagnostic = node?.Component.ComponentId == MediaIntegrityPolicy.Component
+                ? ReadIntegrityDiagnostic(checkpoint)
+                : null;
+            if (!logsReadable)
+                diagnostic ??= new("command_log_unreadable", "L’audit des commandes est illisible et n’a pas été modifié.");
             result.Add(new(nodeId,node?.Name??descriptor?.Name??nodeId,r.GetGuid(1),descriptor?.Kind??"unknown",status,
-                r.GetFieldValue<DateTimeOffset>(2),completedAt,outputId,outputLabel,checkpoint?.NextNodeId,logs, node?.Component.ComponentId == MediaIntegrityPolicy.Component ? ReadIntegrityDiagnostic(checkpoint) : null));
+                r.GetFieldValue<DateTimeOffset>(2),completedAt,outputId,outputLabel,checkpoint?.NextNodeId,logs,diagnostic));
         }
         return result;
     }
@@ -250,8 +255,21 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         const string detail = "Nouvelle exécution créée depuis la source après interruption.";
         await using (var create = Sql.Command("""
             INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
-            SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,@detail
-            FROM executions WHERE id=@id AND state='cancelled'
+            SELECT @next,e.media,e.library_name,e.flow_name,e.flow_version,e.flow_definition,'queued',e.attempt+1,e.id,@detail
+            FROM executions e JOIN execution_work source ON source.execution_id=e.id
+            WHERE e.id=@id AND e.state='cancelled'
+              AND NOT EXISTS(SELECT 1 FROM task_ownership own WHERE own.execution_id=e.id AND own.state='quarantined')
+              AND NOT EXISTS(SELECT 1 FROM task_quarantines quarantine WHERE quarantine.execution_id=e.id)
+              AND NOT EXISTS(
+                SELECT 1 FROM execution_work sibling
+                JOIN executions active ON active.id=sibling.execution_id
+                WHERE sibling.library_id=source.library_id AND sibling.media_key=source.media_key
+                  AND sibling.execution_id<>e.id AND active.state IN ('queued','running','cancelling'))
+              AND NOT EXISTS(
+                SELECT 1 FROM task_ownership sibling
+                JOIN executions active ON active.id=sibling.execution_id
+                WHERE sibling.library_id=source.library_id AND sibling.media_key=source.media_key
+                  AND sibling.execution_id<>e.id AND active.state IN ('queued','running','cancelling'))
             ON CONFLICT(retry_of) DO NOTHING RETURNING id
             """, c, tx))
         {

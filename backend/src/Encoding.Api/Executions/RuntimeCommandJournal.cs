@@ -23,7 +23,7 @@ internal static class RuntimeCommandJournal
             read.Parameters.AddWithValue("id", execution); read.Parameters.AddWithValue("node", group.Key.NodeId); read.Parameters.AddWithValue("invocation", group.Key.InvocationId);
             await using var reader = await read.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) return false;
-            var existing = JsonSerializer.Deserialize<RuntimeCommandLog[]>(reader.GetString(0), Json) ?? [];
+            if (!RuntimeCommandLogCodec.TryDeserialize(reader.GetString(0), out var existing)) return false;
             var completed = !reader.IsDBNull(1);
             await reader.DisposeAsync();
             if (completed) continue; // A late heartbeat cannot rewrite a completed step.

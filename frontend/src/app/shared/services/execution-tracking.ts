@@ -197,6 +197,12 @@ export class ExecutionTracking {
       {},
     );
   }
+  resume(id: string) {
+    return this.http.post<{ id: string }>(
+      '/api/v1/executions/' + encodeURIComponent(id) + '/resume',
+      {},
+    );
+  }
   refresh() {
     this.refreshRequested.next();
   }

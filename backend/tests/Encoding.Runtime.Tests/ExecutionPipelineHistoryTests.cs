@@ -1,6 +1,7 @@
 using Encoding.Api.Executions;
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Contracts.Executions;
 using System.Text.Json;
 using Xunit;
 
@@ -65,5 +66,55 @@ public sealed class ExecutionPipelineHistoryTests
         Assert.Equal("finish", step.NodeId);
         Assert.Equal("finish", step.NodeName);
         Assert.Equal("failed", step.Status);
+    }
+
+    [Fact]
+    public async Task AdjacentLegacyCommandLogArraysRemainReadable()
+    {
+        await using var db = await TestDatabase.CreateAsync(RuntimeFixture.ConnectionString, "pipeline_legacy_command_logs");
+        await DatabaseMigrator.ApplyAsync(db.Db, Harness.RepositoryRoot(), CancellationToken.None);
+        var id = Guid.NewGuid();
+        var command = new RuntimeCommandLog(Guid.NewGuid(), "synthetic-tool", "", "", 0,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false);
+        var serialized = "[]" + JsonSerializer.Serialize(new[] { command }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await using (var insert = db.Db.CreateCommand("""
+            INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt)
+            VALUES(@id,'synthetic.mkv','Synthetic','Legacy command logs',1,'{}','failed',1);
+            INSERT INTO execution_steps(execution_id,node_id,invocation_id,idempotent,command_logs,checkpoint)
+            VALUES(@id,'unknown-step',@invocation,true,@logs,'{}')
+            """))
+        {
+            insert.Parameters.AddWithValue("id", id);
+            insert.Parameters.AddWithValue("invocation", Guid.NewGuid());
+            insert.Parameters.AddWithValue("logs", serialized);
+            await insert.ExecuteNonQueryAsync();
+        }
+
+        var step = Assert.Single(await new ExecutionRepository(db.Db).PipelineAsync(id, CancellationToken.None));
+        Assert.Equal(command.Id, Assert.Single(step.Commands).Id);
+        Assert.Null(step.Diagnostic);
+    }
+
+    [Fact]
+    public async Task UnreadableCommandLogsReturnStructuredDiagnosticInsteadOfThrowing()
+    {
+        await using var db = await TestDatabase.CreateAsync(RuntimeFixture.ConnectionString, "pipeline_corrupt_command_logs");
+        await DatabaseMigrator.ApplyAsync(db.Db, Harness.RepositoryRoot(), CancellationToken.None);
+        var id = Guid.NewGuid();
+        await using (var insert = db.Db.CreateCommand("""
+            INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt)
+            VALUES(@id,'synthetic.mkv','Synthetic','Corrupt command logs',1,'{}','failed',1);
+            INSERT INTO execution_steps(execution_id,node_id,invocation_id,idempotent,command_logs,checkpoint)
+            VALUES(@id,'unknown-step',@invocation,true,'[invalid]','{}')
+            """))
+        {
+            insert.Parameters.AddWithValue("id", id);
+            insert.Parameters.AddWithValue("invocation", Guid.NewGuid());
+            await insert.ExecuteNonQueryAsync();
+        }
+
+        var step = Assert.Single(await new ExecutionRepository(db.Db).PipelineAsync(id, CancellationToken.None));
+        Assert.Empty(step.Commands);
+        Assert.Equal("command_log_unreadable", step.Diagnostic?.Code);
     }
 }

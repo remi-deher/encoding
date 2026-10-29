@@ -1,10 +1,12 @@
+import { ExecutionState, EXECUTION_STATE_LABELS } from './execution';
+
 export type LibraryActivityStatus = 'untreated' | 'active' | 'done' | 'failed' | 'disabled';
 
 export const ACTIVITY_STATUS_LABELS: Record<LibraryActivityStatus, string> = {
-  untreated: 'Non traité',
+  untreated: 'À traiter',
   active: 'En cours',
   done: 'Traité',
-  failed: 'En erreur',
+  failed: 'Erreur ou annulation',
   disabled: 'Désactivé',
 };
 
@@ -26,6 +28,35 @@ export interface LibraryActivityFile {
   readonly node: string | null;
   readonly progress: number | null;
   readonly updatedAt: string | null;
+  readonly executionOwnershipState?: string | null;
+  readonly quarantineReason?: string | null;
+  readonly conflictingExecutionId?: string | null;
+}
+
+export function activityExecutionLabel(file: LibraryActivityFile): string | null {
+  const state = file.executionState as ExecutionState | null;
+  if (!state) return null;
+  const label = EXECUTION_STATE_LABELS[state] ?? state;
+  return file.executionOwnershipState === 'quarantined' ? `En quarantaine · ${label}` : label;
+}
+
+export function activityExecutionTone(
+  file: LibraryActivityFile,
+): 'accent' | 'neutral' | 'danger' | 'success' | 'warning' {
+  if (file.executionOwnershipState === 'quarantined') return 'warning';
+  switch (file.executionState) {
+    case 'running':
+    case 'cancelling':
+      return 'accent';
+    case 'failed':
+      return 'danger';
+    case 'succeeded':
+      return 'success';
+    case 'deferred':
+      return 'warning';
+    default:
+      return 'neutral';
+  }
 }
 
 export interface LibraryActivityCounts {

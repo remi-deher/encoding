@@ -14,11 +14,11 @@ public sealed class TaskCoordinationProjection(DbDataSource db,ClusterPeerIdenti
     internal static TimeSpan RetryDelay(long attempts)=>TimeSpan.FromSeconds(Math.Min(60,Math.Pow(2,Math.Min(6,attempts))));
     public async Task<int> ProjectAsync(CancellationToken ct)
     {
-        const string wake="EXISTS(SELECT 1 FROM task_coordination_parked p JOIN task_ownership o ON o.execution_id=p.execution_id WHERE o.state<>'quarantined')";
+        const string wake="EXISTS(SELECT 1 FROM task_coordination_parked p JOIN task_ownership o ON o.execution_id=p.execution_id WHERE o.state<>'quarantined') OR EXISTS(SELECT 1 FROM task_quarantines q JOIN task_ownership loser ON loser.execution_id=q.execution_id JOIN executions le ON le.id=q.execution_id JOIN execution_work lw ON lw.execution_id=le.id JOIN task_ownership winner ON winner.execution_id=q.winner_id JOIN executions we ON we.id=q.winner_id LEFT JOIN execution_work ww ON ww.execution_id=we.id JOIN task_neutralizations stopped ON stopped.peer_id=winner.owner_peer_id WHERE loser.state='quarantined' AND le.state='queued' AND le.revision=0 AND le.started_at IS NULL AND lw.published_path IS NULL AND NOT lw.publication_requested AND we.state<>'succeeded' AND ww.published_path IS NULL AND NOT COALESCE(ww.publication_requested,FALSE) AND stopped.released_at IS NULL AND stopped.recorded_at<=@cutoff)";
         await using(var hint=db.CreateCommand($"SELECT EXISTS(SELECT 1 FROM task_coordination_inbox WHERE next_attempt_at IS NULL OR next_attempt_at<=@now) OR {wake}"))
-        {hint.Parameters.AddWithValue("now",clock.GetUtcNow());if(!await hint.ScalarBoolAsync(ct)) return 0;}
+        {hint.Parameters.AddWithValue("now",clock.GetUtcNow());hint.Parameters.AddWithValue("cutoff",clock.GetUtcNow()-RecoveryGrace);if(!await hint.ScalarBoolAsync(ct)) return 0;}
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
-        // No quarantine is lifted here. A changed projection only makes the original proof eligible for full verification again.
+        // Recompute duplicate ownership and apply the narrow, time-bounded source-retry exception below.
         await RestoreParkedAsync(c,tx,ct);
         var rows=new List<(string Key,string Body,long Attempts)>();
         await using(var read=Sql.Command("SELECT register_key,body,attempts FROM task_coordination_inbox WHERE next_attempt_at IS NULL OR next_attempt_at<=@now ORDER BY attempts,origin_id,sequence LIMIT 32",c,tx))
@@ -164,16 +164,34 @@ public sealed class TaskCoordinationProjection(DbDataSource db,ClusterPeerIdenti
     }
     internal static async Task DeduplicateAsync(DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        // Terminal executions are not reservations for future explicit attempts of the same file.
+        // Recalculate duplicate reservations from the converged ownership projection.
         await using var dedup=Sql.Command("""
           UPDATE task_ownership SET state='active' WHERE state='quarantined' AND execution_id IN (SELECT execution_id FROM task_quarantines);
           DELETE FROM task_quarantines;
           INSERT INTO task_quarantines(execution_id,winner_id,reason)
           SELECT loser.execution_id,winner.execution_id,'Création concurrente du même média ; résultat conservé en quarantaine.'
           FROM task_ownership loser JOIN task_ownership winner ON winner.library_id=loser.library_id AND winner.media_key=loser.media_key AND winner.cluster_id=loser.cluster_id
-          LEFT JOIN executions le ON le.id=loser.execution_id LEFT JOIN executions we ON we.id=winner.execution_id
+          LEFT JOIN executions le ON le.id=loser.execution_id LEFT JOIN execution_work lw ON lw.execution_id=loser.execution_id LEFT JOIN executions we ON we.id=winner.execution_id LEFT JOIN execution_work ww ON ww.execution_id=winner.execution_id
           WHERE loser.state='active' AND winner.state='active' AND COALESCE(le.finished_at,'infinity')>winner.queued_at AND COALESCE(we.finished_at,'infinity')>loser.queued_at
           AND (winner.queued_at,winner.owner_peer_id,winner.execution_id)<(loser.queued_at,loser.owner_peer_id,loser.execution_id)
+          AND NOT (
+            le.state='queued' AND le.revision=0 AND le.started_at IS NULL AND le.finished_at IS NULL AND lw.published_path IS NULL AND NOT COALESCE(lw.publication_requested,FALSE)
+            AND NOT EXISTS(SELECT 1 FROM execution_steps retry_step WHERE retry_step.execution_id=loser.execution_id)
+            AND we.state<>'succeeded' AND ww.published_path IS NULL AND NOT COALESCE(ww.publication_requested,FALSE)
+            AND EXISTS(SELECT 1 FROM task_neutralizations stopped
+              WHERE stopped.peer_id=winner.owner_peer_id AND stopped.released_at IS NULL
+                AND stopped.recorded_at<=clock_timestamp()-interval '135 seconds')
+            AND NOT EXISTS(
+              SELECT 1 FROM task_ownership sibling
+              JOIN executions sibling_execution ON sibling_execution.id=sibling.execution_id
+              LEFT JOIN execution_work sibling_work ON sibling_work.execution_id=sibling.execution_id
+              WHERE sibling.library_id=loser.library_id AND sibling.media_key=loser.media_key
+                AND sibling.execution_id NOT IN (loser.execution_id,winner.execution_id)
+                AND (sibling_execution.state='succeeded' OR sibling_work.published_path IS NOT NULL
+                  OR COALESCE(sibling_work.publication_requested,FALSE)
+                  OR sibling_execution.state IN ('queued','running','cancelling'))
+            )
+          )
           ORDER BY winner.queued_at,winner.owner_peer_id,winner.execution_id ON CONFLICT(execution_id) DO NOTHING;
           UPDATE task_ownership SET state='quarantined' WHERE execution_id IN (SELECT execution_id FROM task_quarantines);
           UPDATE execution_work SET lease_until=NULL,worker_node_id=NULL,lease_epoch=lease_epoch+1 WHERE execution_id IN (SELECT q.execution_id FROM task_quarantines q JOIN task_ownership o ON o.execution_id=q.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id) AND lease_until IS NOT NULL;

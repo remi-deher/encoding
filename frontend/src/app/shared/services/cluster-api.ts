@@ -57,6 +57,12 @@ export interface ClusterTaskStatus {
   }[];
 }
 
+export interface ClusterTaskActionResult {
+  readonly success: boolean;
+  readonly detail: string;
+  readonly transferId?: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ClusterApi {
   private readonly http = inject(HttpClient);
@@ -69,6 +75,12 @@ export class ClusterApi {
   }
   taskStatus() {
     return this.http.get<ClusterTaskStatus>('/api/v1/cluster/tasks/status');
+  }
+  forceSourceRetry(id: string, confirmedStopped: boolean, reason: string) {
+    return this.http.post<ClusterTaskActionResult>(
+      '/api/v1/cluster/tasks/' + encodeURIComponent(id) + '/force-source-retry',
+      { confirmedStopped, reason },
+    );
   }
   reconciliationStatus() {
     return this.http.get<ClusterReconciliationHealthStatus>(

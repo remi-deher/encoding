@@ -134,6 +134,76 @@ public sealed class ClusterTaskCoordinator(DbDataSource db,ClusterPeerIdentitySt
         await using(var read=Sql.Command("SELECT cluster_id FROM cluster_peer_admissions WHERE peer_id=@peer AND revoked_at IS NULL",c,tx)) {read.Parameters.AddWithValue("peer",peer);if(await read.ScalarGuidAsync(ct) is not {} id) return new(false,"Serveur non admis.");cluster=id;}
         await AppendAsync(new(2,Guid.NewGuid(),cluster,identity.PeerId,"neutralize",Guid.Empty,0,Guid.Empty,SubjectPeerId:peer,RecordedAt:clock.GetUtcNow(),Reason:request.Reason),c,tx,ct);await tx.CommitAsync(ct);await projection.ProjectAsync(ct);return new(true,"Neutralisation attestée et journalisée ; délai de grâce de 135 secondes avant reprise.");
     }
+    public async Task<ClusterTaskResult> ForceSourceRetryAsync(Guid id,ClusterTaskForceSourceRetryRequest request,CancellationToken ct)
+    {
+        if(!await TwoServerRecoveryAsync(ct)) return new(false,"La reprise forcée depuis la source est disponible uniquement dans un cluster à deux serveurs.");
+        if(!request.ConfirmedStopped||request.Reason is not {Length:>=8 and <=1000}) return new(false,"Confirmer l’arrêt effectif de l’installation et de ses workers, avec une justification d’au moins huit caractères.");
+
+        await projection.ProjectAsync(ct);
+        await using(var released=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id JOIN execution_work w ON w.execution_id=e.id JOIN libraries l ON l.id=o.library_id WHERE o.execution_id=@id AND o.owner_peer_id=@local AND o.state='active' AND e.state='queued' AND e.revision=0 AND e.started_at IS NULL AND e.finished_at IS NULL AND w.published_path IS NULL AND NOT w.publication_requested AND l.is_active AND NOT l.is_deleted AND NOT EXISTS(SELECT 1 FROM task_quarantines q WHERE q.execution_id=e.id) AND NOT EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id)"))
+        {released.Parameters.AddWithValue("id",id);released.Parameters.AddWithValue("local",identity.PeerId);if(await released.ScalarBoolAsync(ct)) return new(true,"La tentative source est déjà libérée et en file.");}
+        Guid oldOwner;DateTimeOffset? neutralizedAt=null;bool alreadyNeutralized=false;
+        await using(var c=await db.OpenConnectionAsync(ct))
+        await using(var tx=await c.BeginTransactionAsync(ct))
+        {
+            Guid library;string mediaKey;
+            await using(var candidate=Sql.Command("SELECT o.library_id,o.media_key FROM task_ownership o JOIN executions e ON e.id=o.execution_id JOIN execution_work cw ON cw.execution_id=e.id JOIN task_quarantines q ON q.execution_id=o.execution_id JOIN libraries l ON l.id=o.library_id AND l.is_active AND NOT l.is_deleted WHERE o.execution_id=@id AND o.state='quarantined' AND e.state='queued' AND e.revision=0 AND e.started_at IS NULL AND e.finished_at IS NULL AND cw.published_path IS NULL AND NOT cw.publication_requested AND NOT EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id) FOR UPDATE OF o,e,q",c,tx))
+            {
+                candidate.Parameters.AddWithValue("id",id);await using var r=await candidate.ExecuteReaderAsync(ct);
+                if(!await r.ReadAsync(ct)) return new(false,"Seule une tentative source en quarantaine, en file, jamais démarrée et sans résultat publié peut être forcée.");
+                library=r.GetGuid(0);mediaKey=r.GetString(1);
+            }
+
+            Guid root;
+            await using(var chain=Sql.Command("WITH RECURSIVE conflicts(execution_id,depth) AS (SELECT winner_id,1 FROM task_quarantines WHERE execution_id=@id UNION ALL SELECT q.winner_id,c.depth+1 FROM conflicts c JOIN task_quarantines q ON q.execution_id=c.execution_id WHERE c.depth<32) SELECT c.execution_id FROM conflicts c WHERE NOT EXISTS(SELECT 1 FROM task_quarantines q WHERE q.execution_id=c.execution_id) ORDER BY c.depth DESC LIMIT 1",c,tx))
+            {
+                chain.Parameters.AddWithValue("id",id);if(await chain.ScalarGuidAsync(ct) is not {} rootId) return new(false,"La tentative en quarantaine n’a plus de conflit propriétaire identifiable.");root=rootId;
+            }
+
+            string rootState;string? publishedPath;bool publicationRequested;string ownershipState;
+            await using(var owner=Sql.Command("SELECT o.owner_peer_id,o.state,e.state,w.published_path,w.publication_requested FROM task_ownership o JOIN executions e ON e.id=o.execution_id LEFT JOIN execution_work w ON w.execution_id=e.id WHERE o.execution_id=@id AND o.library_id=@library AND o.media_key=@media",c,tx))
+            {
+                owner.Parameters.AddWithValue("id",root);owner.Parameters.AddWithValue("library",library);owner.Parameters.AddWithValue("media",mediaKey);await using var r=await owner.ExecuteReaderAsync(ct);
+                if(!await r.ReadAsync(ct)) return new(false,"Le conflit d’origine n’est plus présent dans cette bibliothèque.");
+                oldOwner=r.GetGuid(0);ownershipState=r.GetString(1);rootState=r.GetString(2);publishedPath=r.IsDBNull(3)?null:r.GetString(3);publicationRequested=!r.IsDBNull(4)&&r.GetBoolean(4);
+            }
+            if(oldOwner==identity.PeerId||ownershipState is not ("active" or "quarantined")) return new(false,"Le conflit ne dépend pas d’un propriétaire distant neutralisable.");
+            if(rootState=="succeeded"||publishedPath is not null||publicationRequested) return new(false,"Une publication est confirmée ou incertaine ; vérifiez le média avant toute nouvelle tentative.");
+
+            await using(var sibling=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id LEFT JOIN execution_work w ON w.execution_id=e.id WHERE o.library_id=@library AND o.media_key=@media AND o.execution_id<>@candidate AND o.execution_id<>@root AND (e.state='succeeded' OR w.published_path IS NOT NULL OR COALESCE(w.publication_requested,FALSE) OR e.state IN ('queued','running','cancelling')))" ,c,tx))
+            {
+                sibling.Parameters.AddWithValue("library",library);sibling.Parameters.AddWithValue("media",mediaKey);sibling.Parameters.AddWithValue("candidate",id);sibling.Parameters.AddWithValue("root",root);
+                if(await sibling.ScalarBoolAsync(ct)) return new(false,"Une autre tentative du même média peut encore produire ou avoir publié un résultat ; réconciliez-la avant de forcer la reprise.");
+            }
+
+            await using(var existing=Sql.Command("SELECT author_peer_id,recorded_at FROM task_neutralizations WHERE peer_id=@peer AND released_at IS NULL",c,tx))
+            {
+                existing.Parameters.AddWithValue("peer",oldOwner);await using var r=await existing.ExecuteReaderAsync(ct);
+                if(await r.ReadAsync(ct))
+                {
+                    if(r.GetGuid(0)!=identity.PeerId) return new(false,"Ce serveur est déjà neutralisé par une autre décision ; faites converger les journaux avant de continuer.");
+                    alreadyNeutralized=true;neutralizedAt=r.GetFieldValue<DateTimeOffset>(1);
+                }
+            }
+            if(!alreadyNeutralized)
+            {
+                Guid cluster;
+                await using(var admitted=Sql.Command("SELECT cluster_id FROM cluster_peer_admissions WHERE peer_id=@peer AND revoked_at IS NULL",c,tx))
+                {admitted.Parameters.AddWithValue("peer",oldOwner);if(await admitted.ScalarGuidAsync(ct) is not {} clusterId) return new(false,"Le serveur propriétaire n’est plus admis dans ce cluster.");cluster=clusterId;}
+                var reason=request.Reason.Trim();
+                if(reason.Length<8) return new(false,"La justification doit contenir au moins huit caractères.");
+                neutralizedAt=clock.GetUtcNow();
+                await AppendAsync(new(2,Guid.NewGuid(),cluster,identity.PeerId,"neutralize",Guid.Empty,0,Guid.Empty,SubjectPeerId:oldOwner,RecordedAt:neutralizedAt,Reason:reason),c,tx,ct);
+            }
+            await tx.CommitAsync(ct);
+        }
+
+        await projection.ProjectAsync(ct);
+        var current=await ownership.GetAsync(id,ct);
+        if(current?.OwnerPeerId==identity.PeerId&&current.State=="active") return new(true,"La tentative source est libérée et peut reprendre normalement.");
+        var remaining=Math.Max(0,(int)Math.Ceiling((neutralizedAt!.Value+TaskCoordinationProjection.RecoveryGrace-clock.GetUtcNow()).TotalSeconds));
+        return new(true,remaining==0?"Neutralisation attestée ; la projection libérera automatiquement la tentative source après convergence.":$"Neutralisation attestée et journalisée ; reprise automatique depuis la source après le délai de grâce restant ({remaining} s).");
+    }
     public async Task<ClusterTaskResult> RecoverAsync(Guid id,CancellationToken ct)
     {
         if(!await TwoServerRecoveryAsync(ct)) return new(false,"La reprise à trois serveurs exige un témoin ou une décision majoritaire dédiée.");

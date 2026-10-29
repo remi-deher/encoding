@@ -11,12 +11,20 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
             SELECT m.id,m.library_id,l.name AS library,m.relative_path,m.byte_length,m.modified_at,
                    l.is_active AS library_active,v.definition->>'name' AS flow,a.flow_version,
                    e.id AS execution_id,e.state AS execution_state,e.detail,e.node_id,n.name AS node,
-                   e.progress,e.updated_at
+                   e.progress,e.updated_at,o.state AS ownership_state,q.reason AS quarantine_reason,
+                   q.winner_id AS conflicting_execution_id
             FROM library_media m
             JOIN libraries l ON l.id=m.library_id AND NOT l.is_deleted
             LEFT JOIN library_flow_assignments a ON a.library_id=l.id
             LEFT JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version
             LEFT JOIN executions e ON e.id=COALESCE(
+                (SELECT q2.execution_id FROM task_quarantines q2
+                 JOIN task_ownership o2 ON o2.execution_id=q2.execution_id
+                 JOIN executions e2 ON e2.id=q2.execution_id
+                 WHERE o2.library_id=m.library_id AND o2.media_key=upper(m.relative_path)
+                   AND o2.state='quarantined' AND e2.flow_name=v.definition->>'name'
+                   AND e2.flow_version=a.flow_version
+                 ORDER BY q2.created_at DESC,e2.updated_at DESC LIMIT 1),
                 (SELECT e2.id FROM execution_work w2 JOIN executions e2 ON e2.id=w2.execution_id
                  WHERE w2.library_id=m.library_id AND w2.media_key=upper(m.relative_path)
                    AND NOT EXISTS(SELECT 1 FROM task_ownership conflict WHERE conflict.execution_id=e2.id AND conflict.state='quarantined')
@@ -30,13 +38,16 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
                 (SELECT r.execution_id FROM library_processing_receipts r
                  WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=a.flow_id
                    AND r.flow_version=a.flow_version AND r.byte_length=m.byte_length
-                   AND r.modified_at=m.modified_at LIMIT 1))
+                   AND r.modified_at=m.modified_at LIMIT 1),
+                NULL)
             LEFT JOIN cluster_nodes n ON n.id=e.node_id
+            LEFT JOIN task_ownership o ON o.execution_id=e.id
+            LEFT JOIN task_quarantines q ON q.execution_id=e.id
         ), classified AS (
             SELECT *,CASE
-                WHEN execution_state IN ('running','cancelling') THEN 'active'
                 WHEN execution_state IN ('succeeded','deferred') THEN 'done'
-                WHEN execution_state='failed' THEN 'failed'
+                WHEN ownership_state='quarantined' OR execution_state IN ('failed','cancelled') THEN 'failed'
+                WHEN execution_state IN ('running','cancelling') THEN 'active'
                 WHEN NOT library_active THEN 'disabled'
                 ELSE 'untreated'
             END AS status
@@ -104,7 +115,8 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
         await using var filesCommand = Sql.Command($"""
             {ClassifiedSql}
             SELECT id,library_id,library,relative_path,byte_length,modified_at,library_active,flow,flow_version,
-                   status,execution_id,execution_state,detail,node_id,node,progress,updated_at
+                   status,execution_id,execution_state,detail,node_id,node,progress,updated_at,
+                   ownership_state,quarantine_reason,conflicting_execution_id
             FROM classified{resultFilterSql}
             ORDER BY COALESCE(updated_at,modified_at) DESC,relative_path,id
             LIMIT @limit OFFSET @offset
@@ -126,7 +138,10 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
                     reader.IsDBNull(11) ? null : reader.GetString(11), reader.IsDBNull(12) ? null : reader.GetString(12),
                     reader.IsDBNull(13) ? null : reader.GetGuid(13), reader.IsDBNull(14) ? null : reader.GetString(14),
                     reader.IsDBNull(15) ? null : reader.GetDecimal(15),
-                    reader.IsDBNull(16) ? null : reader.GetFieldValue<DateTimeOffset>(16)));
+                    reader.IsDBNull(16) ? null : reader.GetFieldValue<DateTimeOffset>(16),
+                    reader.IsDBNull(17) ? null : reader.GetString(17),
+                    reader.IsDBNull(18) ? null : reader.GetString(18),
+                    reader.IsDBNull(19) ? null : reader.GetGuid(19)));
         }
 
         await transaction.CommitAsync(ct);
