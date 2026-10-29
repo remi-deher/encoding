@@ -342,15 +342,18 @@ export class ActivityPageComponent {
   protected readonly canForceSourceRetry = computed(() => {
     const file = this.selectedFile();
     const execution = this.selectedExecution();
+    const forceableState =
+      execution?.state === 'queued' ||
+      (execution?.state === 'cancelled' && execution.startedAt === null);
     return (
       this.auth.isAdmin() &&
       file !== null &&
       execution !== null &&
+      forceableState &&
       file.libraryActive &&
       !!file.quarantineReason &&
       !!file.conflictingExecutionId &&
       execution.id === file.executionId &&
-      execution.state === 'queued' &&
       execution.ownership?.state === 'quarantined'
     );
   });
