@@ -1,7 +1,9 @@
 import { ActivityExecutionSummaryComponent } from './components/activity-execution-summary.component';
 import { ActivityFlowTraceComponent } from './components/activity-flow-trace.component';
 import { ActivityMetadataViewerComponent } from './components/activity-metadata-viewer.component';
+import { ForceSourceRetryDialogComponent } from './components/force-source-retry-dialog.component';
 import { ExecutionPipelineStep } from '../../shared/models/execution';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,6 +16,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { AuthService } from '../../core/auth/auth.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -46,6 +49,8 @@ import {
   LibraryActivityFile,
   LibraryActivityResponse,
   LibraryActivityStatus,
+  activityExecutionLabel,
+  activityExecutionTone,
 } from '../../shared/models/library-activity';
 import { ExecutionResponse, executionStateLabel } from '../../shared/models/execution';
 import { formatFullDateTime, formatRelativeTime } from '../../shared/models/date-format';
@@ -71,10 +76,10 @@ import { SubnavTemplateComponent } from '../../shared/templates/subnav-template.
 import { MatDialog } from '@angular/material/dialog';
 
 const ACTIVITY_STATUSES: readonly { value: LibraryActivityStatus; label: string }[] = [
-  { value: 'untreated', label: 'Non traité' },
+  { value: 'untreated', label: 'À traiter' },
   { value: 'active', label: 'En cours de traitement' },
   { value: 'done', label: 'Déjà traité' },
-  { value: 'failed', label: 'Échec du traitement' },
+  { value: 'failed', label: 'Erreurs et annulations' },
   { value: 'disabled', label: 'Traitement désactivé' },
 ];
 const PAGE_SIZE = 50;
@@ -119,6 +124,14 @@ function baseName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
+function activityApiError(error: unknown, fallback: string): string {
+  if (error instanceof HttpErrorResponse) {
+    const detail = (error.error as { detail?: unknown } | null)?.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+  }
+  return AuthService.errorMessage(error, fallback);
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-activity-page',
@@ -145,6 +158,8 @@ function baseName(path: string): string {
   styleUrl: './activity-page.component.scss',
 })
 export class ActivityPageComponent {
+  protected readonly activityExecutionLabel = activityExecutionLabel;
+  protected readonly activityExecutionTone = activityExecutionTone;
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly pageShellContext = inject(PageShellContextService);
@@ -155,6 +170,7 @@ export class ActivityPageComponent {
   private readonly downloads = inject(FileDownload);
   private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
+  private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly statuses = ACTIVITY_STATUSES;
@@ -319,6 +335,25 @@ export class ActivityPageComponent {
     ['queued', 'running'].includes(this.selectedExecution()?.state ?? ''),
   );
   protected readonly canRetry = computed(() => this.selectedExecution()?.state === 'failed');
+  protected readonly canResume = computed(() => {
+    const execution = this.selectedExecution();
+    return execution?.state === 'cancelled' && execution.ownership?.state !== 'quarantined';
+  });
+  protected readonly canForceSourceRetry = computed(() => {
+    const file = this.selectedFile();
+    const execution = this.selectedExecution();
+    return (
+      this.auth.isAdmin() &&
+      file !== null &&
+      execution !== null &&
+      file.libraryActive &&
+      !!file.quarantineReason &&
+      !!file.conflictingExecutionId &&
+      execution.id === file.executionId &&
+      execution.state === 'queued' &&
+      execution.ownership?.state === 'quarantined'
+    );
+  });
 
   protected readonly eventColumns: readonly DataTableColumn[] = [
     { key: 'revision', label: 'Ordre' },
@@ -583,6 +618,56 @@ export class ActivityPageComponent {
     );
   }
 
+  protected resumeSelected(): void {
+    const execution = this.selectedExecution();
+    if (!execution || !this.canResume()) return;
+    this.confirm(
+      {
+        title: 'Remettre ce fichier en file ?',
+        message: `Une nouvelle tentative repartira de la source de « ${execution.media} ». La tentative annulée restera dans l’historique. Le serveur refusera la reprise si une autre tentative du même fichier est encore active ou en quarantaine.`,
+        confirmLabel: 'Remettre en file',
+      },
+      () => this.perform('resume', execution.id),
+    );
+  }
+
+  protected forceSourceRetrySelected(): void {
+    const file = this.selectedFile();
+    const execution = this.selectedExecution();
+    if (!file || !execution || !this.canForceSourceRetry() || this.actionBusy()) return;
+    this.dialog
+      .open(ForceSourceRetryDialogComponent, {
+        data: { media: this.fileName(file.relativePath) },
+      })
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((attestation) => {
+        if (!attestation) return;
+        this.actionBusy.set(true);
+        this.clusterApi
+          .forceSourceRetry(execution.id, attestation.confirmedStopped, attestation.reason)
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({
+            next: (result) => {
+              this.actionBusy.set(false);
+              this.feedback.set(result.detail);
+              this.refreshRevision.update((value) => value + 1);
+              this.tracking.refresh();
+              this.notifications.show(result.detail);
+            },
+            error: (error: unknown) => {
+              this.actionBusy.set(false);
+              const message = activityApiError(
+                error,
+                'La reprise forcée a échoué ou la tentative a changé d’état.',
+              );
+              this.feedback.set(message);
+              this.notifications.show(message);
+            },
+          });
+      });
+  }
+
   protected downloadArtifact(row: DataTableRow): void {
     const id = this.selectedExecution()?.id;
     if (id)
@@ -643,7 +728,7 @@ export class ActivityPageComponent {
       });
   }
 
-  private perform(action: 'cancel' | 'retry', id: string): void {
+  private perform(action: 'cancel' | 'retry' | 'resume', id: string): void {
     if (this.actionBusy()) return;
     this.actionBusy.set(true);
     const succeed = () => {
@@ -653,9 +738,12 @@ export class ActivityPageComponent {
       this.notifications.show(
         action === 'cancel'
           ? 'Demande d’annulation enregistrée.'
-          : 'Nouvelle tentative mise en file.',
+          : action === 'resume'
+            ? 'Nouvelle tentative depuis la source mise en file.'
+            : 'Nouvelle tentative mise en file.',
       );
       if (action === 'retry') this.setStatus('active');
+      else if (action === 'resume') this.setStatus('untreated');
     };
     const fail = () => {
       this.actionBusy.set(false);
@@ -666,9 +754,14 @@ export class ActivityPageComponent {
         .cancel(id)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({ next: succeed, error: fail });
-    else
+    else if (action === 'retry')
       this.tracking
         .retry(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({ next: succeed, error: fail });
+    else
+      this.tracking
+        .resume(id)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({ next: succeed, error: fail });
   }

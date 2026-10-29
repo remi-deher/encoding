@@ -854,7 +854,7 @@ export class ActivityExecutionSummaryComponent {
       return executionStateLabel(exec);
     }
     const st = this.file()?.status;
-    return st && ACTIVITY_STATUS_LABELS[st] ? ACTIVITY_STATUS_LABELS[st] : 'Non traité';
+    return st && ACTIVITY_STATUS_LABELS[st] ? ACTIVITY_STATUS_LABELS[st] : 'À traiter';
   });
 
   protected readonly statusTone = computed<'accent' | 'neutral' | 'danger' | 'success' | 'warning'>(

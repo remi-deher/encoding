@@ -11,6 +11,7 @@ public sealed record ClusterTaskEvent(int Version,Guid EventId,Guid ClusterId,Gu
     Guid? TargetPeerId=null,Guid? TransferId=null,string? Snapshot=null,int Revision=0,Guid? SubjectPeerId=null,DateTimeOffset? RecordedAt=null,string? Reason=null,long Sequence=0,bool Reachable=false,Guid? NeutralizationId=null);
 public sealed record ClusterTaskMoveRequest(Guid TargetPeerId);
 public sealed record ClusterTaskNeutralizeRequest(bool ConfirmedStopped,string Reason);
+public sealed record ClusterTaskForceSourceRetryRequest(bool ConfirmedStopped,string Reason);
 public sealed record ClusterTaskResult(bool Success,string Detail,Guid? TransferId=null);
 public sealed record ClusterTaskPeerRequest(int Version,Guid ClusterId,Guid Nonce,string Kind,Guid ExecutionId=default,string? Digest=null,string? Payload=null);
 public sealed record ClusterTaskPeerReply(int Version,Guid ClusterId,Guid PeerId,Guid Nonce,bool Success,string? Payload=null,string? Detail=null);

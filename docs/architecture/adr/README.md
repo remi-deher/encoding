@@ -40,3 +40,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0022](0022-controle-media-explicite-et-rattachement.md) | Contrôle média explicite et prérequis de rattachement | implemented | runtime, cluster |
 | [0023](0023-coordination-et-quarantaine.md) | Coordination des tâches en quarantaine sans blocage global | implemented | runtime, replication-storage |
 | [0024](0024-choix-du-noeud-avant-execution.md) | Choix du nœud avant exécution et minimisation des transferts | implemented | runtime |
+| [0025](0025-liberation-des-reprises-source-apres-neutralisation.md) | Libération d'une reprise source après neutralisation | implemented | runtime |
