@@ -195,12 +195,13 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         Guid libraryId,
         DbConnection c,
         DbTransaction tx,
-        CancellationToken ct)
+        CancellationToken ct,
+        Guid? excludeExecutionId = null)
     {
         const string sql = """
           SELECT n.id, n.name, n.roles,
             COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=n.id), n.max_concurrent_tasks) AS max_tasks,
-            (SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.worker_node_id=n.id AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')) AS active_tasks,
+            (SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.worker_node_id=n.id AND aw.execution_id<>@exclude_execution AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')) AS active_tasks,
             n.capabilities::text,
             n.inventory::text,
             n.last_seen_at >= clock_timestamp() - @offline AS is_online,
@@ -223,6 +224,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         await using var cmd = Sql.Command(sql, c, tx);
         cmd.Parameters.AddWithValue("offline", presence.OfflineAfter);
         cmd.Parameters.AddWithValue("library", libraryId);
+        cmd.Parameters.AddWithValue("exclude_execution", excludeExecutionId?.ToString("D") ?? string.Empty);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var list = new List<NodePlacementCandidate>();
         while (await reader.ReadAsync(ct))
@@ -637,7 +639,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         }
         if(flow is not null && (plan is null || firstMetadata))
         {
-            var candidates=await LoadPlacementCandidatesAsync(libraryId,c,tx,ct);
+            var candidates=await LoadPlacementCandidatesAsync(libraryId,c,tx,ct,id);
             plan=planner.Plan(flow,metadata,candidates,DateTimeOffset.UtcNow);
             await using var save=Sql.Command("UPDATE execution_work SET placement_plan=@plan WHERE execution_id=@id",c,tx);
             save.Parameters.AddWithValue("id",id); save.Parameters.AddWithValue("plan",SqlKind.Json,JsonSerializer.Serialize(plan,Json));
@@ -662,7 +664,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         }
         if(plan is null && flow is not null)
         {
-            var candidates=await LoadPlacementCandidatesAsync(libraryId,c,tx,ct);
+            var candidates=await LoadPlacementCandidatesAsync(libraryId,c,tx,ct,id);
             plan=planner.Plan(flow,metadata,candidates,DateTimeOffset.UtcNow);
             await using var save=Sql.Command("UPDATE execution_work SET placement_plan=@plan WHERE execution_id=@id AND placement_plan IS NULL",c,tx);
             save.Parameters.AddWithValue("id",id); save.Parameters.AddWithValue("plan",SqlKind.Json,JsonSerializer.Serialize(plan,Json));

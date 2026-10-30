@@ -250,7 +250,7 @@ internal static partial class Harness
             await ResetNodesAsync();
             var(id,lease,context)=await EnqueueAsync(RelayFlow());
             await CompleteAsync(id,a,lease,"entry",context);await CompleteAsync(id,a,lease,"variable",context);await CompleteAsync(id,a,lease,"relay",context);
-            var(busyId,_,_)=await EnqueueAsync(RelayFlow());
+            var(busyId,_,_)=await EnqueueAsync(RelayFlow(),clearUnassignedRunning:false);
             await using(var setup=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=CASE WHEN id=@b THEN 1 ELSE 0 END; UPDATE execution_work SET worker_node_id=@b WHERE execution_id=@busy")){ setup.Parameters.AddWithValue("b",b); setup.Parameters.AddWithValue("busy",busyId); await setup.ExecuteNonQueryAsync(); }
             await FullRecovery().ProcessOnceAsync(CancellationToken.None);
             Check((await executions.GetAsync(id,CancellationToken.None))!.State=="running","A relay whose only capable destination is busy waits instead of failing.");

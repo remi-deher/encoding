@@ -394,10 +394,17 @@ internal static partial class Harness
             Check(await groups.DeleteAsync(unused.Id, CancellationToken.None) == "deleted", "An unused group is deleted.");
             Check(await groups.DeleteAsync(unused.Id, CancellationToken.None) == "missing", "Deleting a missing group reports it.");
         }
-        private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null,bool directRead=false)
+        private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null,bool directRead=false,bool clearUnassignedRunning=true)
         {
-            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
-            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left claimable must not be claimed here.
+            var cleanup=clearUnassignedRunning?"""
+                UPDATE executions SET state='cancelled'
+                WHERE state='queued' OR state='running' AND id IN (
+                  SELECT execution_id FROM execution_work
+                  WHERE worker_node_id IS NULL AND lease_until IS NULL AND available_at<=clock_timestamp()
+                )
+                """:"UPDATE executions SET state='cancelled' WHERE state='queued'";
+            await using(var leftovers=db.CreateCommand(cleanup)) await leftovers.ExecuteNonQueryAsync();
             Interlocked.Exchange(ref rejectNextCheckpoint, 0);
             Interlocked.Exchange(ref rejectNextFinish, 0);
             await ResetNodesAsync();
