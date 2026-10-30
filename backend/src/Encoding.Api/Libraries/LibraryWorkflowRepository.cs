@@ -265,7 +265,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         }
         if(node is null)
         {
-            await using var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id<>a.peer_id WHERE a.node_id=n.id AND a.revoked_at IS NULL) ORDER BY n.enrolled_at LIMIT 2",c,tx);
+            await using var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id<>a.peer_id WHERE a.node_id=n.id AND a.revoked_at IS NULL) ORDER BY n.created_at LIMIT 2",c,tx);
             var candidates=new List<Guid>();
             await using var cr=await cmd.ExecuteReaderAsync(ct);
             while(await cr.ReadAsync(ct)) candidates.Add(cr.GetGuid(0));

@@ -86,7 +86,7 @@ public sealed class ClusterTaskCoordinator(DbDataSource db,ClusterPeerIdentitySt
             cmd.Parameters.AddWithValue("local",identity.PeerId);
             if(await cmd.ScalarGuidAsync(ct) is {} admitted) {await local.RegisterAsync(admitted,ct);return admitted;}
         }
-        await using(var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a WHERE a.node_id=n.id AND a.peer_id<>@local AND a.revoked_at IS NULL) ORDER BY n.enrolled_at LIMIT 2",c))
+        await using(var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a WHERE a.node_id=n.id AND a.peer_id<>@local AND a.revoked_at IS NULL) ORDER BY n.created_at LIMIT 2",c))
         {
             cmd.Parameters.AddWithValue("local",identity.PeerId);
             var candidates=new List<Guid>();

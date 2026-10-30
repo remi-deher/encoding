@@ -130,7 +130,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         WHERE e.state IN ('queued','running') AND {TaskOwnershipRepository.ActiveSql("e.id")} AND NOT EXISTS(
           SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
           WHERE a.library_id=w.library_id AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
-            AND n.deleted_at IS NULL
+            AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
             AND (w.handoff_selector IS NULL OR w.source_node_id IS NULL OR a.node_id=w.source_node_id OR w.handoff_selector->>'mode'='resume' OR w.handoff_selector->>'resumed' IN (1,'true')))
         LIMIT 100
         """;

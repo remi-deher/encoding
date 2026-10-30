@@ -85,7 +85,13 @@ public sealed class ClusterTaskMaintenance(DbDataSource db,ClusterPeerIdentitySt
         {
             read.Parameters.AddWithValue("local",identity.PeerId);
             await using var r=await read.ExecuteReaderAsync(ct);
-            while(await r.ReadAsync(ct)) serverPeers.Add((r.GetGuid(0),r.GetBoolean(1),r.GetBoolean(2)));
+            while(await r.ReadAsync(ct))
+            {
+                var peerId=r.GetGuid(0);
+                var offline=!r.IsDBNull(1)&&Convert.ToInt64(r.GetValue(1))!=0;
+                var neutralized=!r.IsDBNull(2)&&Convert.ToInt64(r.GetValue(2))!=0;
+                serverPeers.Add((peerId,offline,neutralized));
+            }
         }
         if(serverPeers.Count!=1) return;
         var remote=serverPeers[0];
