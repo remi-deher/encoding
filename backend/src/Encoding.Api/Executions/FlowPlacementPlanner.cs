@@ -260,7 +260,23 @@ public sealed class FlowPlacementPlanner(FlowComponentRegistry registry)
         assignments=best;
 
         var distinctWorkers = assignments.Values.Distinct().Count();
-        if (distinctWorkers == 1) return null; // Le worker entier aurait dû être sélectionné ci-dessus.
+        if (distinctWorkers == 1)
+        {
+            var singleWorkerId = assignments[roots[0]];
+            var singleWorker = candidates.FirstOrDefault(c => c.NodeId == singleWorkerId);
+            var directAccess = candidates.FirstOrDefault(candidate => candidate.IsOnline && candidate.IsWorker
+                && candidate.Access is { IsEnabled: true, Mode: "direct", CanRead: true, CanWrite: true, LocalPath: not null });
+            if (singleWorker?.Access is { IsEnabled: true, Mode: "direct", CanRead: true, LocalPath: not null })
+            {
+                var nodeLabel = singleWorker.Name ?? singleWorkerId.ToString("D");
+                return new(FlowPlacementPlan.StrategyDirectUnified, singleWorkerId, singleWorkerId, null,
+                    $"Placement direct unifié : le nœud d’accès local {nodeLabel} prend l’intégralité du flow (0 transfert réseau).",
+                    CollectCapabilitiesNames(paths), [], now, assignments);
+            }
+            return new(FlowPlacementPlan.StrategyTransferWorker, singleWorkerId, directAccess?.NodeId, null,
+                $"Placement avec transfert : le worker {singleWorker?.Name ?? singleWorkerId.ToString("D")} prend la tâche via transfert WebDAV.",
+                CollectCapabilitiesNames(paths), [], now, assignments);
+        }
         var accessNode = candidates.FirstOrDefault(candidate => candidate.IsOnline && candidate.IsWorker
             && candidate.Access is { IsEnabled: true, Mode: "direct", CanRead: true, CanWrite: true, LocalPath: not null });
         return new(FlowPlacementPlan.StrategySegmented, assignments.GetValueOrDefault(roots[0]), accessNode?.NodeId,

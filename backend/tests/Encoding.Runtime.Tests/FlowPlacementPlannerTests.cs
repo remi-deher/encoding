@@ -370,4 +370,126 @@ public sealed class FlowPlacementPlannerTests
 
         Assert.Equal(nodeBId, plan.AssignedNodeId);
     }
+
+    [Fact]
+    public void DirectSourceScan_DelegatesOnlyWhenH265Needed_AndRunsLocallyWhenAlreadyHevc()
+    {
+        var (registry, planner) = CreatePlanner();
+        var libId = Guid.NewGuid();
+        var node50 = Guid.NewGuid();
+        var node51 = Guid.NewGuid();
+
+        var input = Node(registry, "input", "base-input-video");
+        var directSource = Node(registry, "direct-source", "nodes-require-direct-access", new() { ["mode"] = J("strict") });
+        var needsHevc = Node(registry, "needs-hevc", "conditions-match", new()
+        {
+            ["rules"] = J(new
+            {
+                kind = "group",
+                match = "all",
+                children = new object[]
+                {
+                    new { kind = "rule", field = "video.codec", @operator = "neq", value = "hevc" }
+                }
+            })
+        });
+        var libCap = Node(registry, "library-capability", "nodes-library-access", new() { ["requireProfileEncoder"] = J(true) });
+        var videoLocal = Node(registry, "video-local", "video-transcode", new()
+        {
+            ["videoCodec"] = J("hevc"),
+            ["encoderMode"] = J("automatic"),
+            ["retryWithCpu"] = J(false),
+            ["encodingProfile"] = J(new
+            {
+                id = Guid.NewGuid(),
+                version = 1,
+                name = "HEVC HW",
+                targets = new[] { new { encoderId = "hevc_qsv", quality = 25, preset = "medium", priority = 1 } }
+            })
+        });
+        var handoff = Node(registry, "handoff", "nodes-handoff", new() { ["mode"] = J("eligible") });
+        var requireHw = Node(registry, "require-hardware", "nodes-require-capability", new() { ["toolId"] = J("ffmpeg"), ["encoderKind"] = J("profile") });
+        var videoWorker = Node(registry, "video-worker", "video-transcode", new()
+        {
+            ["videoCodec"] = J("hevc"),
+            ["encoderMode"] = J("automatic"),
+            ["retryWithCpu"] = J(false),
+            ["encodingProfile"] = J(new
+            {
+                id = Guid.NewGuid(),
+                version = 1,
+                name = "HEVC HW",
+                targets = new[] { new { encoderId = "hevc_qsv", quality = 25, preset = "medium", priority = 1 } }
+            })
+        });
+        var assembleCopy = Node(registry, "assemble-copy", "base-publish-result");
+        var publish = Node(registry, "publish", "base-publish-result");
+        var done = Node(registry, "done", "base-complete-flow");
+
+        var flow = MakeFlow("DirectThenDelegate",
+            [input, directSource, needsHevc, libCap, videoLocal, handoff, requireHw, videoWorker, assembleCopy, publish, done],
+            [
+                new("c1", "input", "success", "direct-source"),
+                new("c2", "direct-source", "success", "needs-hevc"),
+                new("c3", "needs-hevc", "no", "assemble-copy"),
+                new("c4", "assemble-copy", "published", "done"),
+                new("c5", "needs-hevc", "yes", "library-capability"),
+                new("c6", "library-capability", "yes", "video-local"),
+                new("c7", "library-capability", "no", "handoff"),
+                new("c8", "handoff", "success", "require-hardware"),
+                new("c9", "require-hardware", "success", "video-worker"),
+                new("c10", "video-local", "success", "publish"),
+                new("c11", "video-worker", "success", "publish"),
+                new("c12", "publish", "published", "done")
+            ]);
+
+        var candidates = new[]
+        {
+            new NodePlacementCandidate(
+                node50, "encoding-50", true, true,
+                [
+                    Tool("ffprobe"),
+                    Tool("ffmpeg", "7.0.0", ["libx264", "libx265"], ["cpu"]),
+                    Tool("mkvtoolnix"),
+                    Tool("plugin/base", "1.9.0"),
+                    Tool("plugin/nodes", "1.8.0"),
+                    Tool("plugin/conditions", "1.2.0"),
+                    Tool("plugin/video", "1.3.0")
+                ],
+                null, null, new(libId, "direct", true, true, true, "/media", null)),
+            new NodePlacementCandidate(
+                node51, "encoding-51", true, true,
+                [
+                    Tool("ffprobe"),
+                    Tool("ffmpeg", "7.0.0", ["hevc_qsv", "libx264"], ["qsv", "cpu"], [new("hevc_qsv", "hevc", "qsv", true, true)]),
+                    Tool("mkvtoolnix"),
+                    Tool("plugin/base", "1.9.0"),
+                    Tool("plugin/nodes", "1.8.0"),
+                    Tool("plugin/conditions", "1.2.0"),
+                    Tool("plugin/video", "1.3.0")
+                ],
+                null, null, new(libId, "transfer", true, true, false, null, node50))
+        };
+
+        // 1. Avant scan (sourceMetadata = null) : plan segmenté commençant sur encoding-50 et déléguant le H.265 à encoding-51
+        var initialPlan = planner.Plan(flow, null, candidates, DateTimeOffset.UtcNow);
+        Assert.Equal(FlowPlacementPlan.StrategySegmented, initialPlan.Strategy);
+        Assert.Equal(node50, initialPlan.AssignedNodeId);
+        Assert.Equal(node50, initialPlan.NodeAssignments!["input"]);
+        Assert.Equal(node50, initialPlan.NodeAssignments["handoff"]);
+        Assert.Equal(node51, initialPlan.NodeAssignments["video-worker"]);
+
+        // 2. Après scan d'un fichier H.264 : plan segmenté, encoding-50 prépare puis délègue à encoding-51
+        var h264Meta = J(new { streams = new[] { new { codec_type = "video", codec_name = "h264", width = 1920, height = 1080 } } });
+        var h264Plan = planner.Plan(flow, h264Meta, candidates, DateTimeOffset.UtcNow);
+        Assert.Equal(FlowPlacementPlan.StrategySegmented, h264Plan.Strategy);
+        Assert.Equal(node50, h264Plan.AssignedNodeId);
+        Assert.Equal(node51, h264Plan.NodeAssignments!["video-worker"]);
+
+        // 3. Après scan d'un fichier déjà HEVC : reste à 100 % sur encoding-50 (0 transfert réseau)
+        var hevcMeta = J(new { streams = new[] { new { codec_type = "video", codec_name = "hevc", width = 1920, height = 1080 } } });
+        var hevcPlan = planner.Plan(flow, hevcMeta, candidates, DateTimeOffset.UtcNow);
+        Assert.Equal(FlowPlacementPlan.StrategyDirectUnified, hevcPlan.Strategy);
+        Assert.Equal(node50, hevcPlan.AssignedNodeId);
+    }
 }
