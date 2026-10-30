@@ -108,7 +108,8 @@ public sealed class DockerClusterTests
 
         private async Task RunAsync(string name, params string[] arguments)
         {
-            var full = new List<string> { "run", "-d", "--name", $"{name}-{id}".Replace($"-{id}-{id}", $"-{id}"), "--network", Network, "-e", "ASPNETCORE_ENVIRONMENT=Production", "-e", "Auth__CookieSecure=false" };
+            var full = new List<string> { "run", "-d", "--name", $"{name}-{id}".Replace($"-{id}-{id}", $"-{id}"), "--network", Network,
+                "--network-alias", name + ".local", "-e", "ASPNETCORE_ENVIRONMENT=Production", "-e", "Auth__CookieSecure=false" };
             full.AddRange(arguments);
             containers.Add($"{name}-{id}".Replace($"-{id}-{id}", $"-{id}"));
             await DockerAsync([.. full]);
