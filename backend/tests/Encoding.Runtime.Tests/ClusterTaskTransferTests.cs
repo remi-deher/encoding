@@ -325,6 +325,8 @@ public sealed partial class ClusterTaskTransferTests(ITestOutputHelper output)
     public async Task TwoServerSelfHealingAutomaticallyNeutralizesRecoversAndReadmits()
     {
         await using var pair=await Pair.CreateAsync();
+        await using(var link=pair.A.Db.Db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '3 minutes' WHERE id=@node; UPDATE cluster_peer_admissions SET node_id=@node WHERE peer_id=@peer"))
+        {link.Parameters.AddWithValue("node",pair.A.Node);link.Parameters.AddWithValue("peer",pair.A.Identity.PeerId);await link.ExecuteNonQueryAsync();}
         await using(var link=pair.B.Db.Db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at) VALUES(@node,'peer-a',ARRAY['server','worker'],2,'[]',clock_timestamp()-interval '3 minutes'); UPDATE cluster_peer_admissions SET node_id=@node WHERE peer_id=@peer"))
         {link.Parameters.AddWithValue("node",pair.A.Node);link.Parameters.AddWithValue("peer",pair.A.Identity.PeerId);await link.ExecuteNonQueryAsync();}
         var id=await pair.A.EnqueueAsync();var sha=await pair.A.AddCheckpointAsync(id,[2,4,6,8]);
