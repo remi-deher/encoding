@@ -110,7 +110,7 @@ internal static class PluginTests
         var badId=root.DeepClone().AsObject();
         badId["id"]="../evil";
         var shadowsBuiltIn=root.DeepClone().AsObject();
-        shadowsBuiltIn["id"]="plex";
+        shadowsBuiltIn["id"]="second-example";
         var badVersion=root.DeepClone().AsObject();
         badVersion["version"]="latest";
         var badSchema=root.DeepClone().AsObject();
@@ -139,12 +139,12 @@ internal static class PluginTests
                 var good=JsonNode.Parse(File.ReadAllText(source))!.AsObject();
                 good["id"]="second-example";
                 foreach(var component in good["components"]!.AsArray()) component!["id"]=component["id"]!.GetValue<string>().Replace("example-","second-");
-                File.WriteAllText(Path.Combine(directory,"b-valid.json"),good.ToJsonString());
+                File.WriteAllText(Path.Combine(directory,"a-valid.json"),good.ToJsonString());
                 var configuration=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["FlowPlugins:ManifestDirectory"]=directory }).Build();
                 var registry=StoreCatalogFixture.Create(configuration);
                 Check(registry.Rejected.Count==1 && registry.Rejected[0].File=="invalid.json" && registry.Rejected[0].Reason.Length>0,"The catalog reports the invalid manifest without failing: "+name);
                 Check(registry.Plugins.All(plugin=>plugin.Id!="../evil") && registry.Plugins.Any(plugin=>plugin.Id=="second-example"),"A broken manifest does not hide a valid one: "+name);
-                Check(registry.Plugins.Count(plugin=>plugin.Id=="plex")==1,"A third-party manifest never replaces an installed plugin: "+name);
+                Check(registry.Plugins.Count(plugin=>plugin.Id=="second-example")==1,"A third-party manifest never replaces an installed plugin: "+name);
             }
             finally { Directory.Delete(directory,true); }
         }
