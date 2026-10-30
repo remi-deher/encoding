@@ -730,7 +730,7 @@
             "label": "Ancien réglage de décodage (inactif)",
             "type": "boolean",
             "defaultValue": false,
-            "importance": "expert",
+            "importance": "advanced",
             "section": "Compatibilité historique",
             "description": "Conservé pour lire les anciennes définitions. Le décodage d’intégrité se règle avec le bloc « Rechercher les erreurs média »."
           }
