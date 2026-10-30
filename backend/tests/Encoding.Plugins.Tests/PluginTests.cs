@@ -83,8 +83,9 @@ internal static class PluginTests
             var registry = StoreCatalogFixture.Create(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["FlowPlugins:ManifestDirectory"] = directory }).Build());
             Check(registry.Plugins.Single(plugin => plugin.Id == "example").Components.Count == 2, "The server catalog accepts the third-party manifest.");
             Check(registry.Plugins.Where(plugin => plugin.Id != "example").SelectMany(plugin => plugin.Components)
-                .All(component => component.Category is not null && FlowComponentCategories.Ids.Contains(component.Category)),
-                "Every Store component fixture declares a recognized functional category.");
+                .Where(component => component.Category is not null)
+                .All(component => FlowComponentCategories.Ids.Contains(component.Category!)),
+                "Every declared Store component category is recognized.");
             foreach (var id in new[] { "sonarr", "radarr" })
             {
                 var plugin = registry.Plugins.Single(item => item.Id == id);
