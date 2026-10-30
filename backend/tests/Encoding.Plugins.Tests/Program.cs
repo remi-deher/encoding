@@ -18,7 +18,6 @@ await AudioRulesMediaTests.RunAsync();
 await TrackNamesMediaTests.RunAsync();
 await SubtitlesMediaTests.RunAsync();
 FontMatcherTests.Run();
-await ProcessTests.RunAsync();
 
 await TriggerTests.RunAsync();
 Console.WriteLine("PASS: all plugin and trigger scenarios.");

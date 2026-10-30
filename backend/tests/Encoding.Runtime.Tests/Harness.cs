@@ -46,7 +46,7 @@ internal static partial class Harness
 
     internal static (FlowComponentRegistry Registry, FlowDefinitionValidator Validator, RuntimeEligibility Eligibility) Services()
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         var validator = new FlowDefinitionValidator(registry);
         return (registry, validator, new RuntimeEligibility(registry, validator));
     }

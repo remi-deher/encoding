@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;
+using Encoding.Core.Plugins;
 
 namespace Encoding.NodeAgent.Runtime;
 
@@ -13,6 +14,7 @@ public sealed class PluginLaunch
     public string Executable { get; set; }="";
     public string[] Arguments { get; set; }=[];
     public string[] ReadOnlyPaths { get; set; }=[];
+    public bool IsNative { get; set; }
 }
 
 /// <summary>Third party implementations run as separate child processes with a versioned JSON envelope.</summary>
@@ -28,9 +30,7 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
         {
             var declared=configuration.GetSection("Runtime:Plugins").Get<PluginLaunch[]>()??[];
             var downloaded=CustomPluginCatalog.Scan(CustomPluginCatalog.DirectoryFor(configuration)).Where(plugin=>declared.All(item=>item.Id!=plugin.Id || item.Version!=plugin.Version));
-            var bundled = BundledPluginCatalog.Scan(configuration)
-                .Where(plugin => declared.All(item => item.Id != plugin.Id));
-            return declared.Concat(downloaded).Concat(bundled)
+            return declared.Concat(downloaded)
                 .Where(plugin => plugin.Enabled).DistinctBy(plugin => (plugin.Id, plugin.Version)).ToList();
         }
     }
@@ -45,13 +45,22 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
         var key=plugin.Id+"@"+plugin.Version;
         var fingerprint=Fingerprint(plugin);
         if(described.TryGetValue(key,out var cached) && cached.Fingerprint==fingerprint) return cached.Manifest;
-        var directory=Path.Combine(options.DataDirectory,"plugin-describe",Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key))));
-        Directory.CreateDirectory(directory);
-        var result=await processes.RunAsync(plugin.Executable,plugin.Arguments,directory,TimeSpan.FromSeconds(20),ct,"{\"type\":\"describe\",\"contractVersion\":1}\n",sandbox:true,readOnlyPaths:plugin.ReadOnlyPaths);
-        if(result.ExitCode!=0) throw Failure(plugin,"La poignée de main du plugin a échoué",result);
         PluginManifest manifest;
-        try { manifest=JsonSerializer.Deserialize<PluginManifest>(result.Output,Json)??throw new IOException("Manifeste plugin absent."); }
-        catch(JsonException exception) { throw new IOException($"Le plugin {plugin.Id} a répondu un manifeste illisible ({exception.Message}).",exception); }
+        if (plugin.IsNative)
+        {
+            var packageDirectory=plugin.ReadOnlyPaths.Single();
+            manifest=JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(Path.Combine(packageDirectory,PluginPackage.ManifestFile)),Json)
+                ??throw new IOException("Manifeste du plugin natif absent.");
+        }
+        else
+        {
+            var directory=Path.Combine(options.DataDirectory,"plugin-describe",Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key))));
+            Directory.CreateDirectory(directory);
+            var result=await processes.RunAsync(plugin.Executable,plugin.Arguments,directory,TimeSpan.FromSeconds(20),ct,"{\"type\":\"describe\",\"contractVersion\":1}\n",sandbox:true,readOnlyPaths:plugin.ReadOnlyPaths);
+            if(result.ExitCode!=0) throw Failure(plugin,"La poignée de main du plugin a échoué",result);
+            try { manifest=JsonSerializer.Deserialize<PluginManifest>(result.Output,Json)??throw new IOException("Manifeste plugin absent."); }
+            catch(JsonException exception) { throw new IOException($"Le plugin {plugin.Id} a répondu un manifeste illisible ({exception.Message}).",exception); }
+        }
         if(manifest.ContractVersion!=1 || manifest.Id!=plugin.Id || manifest.Version!=plugin.Version || !manifest.SupportedHostContractVersions.Contains(1))
             throw new IOException($"Handshake plugin incompatible : le processus annonce {manifest.Id} {manifest.Version} (contrat {manifest.ContractVersion}), le worker attend {plugin.Id} {plugin.Version} (contrat 1).");
         described[key]=(fingerprint,manifest);
@@ -71,7 +80,7 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
     {
         var builder=new System.Text.StringBuilder(plugin.Executable).Append('|').Append(string.Join(' ',plugin.Arguments)).Append('\n');
         var count=0;
-        foreach(var root in plugin.ReadOnlyPaths.Append(plugin.Executable))
+        foreach(var root in plugin.ReadOnlyPaths.Concat(plugin.IsNative ? [] : [plugin.Executable]))
         {
             IEnumerable<string> files;
             if(File.Exists(root)) files=[root];
@@ -90,7 +99,7 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
     private void ValidatePaths(PluginLaunch plugin)
     {
         var protectedRoot=Path.GetFullPath(options.DataDirectory).TrimEnd(Path.DirectorySeparatorChar);
-        foreach(var candidate in plugin.ReadOnlyPaths.Append(plugin.Executable))
+        foreach(var candidate in plugin.ReadOnlyPaths.Concat(plugin.IsNative ? [] : [plugin.Executable]))
         {
             var path=Path.GetFullPath(candidate).TrimEnd(Path.DirectorySeparatorChar);
             if(protectedRoot==path || protectedRoot.StartsWith(path+Path.DirectorySeparatorChar,StringComparison.Ordinal)
@@ -102,6 +111,7 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
     {
         var plugin=Installed.SingleOrDefault(p=>p.Id==invocation.Component.PluginId && p.Version==invocation.Component.PluginVersion)
             ??throw new IOException("Cette version du plugin n’est pas installée sur le worker.");
+        if (plugin.IsNative) throw new IOException($"Le composant {plugin.Id} doit être exécuté par le moteur et ne peut pas être invoqué comme plugin de processus.");
         var manifest=await DescribeAsync(plugin,ct);
         var component=manifest.Components.FirstOrDefault(component=>component.Id==invocation.Component.ComponentId && component.Version==invocation.Component.ComponentVersion && component.ConfigurationSchema.Version==invocation.Component.ConfigurationSchemaVersion)
             ??throw new IOException("Version de composant absente du processus plugin.");

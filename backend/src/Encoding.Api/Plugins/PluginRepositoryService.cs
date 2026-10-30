@@ -236,7 +236,9 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
     {
         if (item.ValueKind != JsonValueKind.Object) return null;
         var id = Text(item, "id");
-        if (id is null || !PluginIdentity.IsQualifiedPluginId(id) || PluginIdentity.IsOfficialNamespace(id) && !official) return null;
+        var officialLegacyId = id is not null && official
+            && (PluginPackage.HistoricalOfficialPluginIds.Contains(id) || PluginPackage.NativeComponentPluginIds.Contains(id));
+        if (id is null || !PluginIdentity.IsQualifiedPluginId(id) && !officialLegacyId || PluginIdentity.IsOfficialNamespace(id) && !official) return null;
         var versions = new List<RepositoryVersion>();
         if (item.TryGetProperty("versions", out var versionList) && versionList.ValueKind == JsonValueKind.Array)
             foreach (var entry in versionList.EnumerateArray())

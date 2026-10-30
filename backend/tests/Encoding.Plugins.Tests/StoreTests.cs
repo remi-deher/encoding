@@ -25,7 +25,7 @@ internal static class StoreTests
 
     public static byte[] Package(string id, string version, Action<JsonObject>? tweak = null, Dictionary<string, string>? extra = null, bool withEntrypoint = true)
     {
-        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "backend", "plugins", "example", "manifest.json")))!.AsObject();
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "backend", "tests", "Fixtures", "StoreCatalog", "example.json")))!.AsObject();
         manifest["id"] = id;
         manifest["version"] = version;
         foreach (var component in manifest["components"]!.AsArray()) component!["id"] = id.Replace('.', '-') + "-" + component["id"]!.GetValue<string>()["example-".Length..];
@@ -92,7 +92,7 @@ internal static class StoreTests
     private static (PluginStoreService Store, FlowComponentRegistry Registry) Create(string directory)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build();
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         return (new PluginStoreService(configuration, registry, NullLogger<PluginStoreService>.Instance), registry);
     }
 
@@ -178,7 +178,7 @@ internal static class StoreTests
         try
         {
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build();
-            var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+            var registry = StoreCatalogFixture.Create();
             var store = new PluginStoreService(configuration, registry, NullLogger<PluginStoreService>.Instance);
             var repositories = new PluginRepositoryService(configuration, new Factory(), store, NullLogger<PluginRepositoryService>.Instance);
 

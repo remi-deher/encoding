@@ -25,7 +25,11 @@ public static class PluginPackage
     public const long MaxUncompressedBytes = 128L * 1024 * 1024;
     public const int MaxEntries = 500;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private static readonly string[] Runtimes = ["python3", "node"];
+    private static readonly string[] Runtimes = ["python3", "node", "native"];
+    public static readonly IReadOnlySet<string> NativeComponentPluginIds = new HashSet<string>(StringComparer.Ordinal)
+        { "video", "audio", "subtitles", "mkv", "images", "probe", "ai" };
+    public static readonly IReadOnlySet<string> HistoricalOfficialPluginIds = new HashSet<string>(StringComparer.Ordinal)
+        { "plex", "sonarr", "radarr", "jellyfin" };
 
     public static string Hash(byte[] archive) => Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
 
@@ -65,10 +69,21 @@ public static class PluginPackage
         }
         catch (JsonException exception) { throw new PluginPackageException($"plugin.json est illisible : {exception.Message}"); }
         if (!Runtimes.Contains(runtime.Type)) throw new PluginPackageException($"runtime.type « {runtime.Type} » non pris en charge ({string.Join(", ", Runtimes)}).");
-        var entrypoint = SafeRelativePath(runtime.Entrypoint);
-        if (entrypoint.Length == 0 || zip.GetEntry(entrypoint) is null) throw new PluginPackageException($"Le point d'entrée « {runtime.Entrypoint} » est absent de l'archive.");
-        if (manifest.Id is null || !PluginIdentity.IsQualifiedPluginId(manifest.Id))
-            throw new PluginPackageException($"Identifiant « {manifest.Id} » invalide : « espace.nom » en minuscules, chiffres et tirets.");
+        if (runtime.Type == "native")
+        {
+            if (!NativeComponentPluginIds.Contains(manifest.Id) || !string.IsNullOrEmpty(runtime.Entrypoint))
+                throw new PluginPackageException("Le runtime natif est réservé aux familles de composants moteur autorisées et ne déclare pas de point d'entrée.");
+        }
+        else
+        {
+            var entrypoint = SafeRelativePath(runtime.Entrypoint);
+            if (entrypoint.Length == 0 || zip.GetEntry(entrypoint) is null) throw new PluginPackageException($"Le point d'entrée « {runtime.Entrypoint} » est absent de l'archive.");
+            runtime = runtime with { Entrypoint = entrypoint };
+        }
+        if (manifest.Id is null || (runtime.Type == "native"
+                ? !NativeComponentPluginIds.Contains(manifest.Id)
+                : !PluginIdentity.IsQualifiedPluginId(manifest.Id) && !HistoricalOfficialPluginIds.Contains(manifest.Id)))
+            throw new PluginPackageException($"Identifiant « {manifest.Id} » invalide pour le runtime {runtime.Type}.");
         var toolDependencies = manifest.RequiredToolPackages ?? [];
         if (toolDependencies.Any(item => item is null || string.IsNullOrWhiteSpace(item.ToolPackageId)
             || !System.Text.RegularExpressions.Regex.IsMatch(item.ToolPackageId, "^[a-z0-9][a-z0-9._-]{0,127}$")
@@ -81,7 +96,7 @@ public static class PluginPackage
             if (dependency.MaximumVersionExclusive is { } maximum
                 && !System.Text.RegularExpressions.Regex.IsMatch(maximum, @"^\d+\.\d+\.\d+$"))
                 throw new PluginPackageException($"Version maximale invalide pour l'outil « {dependency.ToolPackageId} ».");
-        return new PluginPackageInfo(manifest, runtime with { Entrypoint = entrypoint }, Hash(archive), entries.Count, total);
+        return new PluginPackageInfo(manifest, runtime, Hash(archive), entries.Count, total);
     }
 
     /// <summary>Extrait l'archive dans <paramref name="directory"/> (créé s'il n'existe pas). Aucun fichier ne sort du dossier.</summary>

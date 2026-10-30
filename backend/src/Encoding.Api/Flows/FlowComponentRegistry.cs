@@ -32,7 +32,7 @@ public sealed class FlowComponentRegistry
         var manifests = new List<PluginManifest> { manifest };
         var catalogDirectory = Path.Combine(AppContext.BaseDirectory, "Flows", "Catalog");
         foreach (var file in Directory.EnumerateFiles(catalogDirectory, "*.json")
-                     .Where(file => !Path.GetFileName(file).Equals("base.json", StringComparison.OrdinalIgnoreCase))
+                     .Where(file => !new[] { "base.json", "nodes.json", "conditions.json" }.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase))
                      .Order())
         {
             var extra = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(file), new JsonSerializerOptions(JsonSerializerDefaults.Web))
@@ -88,9 +88,11 @@ public sealed class FlowComponentRegistry
     /// Contrôle un manifeste tiers (fichier du dossier de manifestes ou paquet du Store) et retourne sa forme normalisée avec
     /// ses références. <paramref name="replacing"/> : identifiant du plugin que ce manifeste remplace (mise à jour d'un paquet).
     /// </summary>
-    private (PluginManifest Manifest, List<FlowComponentReference> References) CheckThirdParty(PluginManifest extra, IReadOnlyList<PluginManifest> existing, string? replacing)
+    private (PluginManifest Manifest, List<FlowComponentReference> References) CheckThirdParty(PluginManifest extra, IReadOnlyList<PluginManifest> existing, string? replacing, bool native = false)
     {
-        if (extra.Id is null || !PluginIdentity.IsValidPluginId(extra.Id))
+        if (extra.Id is null || (native
+                ? !Encoding.Core.Plugins.PluginPackage.NativeComponentPluginIds.Contains(extra.Id)
+                : !PluginIdentity.IsValidPluginId(extra.Id)))
             throw new InvalidOperationException($"Identifiant de plugin invalide : « {extra.Id} » (minuscules, chiffres et tirets, avec un espace de noms optionnel « espace.nom »).");
         var others = existing.Where(item => item.Id != replacing).ToList();
         if (others.Any(item => item.Id == extra.Id) || replacing is null && existing.Any(item => item.Id == extra.Id))
@@ -121,7 +123,7 @@ public sealed class FlowComponentRegistry
     /// restent résolubles par les flows existants : leurs références pointent vers le descripteur de la nouvelle version, qui doit
     /// donc rester compatible avec son schéma (un changement incompatible exige un nouvel identifiant de composant).
     /// </summary>
-    public bool TryInstall(PluginManifest manifest, out string reason)
+    public bool TryInstall(PluginManifest manifest, out string reason, bool native = false)
     {
         lock (installGate)
         {
@@ -140,7 +142,9 @@ public sealed class FlowComponentRegistry
                         CompatiblePluginVersions = (component.CompatiblePluginVersions ?? []).Concat(inherited).Distinct().ToArray()
                     }).ToArray()
                 };
-                var (normalized, references) = CheckThirdParty(withHistory, plugins, previous?.Id);
+                if (native && !Encoding.Core.Plugins.PluginPackage.NativeComponentPluginIds.Contains(manifest.Id))
+                    throw new InvalidOperationException("Ce plugin natif n'est pas une famille de composants moteur autorisée.");
+                var (normalized, references) = CheckThirdParty(withHistory, plugins, previous?.Id, native);
                 if (previous is not null) RemoveRegistrations(previous.Id);
                 Register(normalized, references);
                 plugins = plugins.Where(item => item.Id != normalized.Id).Append(normalized).ToList();

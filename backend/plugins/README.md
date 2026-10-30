@@ -1,16 +1,11 @@
-# Plugins d’intégration
+# Écrire et empaqueter des plugins
 
-Un plugin ajoute des composants de flow (actions, conditions) fournis par un processus séparé. Le contrat est décrit dans [0012](../../docs/architecture/domains/flows.md) et [0015](../../docs/architecture/domains/runtime.md) ; les plugins Sonarr/Radarr/Plex/Jellyfin et ce SDK dans [0032](../../docs/architecture/domains/plugins.md).
+Un plugin ajoute des composants de flow (actions, conditions) fournis par un processus séparé. Le code source des plugins maintenus par le projet, leur SDK, leurs exemples et leurs tests vivent dans le dépôt public [remi-deher/encoding-store](https://github.com/remi-deher/encoding-store). Le moteur ne les copie plus dans l'image. Le contrat d'exécution est décrit dans [la fiche plugins](../../docs/architecture/domains/plugins.md) et [le guide du Store](https://github.com/remi-deher/encoding-store).
 
 ```
-sdk/encoding_plugin_sdk.py   SDK Python (un seul fichier, bibliothèque standard)
-sdk/encoding-plugin-sdk.mjs  SDK JavaScript (un seul fichier, Node.js, sans dépendance), même API
-arr/plugin.py                Sonarr et Radarr (python3 plugin.py sonarr|radarr)
-plex/plugin.py               Plex
-jellyfin/plugin.py           Jellyfin
-example/                     plugin tiers minimal en Python : plugin.py + manifest.json
-example-js/                  le même en JavaScript : plugin.mjs + manifest.json
-tests/                       tests Python (python3 -m unittest discover -s backend/plugins/tests)
+plugin.json                  manifeste + runtime (`python3` ou `node`)
+main.py                      point d'entrée isolé
+encoding_plugin_sdk.py       SDK copié dans l'archive, aucune dépendance installée
 ```
 
 ## Modèle d’exécution
@@ -95,7 +90,7 @@ Exactement un de `outputId` ou `terminalResult` (`unchanged`, `success`, `failed
 
 ## Installer un plugin tiers
 
-**Par le Store (recommandé)** : empaquetez le plugin en `.zip` avec un `plugin.json` à la racine (le manifeste habituel plus `"runtime": { "type": "python3", "entrypoint": "main.py" }`, identifiant `espace.nom`), copiez-y le SDK à côté du point d'entrée, puis *Plugins & Outils → Store & Dépôts → Importer une archive*. Le serveur contrôle le paquet, l'enregistre à chaud, et chaque worker le télécharge et le vérifie dans la minute. Voir 0063 (état d'implémentation, limites en cluster multi-serveurs).
+**Par le Store (recommandé)** : empaquetez le plugin en `.zip` avec un `plugin.json` à la racine (manifeste habituel plus `"runtime": { "type": "python3", "entrypoint": "main.py" }`, identifiant `espace.nom`), copiez-y le SDK à côté du point d'entrée, puis utilisez *Plugins & Outils → Store & Dépôts*. Les plugins d'intégration du projet (Plex, Sonarr, Radarr et Jellyfin) sont publiés dans le dépôt public et installables depuis ce Store. Le serveur contrôle l'archive ; chaque worker la télécharge et vérifie son empreinte. Le code plugin et ses tests peuvent ainsi évoluer dans le dépôt Store sans compiler l'application.
 
 ### Paquets d'outils du Store
 

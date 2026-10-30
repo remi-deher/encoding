@@ -70,7 +70,7 @@ public sealed class AiToolTests
     public async Task FlowGenerationDoesNotReportSyntheticSuccessWhenCliIsMissing()
     {
         using var fixture = new AiCliTestProfile();
-        var registry = new FlowComponentRegistry(fixture.Configuration);
+        var registry = StoreCatalogFixture.Create(fixture.Configuration);
         var validator = new FlowDefinitionValidator(registry);
         var factory = new AiClientFactory(fixture.Configuration, new MockHttpClientFactory(), cliRuntime: fixture.Runtime);
         var service = new FlowAiGeneratorService(factory, new FlowCatalogPromptBuilder(registry), validator);
@@ -157,7 +157,7 @@ public sealed class AiToolTests
     [Fact]
     public void FlowComponentRegistry_AdvertisesOnlyAiComponentsWithRuntimeHandlers()
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         Assert.NotNull(registry.FindReference("ai-translate-subtitles"));
         Assert.NotNull(registry.FindReference("ai-metadata-enricher"));
         Assert.Null(registry.FindReference("base-ai-translate-subtitles"));
@@ -175,7 +175,7 @@ public sealed class AiToolTests
     [Fact]
     public void FlowComponentRegistry_Loads_Modular_Plugins()
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
 
         // Plugins exist
         var pluginIds = registry.Plugins.Select(p => p.Id).ToHashSet();

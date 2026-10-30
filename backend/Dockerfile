@@ -83,17 +83,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get $ca_opt install -y --no-install-recommends libvpl2 libmfx1 libmfx-gen1.2 vainfo mesa-va-drivers libdrm-amdgpu1; \
     ffmpeg -hide_banner -encoders 2>/dev/null | grep -q nvenc; \
     rm -f /tmp/ca-bundle.pem
-# Plugins d'intégration livrés avec le worker (processus Python séparés, voir backend/plugins/README.md).
-# Le manifeste copié est le JSON que le serveur charge : une seule définition des composants.
-COPY backend/plugins/sdk/encoding_plugin_sdk.py backend/plugins/arr/plugin.py /opt/encoding/plugins/arr/
-COPY backend/src/Encoding.Api/Flows/Catalog/sonarr.json backend/src/Encoding.Api/Flows/Catalog/radarr.json /opt/encoding/plugins/arr/manifests/
-COPY backend/plugins/sdk/encoding_plugin_sdk.py backend/plugins/plex/plugin.py /opt/encoding/plugins/plex/
-COPY backend/src/Encoding.Api/Flows/Catalog/plex.json /opt/encoding/plugins/plex/manifests/
-COPY backend/plugins/sdk/encoding_plugin_sdk.py backend/plugins/jellyfin/plugin.py /opt/encoding/plugins/jellyfin/
-COPY backend/src/Encoding.Api/Flows/Catalog/jellyfin.json /opt/encoding/plugins/jellyfin/manifests/
-# Plugins du Store téléchargés par le worker (0063) : recréés depuis le serveur, hors du dossier de données privées du nœud.
-RUN mkdir -p /opt/encoding/custom-plugins /var/lib/encoding-node /var/lib/encoding/flow-backups /var/lib/encoding/runtime-artifacts /var/lib/encoding/plugin-keys \
- && chown -R $APP_UID:$APP_UID /opt/encoding/custom-plugins /var/lib/encoding-node /var/lib/encoding
+# Plugins et outils du Store téléchargés par les workers, hors du dossier privé de données du nœud.
+RUN mkdir -p /opt/encoding/custom-plugins /opt/encoding/managed-tools /var/lib/encoding-node /var/lib/encoding/flow-backups /var/lib/encoding/runtime-artifacts /var/lib/encoding/plugin-keys \
+ && chown -R $APP_UID:$APP_UID /opt/encoding/custom-plugins /opt/encoding/managed-tools /var/lib/encoding-node /var/lib/encoding
 WORKDIR /app
 COPY --from=build /app/api ./api
 COPY --from=build /app/agent ./agent
@@ -113,6 +105,7 @@ ENV Node__Roles=server,worker \
     Runtime__ArtifactDirectory=/var/lib/encoding-node/runtime-artifacts \
     Runtime__CustomPluginDirectory=/opt/encoding/custom-plugins \
     PluginStore__Directory=/var/lib/encoding-node/plugin-store \
+    PluginStore__OfficialRepositoryUrl=https://raw.githubusercontent.com/remi-deher/encoding-store/main/repository.json \
     Logging__Console__FormatterName=json \
     Logging__Console__FormatterOptions__UseUtcTimestamp=true \
     Logging__Console__FormatterOptions__IncludeScopes=true

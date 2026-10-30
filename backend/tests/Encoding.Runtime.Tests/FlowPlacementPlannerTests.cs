@@ -16,7 +16,7 @@ public sealed class FlowPlacementPlannerTests
 
     private static (FlowComponentRegistry Registry, FlowPlacementPlanner Planner) CreatePlanner()
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         var planner = new FlowPlacementPlanner(registry);
         return (registry, planner);
     }

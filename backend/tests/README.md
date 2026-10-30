@@ -41,14 +41,13 @@ Les attentes durables (0033) sont vérifiées sur SQLite : libération du worker
 
 ## Plugins et déclencheur d’import
 
-`backend/tests/Encoding.Plugins.Tests` vérifie la correspondance des chemins, l’analyse des webhooks Sonarr/Radarr, l’acceptation des manifestes par le catalogue, l’exécution du plugin Sonarr par `PluginProcessHost` dans le bac à sable (ignorée si Landlock ou python3 est absent) et le déclencheur sur une base SQLite temporaire :
+`backend/tests/Encoding.Plugins.Tests` vérifie les règles de correspondance, les webhooks, le Store, les comportements média C# et le déclencheur sur SQLite. Les manifestes Store utilisés par les scénarios runtime sont des fixtures explicites sous `backend/tests/Fixtures/StoreCatalog`; le registre de production ne les charge pas par défaut. Le test de processus Sonarr a été retiré avec le code du plugin, dont les tests de source vivent dans le dépôt Store :
 
 ```powershell
 dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
-python3 -m unittest discover -s backend/plugins/tests -v
 ```
 
-Les tests Python lancent le SDK, le plugin d’exemple et les plugins Sonarr/Radarr comme processus réels contre un faux service HTTP local ; ils n’utilisent aucun service personnel.
+Les tests des plugins Python et du SDK sont maintenus dans le dépôt public Encoding Store. Ils utilisent un faux service HTTP local et aucun service personnel.
 
 ## Charge et contention SQLite
 

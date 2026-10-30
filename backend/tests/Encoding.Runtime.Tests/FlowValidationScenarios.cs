@@ -10,7 +10,7 @@ internal static class FlowValidationScenarios
 
     public static void Run()
     {
-        var registry = new FlowComponentRegistry(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         var validator = new FlowDefinitionValidator(registry);
         FlowNodeDefinition Node(string id, string componentId, IReadOnlyDictionary<string, JsonElement>? changes = null)
         {

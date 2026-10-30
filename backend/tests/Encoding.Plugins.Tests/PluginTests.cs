@@ -25,7 +25,7 @@ internal static class PluginTests
     private static void PathMappings()
     {
         // Les vecteurs sont partagés avec les tests Python : les deux implémentations doivent concorder.
-        using var vectors = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "backend", "plugins", "tests", "path-mapping-vectors.json")));
+        using var vectors = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "backend", "tests", "Fixtures", "path-mapping-vectors.json")));
         var root = vectors.RootElement;
         var libraries = root.GetProperty("libraries").EnumerateObject().ToDictionary(item => item.Name, item => Guid.Parse(item.Value.GetString()!));
         string Fill(string text) => libraries.Aggregate(text, (current, item) => current.Replace("{" + item.Key + "}", item.Value.ToString()));
@@ -74,13 +74,13 @@ internal static class PluginTests
     /// <summary>Le serveur charge les manifestes livrés (Sonarr, Radarr) et celui d’un plugin tiers copié de l’exemple.</summary>
     private static void CatalogAcceptsManifests()
     {
-        var plugins = Path.Combine(RepositoryRoot(), "backend", "plugins");
+        var plugins = Path.Combine(RepositoryRoot(), "backend", "tests", "Fixtures", "StoreCatalog");
         var directory = Path.Combine(Path.GetTempPath(), "encoding-plugin-manifests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
         {
-            File.Copy(Path.Combine(plugins, "example", "manifest.json"), Path.Combine(directory, "example.json"));
-            var registry = new FlowComponentRegistry(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["FlowPlugins:ManifestDirectory"] = directory }).Build());
+            File.Copy(Path.Combine(plugins, "example.json"), Path.Combine(directory, "example.json"));
+            var registry = StoreCatalogFixture.Create(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["FlowPlugins:ManifestDirectory"] = directory }).Build());
             Check(registry.Plugins.Single(plugin => plugin.Id == "example").Components.Count == 2, "The server catalog accepts the third-party manifest.");
             Check(registry.Plugins.Where(plugin => plugin.Id != "example").SelectMany(plugin => plugin.Components)
                 .All(component => component.Category is not null && FlowComponentCategories.Ids.Contains(component.Category)),
@@ -100,7 +100,7 @@ internal static class PluginTests
 
     private static void InvalidManifestsAreRejected()
     {
-        var source=Path.Combine(RepositoryRoot(),"backend","plugins","example","manifest.json");
+        var source=Path.Combine(RepositoryRoot(),"backend","tests","Fixtures","StoreCatalog","example.json");
         var root=JsonNode.Parse(File.ReadAllText(source))!.AsObject();
         var duplicate=root.DeepClone().AsObject();
         duplicate["components"]!.AsArray().Add(duplicate["components"]![0]!.DeepClone());
@@ -140,7 +140,7 @@ internal static class PluginTests
                 foreach(var component in good["components"]!.AsArray()) component!["id"]=component["id"]!.GetValue<string>().Replace("example-","second-");
                 File.WriteAllText(Path.Combine(directory,"b-valid.json"),good.ToJsonString());
                 var configuration=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["FlowPlugins:ManifestDirectory"]=directory }).Build();
-                var registry=new FlowComponentRegistry(configuration);
+                var registry=StoreCatalogFixture.Create(configuration);
                 Check(registry.Rejected.Count==1 && registry.Rejected[0].File=="invalid.json" && registry.Rejected[0].Reason.Length>0,"The catalog reports the invalid manifest without failing: "+name);
                 Check(registry.Plugins.All(plugin=>plugin.Id!="../evil") && registry.Plugins.Any(plugin=>plugin.Id=="second-example"),"A broken manifest does not hide a valid one: "+name);
                 Check(registry.Plugins.Count(plugin=>plugin.Id=="plex")==1,"A third-party manifest never replaces a built-in plugin: "+name);
@@ -172,7 +172,7 @@ internal static class PluginTests
 
     private static void ServerOnlySettingsStayOffWorkers()
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         var sonarr = registry.Plugins.Single(plugin => plugin.Id == "sonarr");
         Check(sonarr.ConfigurationSchema!.Fields.Single(field => field.Id == "webhookSecret").Scope == "server", "The webhook secret is declared server-only.");
         var values = new Dictionary<string, JsonElement>
@@ -203,7 +203,7 @@ internal static class PluginTests
 
     private static void ManifestFingerprintDetectsContractDrift()
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         var plex = registry.Plugins.Single(plugin => plugin.Id == "plex");
         var fingerprint = PluginManifestFingerprint.Compute(plex);
         var relabelled = plex with { Name = "Autre libellé", Components = plex.Components.Select(c => c with { Name = c.Name + " (v2)", Description = "x", Category = "utilities" }).ToArray() };

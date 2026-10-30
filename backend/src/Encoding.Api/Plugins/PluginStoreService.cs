@@ -60,7 +60,7 @@ public sealed class PluginStoreService(IConfiguration configuration, FlowCompone
                 if (info.Sha256 != installed.Sha256) throw new PluginPackageException("L'empreinte de l'archive ne correspond plus à celle enregistrée.");
                 if ((info.Manifest.RequiredToolPackages ?? []).Any(dependency => !tools.Satisfies(dependency, ToolPackagePlatform.Current)))
                     throw new PluginPackageException("Une dépendance d'outil de ce plugin n'est plus installée à une version compatible.");
-                if (!registry.TryInstall(info.Manifest, out var reason)) throw new PluginPackageException(reason);
+                if (!registry.TryInstall(info.Manifest, out var reason, info.Runtime.Type == "native")) throw new PluginPackageException(reason);
             }
             catch (Exception exception) when (exception is PluginPackageException or IOException)
             {
@@ -75,6 +75,8 @@ public sealed class PluginStoreService(IConfiguration configuration, FlowCompone
     {
         var info = PluginPackage.Inspect(archive);
         var id = info.Manifest.Id;
+        if (!PluginIdentity.IsQualifiedPluginId(id) && !allowOfficial)
+            throw new PluginPackageException("Les identifiants de plugin non qualifiés sont réservés aux paquets officiels.");
         if (expectedSha256 is not null && !string.Equals(expectedSha256, info.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new PluginPackageException("L'empreinte SHA-256 de l'archive ne correspond pas à celle annoncée par le dépôt.");
         if (expectedId is not null && expectedId != id) throw new PluginPackageException($"L'archive contient « {id} », pas « {expectedId} ».");
@@ -92,7 +94,7 @@ public sealed class PluginStoreService(IConfiguration configuration, FlowCompone
                 if (same.Sha256 == info.Sha256) return same;
                 throw new PluginPackageException("Cette version est déjà installée avec un contenu différent : une version publiée est immuable, incrémentez la version.");
             }
-            if (!registry.TryInstall(info.Manifest, out var reason)) throw new PluginPackageException(reason);
+            if (!registry.TryInstall(info.Manifest, out var reason, info.Runtime.Type == "native")) throw new PluginPackageException(reason);
             var directory = PackageDirectory(id, info.Manifest.Version);
             try
             {
