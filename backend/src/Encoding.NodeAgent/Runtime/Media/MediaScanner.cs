@@ -64,7 +64,7 @@ public sealed class MediaScanner(ProcessToolRunner tools)
                 {
                     var sampleResult = await tools.RunAsync(ffmpeg,
                         ["-nostdin", "-v", "error", "-xerror", "-ss", at.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-                         "-i", candidate, "-t", "5", "-map", "0:v?", "-f", "null", "-"],
+                         "-i", candidate, "-t", "5", "-map", "0:v?", "-fps_mode", "vfr", "-f", "null", "-"],
                         dir, TimeSpan.FromMinutes(1), ct);
                     if (sampleResult.ExitCode != 0 || !string.IsNullOrWhiteSpace(sampleResult.Error))
                     {
@@ -77,7 +77,7 @@ public sealed class MediaScanner(ProcessToolRunner tools)
         }
 
         var result=await tools.RunAsync(ffmpeg,
-            ["-nostdin","-v","error","-xerror","-i",candidate,"-map","0:v?","-map","0:a?","-f","null","-"],dir,TimeSpan.FromHours(6),ct);
+            ["-nostdin","-v","error","-xerror","-i",candidate,"-map","0:v?","-map","0:a?","-fps_mode","vfr","-f","null","-"],dir,TimeSpan.FromHours(6),ct);
         // ffmpeg 6.x sort en 0 sur une image corrompue ou un conteneur abîmé, même avec -xerror : avec « -v error », toute ligne d'erreur sur stderr est un échec.
         if(result.ExitCode!=0 || !string.IsNullOrWhiteSpace(result.Error))
         {
