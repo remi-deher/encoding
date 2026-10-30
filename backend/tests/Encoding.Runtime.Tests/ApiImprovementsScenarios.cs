@@ -785,6 +785,8 @@ internal static class ApiImprovementsScenarios
             foreach (var (key, value) in settings) builder.UseSetting(key, value);
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<Encoding.Api.Flows.FlowComponentRegistry>();
+                services.AddSingleton(StoreCatalogFixture.Create());
                 foreach (var descriptor in services.Where(item => item.ServiceType == typeof(IHostedService)).ToArray())
                     services.Remove(descriptor);
             });

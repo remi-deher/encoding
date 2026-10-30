@@ -34,7 +34,7 @@ public sealed class MediaAssemblyTests
             using var capture=RuntimeCommandCapture.Begin();var invocation=Guid.NewGuid();
             MediaActionOutcome result;
             using(capture.BeginStep("assembly",invocation))
-                result=await actions.AssembleAsync(Config(new { addFonts=true }),metadata,null,source,directory,"assembly",default,resource);
+                result=await actions.AssembleAsync(Config(new { manageSubtitles=true, addFonts=true }),metadata,null,source,directory,"assembly",default,resource);
             Assert.NotNull(result.Primary);
             var commands=capture.ForStep("assembly",invocation);
             Assert.Single(commands,command=>command.Command.Contains("mkvmerge") && command.Command.Contains(" -o "));
@@ -46,7 +46,7 @@ public sealed class MediaAssemblyTests
             var identification=await tools.CheckedAsync("mkvmerge",["-J",result.Primary!],directory,default);
             Assert.Contains("TestFont.ttf",identification);
             var empty=Path.Combine(directory,"empty-fonts");Directory.CreateDirectory(empty);
-            await Assert.ThrowsAsync<SubtitleException>(()=>actions.AssembleAsync(Config(new { addFonts=true }),metadata,null,source,directory,"failure",default,empty));
+            await Assert.ThrowsAsync<SubtitleException>(()=>actions.AssembleAsync(Config(new { manageSubtitles=true, addFonts=true }),metadata,null,source,directory,"failure",default,empty));
             Assert.Equal(sha,await SafeMediaPaths.DigestAsync(source,default));
         }
         finally { Directory.Delete(directory,true); }
