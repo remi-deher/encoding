@@ -202,7 +202,8 @@ await StandardFlowTemplateSeeder.EnsureAsync(
     localDatabase,
     flowRegistry,
     app.Services.GetRequiredService<FlowDefinitionValidator>(),
-    app.Lifetime.ApplicationStopping);
+    app.Lifetime.ApplicationStopping,
+    app.Logger);
 await app.Services.GetRequiredService<Encoding.Api.Plugins.ClusterExtensionActivationState>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 await app.Services.GetRequiredService<TaskOwnershipRepository>().InitializeAsync(app.Lifetime.ApplicationStopping);

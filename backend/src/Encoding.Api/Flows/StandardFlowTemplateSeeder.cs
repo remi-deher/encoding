@@ -27,9 +27,15 @@ public static class StandardFlowTemplateSeeder
     private sealed record Edge(string From, string Output, string To);
 
     public static async Task EnsureAsync(DbDataSource dataSource, FlowComponentRegistry registry,
-        FlowDefinitionValidator validator, CancellationToken ct)
+        FlowDefinitionValidator validator, CancellationToken ct, ILogger? logger = null)
     {
-        var templates = Build(registry);
+        List<Template> templates;
+        try { templates = Build(registry); }
+        catch (InvalidOperationException exception) when (exception.Message.StartsWith("Le composant intégré", StringComparison.Ordinal))
+        {
+            logger?.LogInformation("Les modèles standards attendent les paquets de composants nécessaires du Store : {Reason}", exception.Message);
+            return;
+        }
         if (templates.Count != TemplateIds.Length)
             throw new InvalidOperationException("Le catalogue des modèles standards n’a pas le nombre attendu d’entrées.");
 
