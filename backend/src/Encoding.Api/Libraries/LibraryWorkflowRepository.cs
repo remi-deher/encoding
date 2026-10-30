@@ -257,13 +257,28 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     /// </summary>
     private async Task<bool> ServesLibraryAutomaticallyAsync(Guid library,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        if(localNode?.NodeId is not {} node) return true;
+        var node=localNode?.NodeId;
+        if(node is null)
+        {
+            await using var cmd=Sql.Command("SELECT a.node_id FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id=a.peer_id WHERE a.revoked_at IS NULL AND a.node_id IS NOT NULL LIMIT 1",c,tx);
+            node=await cmd.ScalarGuidAsync(ct);
+        }
+        if(node is null)
+        {
+            await using var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id<>a.peer_id WHERE a.node_id=n.id AND a.revoked_at IS NULL) ORDER BY n.enrolled_at LIMIT 2",c,tx);
+            var candidates=new List<Guid>();
+            await using var cr=await cmd.ExecuteReaderAsync(ct);
+            while(await cr.ReadAsync(ct)) candidates.Add(cr.GetGuid(0));
+            if(candidates.Count==1) node=candidates[0];
+        }
+        if(node is not {} resolvedNode) return true;
+        if(localNode?.NodeId is null) await localNode!.RegisterAsync(resolvedNode,ct);
         await using var access=Sql.Command("""
           SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id AND n.deleted_at IS NULL AND 'server'=ANY(n.roles)
                         WHERE a.library_id=@library AND a.mode='direct' AND a.is_enabled AND a.can_read),
                  EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=@library AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read)
           """,c,tx);
-        access.Parameters.AddWithValue("library",library);access.Parameters.AddWithValue("node",node);
+        access.Parameters.AddWithValue("library",library);access.Parameters.AddWithValue("node",resolvedNode);
         await using var r=await access.ExecuteReaderAsync(ct);
         if(!await r.ReadAsync(ct)) return true;
         var anyDirect=Convert.ToInt64(r.GetValue(0))!=0;var localDirect=Convert.ToInt64(r.GetValue(1))!=0;

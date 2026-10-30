@@ -10,9 +10,15 @@ public sealed class RuntimeClient : IDisposable
 {
     private readonly HttpClient http=new() { Timeout=Timeout.InfiniteTimeSpan };
     private readonly WorkerIdentityState identity;
-    public RuntimeClient(WorkerIdentityState identity)
-    { this.identity=identity; http.BaseAddress=new Uri(identity.ApiBaseUrl!); http.DefaultRequestHeaders.Add("X-Node-Token",identity.NodeToken); }
+    public RuntimeClient(WorkerIdentityState identity, string? apiBaseUrl = null)
+    {
+        this.identity=identity;
+        ApiBaseUrl=apiBaseUrl ?? identity.ApiBaseUrl!;
+        http.BaseAddress=new Uri(ApiBaseUrl);
+        http.DefaultRequestHeaders.Add("X-Node-Token",identity.NodeToken);
+    }
     public Guid NodeId=>identity.Id;
+    public string ApiBaseUrl { get; }
     private string Route(string path)=>$"api/v1/runtime/nodes/{identity.Id:D}/{path}";
     public async Task<T?> PostAsync<T>(string path,object body,CancellationToken ct)
     {

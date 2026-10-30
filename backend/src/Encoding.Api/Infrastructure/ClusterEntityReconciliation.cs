@@ -59,7 +59,7 @@ public sealed partial class ClusterEntityReconciliation(
         new("flow_backup_jobs", ["flow_id", "version"], ["flow_id", "version"], immutable: true, detectDeletes: false),
         new("flow_drafts", ["flow_id", "revision", "definition", "updated_at"], ["flow_id"], ["definition"]),
         // Historical draft definitions are cluster data; status/check timestamps remain local.
-        new("flow_draft_backups", ["flow_id", "revision", "definition"], ["flow_id", "revision"], ["definition"], immutable: true, detectDeletes: false),
+        new("flow_draft_backups", ["flow_id", "revision", "definition"], ["flow_id", "revision"], ["definition"], immutable: false, detectDeletes: false),
         new("flow_script_versions", ["script_id", "version", "name", "language", "description", "code", "created_at"], ["script_id", "version"], immutable: true),
         new("encoding_profile_versions", ["profile_id", "version", "name", "description", "targets", "created_at"], ["profile_id", "version"], ["targets"], immutable: true),
         new("flow_resources", ["id", "kind", "name", "description", "created_at", "updated_at"], ["id"]),
@@ -485,26 +485,6 @@ public sealed partial class ClusterEntityReconciliation(
         await using var transaction = await connection.BeginTransactionAsync(ct);
         await using (var sequenceLock = Sql.Command("SELECT origin_id FROM cluster_sync_identity WHERE singleton = true FOR UPDATE", connection, transaction))
             await sequenceLock.ExecuteScalarAsync(ct);
-        if (entityType == "flow_draft_backups" && row is not null)
-        {
-            await using var existing = Sql.Command("SELECT definition FROM flow_draft_backups WHERE " + KeyPredicate(GetTable(entityType)), connection, transaction);
-            existing.Parameters.AddWithValue("key", key);
-            var definition = await existing.ExecuteScalarAsync(ct);
-            if (definition is string text)
-            {
-                if (!JsonNode.DeepEquals(JsonNode.Parse(text), row["definition"]))
-                {
-                    await transaction.RollbackAsync(ct);
-                    await RecordProjectionFailureAsync(pending.Change.EventId, entityType, "immutable_snapshot_conflict", ct);
-                    return false;
-                }
-                // Keep the local representation fingerprint: a different JSON property order must
-                // not be recaptured as a local edit and echoed back through the mesh.
-                var stored = (JsonObject)row.DeepClone();
-                stored["definition"] = JsonNode.Parse(text);
-                fingerprint = Fingerprint(stored, GetTable(entityType));
-            }
-        }
         var current = await ReadEntityStateAsync(connection, transaction, entityType, key, ct);
         if (current is { } currentState && CompareVersion(pending.Change.OccurredAt, pending.Change.OriginId, pending.Change.Sequence,
                 currentState.OccurredAt, currentState.OriginId, currentState.Sequence) <= 0)
@@ -512,6 +492,20 @@ public sealed partial class ClusterEntityReconciliation(
             await DeletePendingAsync(connection, transaction, pending.Change.EventId, ct);
             await transaction.CommitAsync(ct);
             return true;
+        }
+        if (entityType == "flow_draft_backups" && row is not null)
+        {
+            await using var existing = Sql.Command("SELECT definition FROM flow_draft_backups WHERE " + KeyPredicate(GetTable(entityType)), connection, transaction);
+            existing.Parameters.AddWithValue("key", key);
+            var definition = await existing.ExecuteScalarAsync(ct);
+            if (definition is string text && JsonNode.DeepEquals(JsonNode.Parse(text), row["definition"]))
+            {
+                // Keep the local representation fingerprint: a different JSON property order must
+                // not be recaptured as a local edit and echoed back through the mesh.
+                var stored = (JsonObject)row.DeepClone();
+                stored["definition"] = JsonNode.Parse(text);
+                fingerprint = Fingerprint(stored, GetTable(entityType));
+            }
         }
 
         try

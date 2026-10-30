@@ -16,6 +16,11 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
 
     // Shared fence for every local lease and source-write path. Legacy test repositories have no bound server identity.
     internal static string ActiveSql(string execution,bool control=false)=>$"(NOT EXISTS(SELECT 1 FROM task_server_identity) OR EXISTS(SELECT 1 FROM task_ownership own JOIN task_server_identity srv ON srv.peer_id=own.owner_peer_id WHERE own.execution_id={execution} AND own.state IN ({(control?"'active','frozen','quarantined'":"'active'")}) AND own.cluster_id=(SELECT id FROM cluster_identity WHERE singleton=true) AND srv.ready=1 AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=srv.peer_id AND stopped.released_at IS NULL)))";
+    internal const string BlockingPendingSql = """
+        EXISTS(SELECT 1 FROM task_ownership_inbox)
+        OR EXISTS(SELECT 1 FROM task_coordination_inbox)
+        OR EXISTS(SELECT 1 FROM cluster_sync_pending_projections p WHERE NOT EXISTS(SELECT 1 FROM cluster_projection_diagnostics d WHERE d.event_id=p.event_id))
+        """;
     public async Task InitializeAsync(CancellationToken ct)
     {
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);await BindIdentityAsync(c,tx,ct);
@@ -26,12 +31,12 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
         var result = new List<string>();
         await using var c = await db.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(System.Data.IsolationLevel.Snapshot, ct);
-        foreach (var (table, code) in new[] {
-            ("cluster_sync_pending_projections", "pending_entity_projections"),
-            ("task_ownership_inbox", "pending_ownership_events"),
-            ("task_coordination_inbox", "pending_coordination_events") })
+        foreach (var (predicate, code) in new[] {
+            ("EXISTS(SELECT 1 FROM cluster_sync_pending_projections p WHERE NOT EXISTS(SELECT 1 FROM cluster_projection_diagnostics d WHERE d.event_id=p.event_id))", "pending_entity_projections"),
+            ("EXISTS(SELECT 1 FROM task_ownership_inbox)", "pending_ownership_events"),
+            ("EXISTS(SELECT 1 FROM task_coordination_inbox)", "pending_coordination_events") })
         {
-            await using var pending = Sql.Command($"SELECT EXISTS(SELECT 1 FROM {table})", c, tx);
+            await using var pending = Sql.Command($"SELECT {predicate}", c, tx);
             if (await pending.ScalarBoolAsync(ct)) result.Add(code);
         }
         await using (var stopped = Sql.Command("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@local AND released_at IS NULL)", c, tx))
@@ -43,14 +48,28 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
         await using (var state = Sql.Command("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=1)", c, tx))
             ready = await state.ScalarBoolAsync(ct);
         if (!ready)
-        await using (var peers = Sql.Command("SELECT a.peer_id FROM cluster_peer_admissions a JOIN cluster_identity i ON i.id=a.cluster_id LEFT JOIN cluster_nodes n ON n.id=a.node_id WHERE a.revoked_at IS NULL AND a.peer_id<>@local AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=a.peer_id AND stopped.released_at IS NULL) AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))", c, tx))
+        await using (var peers = Sql.Command("""
+          SELECT a.peer_id,
+            CASE WHEN n.id IS NOT NULL THEN n.last_seen_at<=clock_timestamp()-interval '45 seconds'
+            ELSE EXISTS(
+              SELECT 1 FROM cluster_nodes rn
+              WHERE rn.deleted_at IS NULL AND 'server'=ANY(rn.roles)
+                AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions la WHERE la.peer_id=@local AND la.node_id=rn.id AND la.revoked_at IS NULL)
+                AND rn.last_seen_at<=clock_timestamp()-interval '45 seconds'
+            ) END
+          FROM cluster_peer_admissions a JOIN cluster_identity i ON i.id=a.cluster_id LEFT JOIN cluster_nodes n ON n.id=a.node_id
+          WHERE a.revoked_at IS NULL AND a.peer_id<>@local
+            AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=a.peer_id AND stopped.released_at IS NULL)
+            AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))
+          """, c, tx))
         {
             peers.Parameters.AddWithValue("local", identity.PeerId);
             await using var reader = await peers.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
             {
                 var peer = reader.GetGuid(0);
-                if (health is null || !health.HasFreshCatchUp(peer, TimeSpan.FromSeconds(45)))
+                var nodeOffline = reader.GetBoolean(1);
+                if (!nodeOffline && (health is null || !health.HasFreshCatchUp(peer, TimeSpan.FromSeconds(45))))
                     result.Add("peer_catch_up_unconfirmed:" + peer.ToString("D"));
             }
         }
@@ -61,21 +80,34 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
     {
         await ProjectAsync(ct);
         if(coordination is not null) await coordination.ProjectAsync(ct);
-        await using(var hint=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=1) AND NOT EXISTS(SELECT 1 FROM task_ownership_inbox) AND NOT EXISTS(SELECT 1 FROM task_coordination_inbox) AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped JOIN task_server_identity s ON stopped.peer_id=s.peer_id WHERE stopped.released_at IS NULL) AND NOT EXISTS(SELECT 1 FROM cluster_sync_pending_projections) AND NOT EXISTS(SELECT 1 FROM execution_work w WHERE NOT EXISTS(SELECT 1 FROM task_ownership o WHERE o.execution_id=w.execution_id))"))
+        await using(var hint=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=1) AND NOT EXISTS(SELECT 1 FROM task_ownership_inbox) AND NOT EXISTS(SELECT 1 FROM task_coordination_inbox) AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped JOIN task_server_identity s ON stopped.peer_id=s.peer_id WHERE stopped.released_at IS NULL) AND NOT EXISTS(SELECT 1 FROM cluster_sync_pending_projections p WHERE NOT EXISTS(SELECT 1 FROM cluster_projection_diagnostics d WHERE d.event_id=p.event_id)) AND NOT EXISTS(SELECT 1 FROM execution_work w WHERE NOT EXISTS(SELECT 1 FROM task_ownership o WHERE o.execution_id=w.execution_id))"))
             if(await hint.ScalarBoolAsync(ct)) return true;
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);await BindIdentityAsync(c,tx,ct);
         await using(var stopped=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@local AND released_at IS NULL)",c,tx)) {stopped.Parameters.AddWithValue("local",identity.PeerId);if(await stopped.ScalarBoolAsync(ct)) return false;}
-        await using(var pending=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership_inbox) OR EXISTS(SELECT 1 FROM task_coordination_inbox) OR EXISTS(SELECT 1 FROM cluster_sync_pending_projections)",c,tx)) if(await pending.ScalarBoolAsync(ct)) return false;
+        await using(var pending=Sql.Command($"SELECT {BlockingPendingSql}",c,tx)) if(await pending.ScalarBoolAsync(ct)) return false;
         await using(var ready=Sql.Command("SELECT ready FROM task_server_identity",c,tx))
         {
             if(!await ready.ScalarBoolAsync(ct))
             {
-                var peers=new List<Guid>();
-                await using(var read=Sql.Command("SELECT a.peer_id FROM cluster_peer_admissions a JOIN cluster_identity i ON i.id=a.cluster_id LEFT JOIN cluster_nodes n ON n.id=a.node_id WHERE a.revoked_at IS NULL AND a.peer_id<>@local AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=a.peer_id AND stopped.released_at IS NULL) AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))",c,tx))
+                var peers=new List<(Guid Peer,bool NodeOffline)>();
+                await using(var read=Sql.Command("""
+                  SELECT a.peer_id,
+                    CASE WHEN n.id IS NOT NULL THEN n.last_seen_at<=clock_timestamp()-interval '45 seconds'
+                    ELSE EXISTS(
+                      SELECT 1 FROM cluster_nodes rn
+                      WHERE rn.deleted_at IS NULL AND 'server'=ANY(rn.roles)
+                        AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions la WHERE la.peer_id=@local AND la.node_id=rn.id AND la.revoked_at IS NULL)
+                        AND rn.last_seen_at<=clock_timestamp()-interval '45 seconds'
+                    ) END
+                  FROM cluster_peer_admissions a JOIN cluster_identity i ON i.id=a.cluster_id LEFT JOIN cluster_nodes n ON n.id=a.node_id
+                  WHERE a.revoked_at IS NULL AND a.peer_id<>@local
+                    AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=a.peer_id AND stopped.released_at IS NULL)
+                    AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))
+                  """,c,tx))
                 {
-                    read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)) peers.Add(r.GetGuid(0));
+                    read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)) peers.Add((r.GetGuid(0),r.GetBoolean(1)));
                 }
-                if(peers.Any(peer=>health is null || !health.HasFreshCatchUp(peer,TimeSpan.FromSeconds(45)))) return false;
+                if(peers.Any(item=>!item.NodeOffline && (health is null || !health.HasFreshCatchUp(item.Peer,TimeSpan.FromSeconds(45))))) return false;
                 await using var allow=Sql.Command("UPDATE task_server_identity SET ready=1",c,tx);await allow.ExecuteNonQueryAsync(ct);
             }
         }

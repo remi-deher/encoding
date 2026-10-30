@@ -4,7 +4,11 @@
 
 Chaque serveur conserve son SQLite local. Les baux sont locaux au propriétaire ; le maillage signé transporte les décisions et les checkpoints, jamais une base partagée. Une partition ne suspend pas les calculs déjà possédés. Un simple délai réseau ne permet aucune reprise.
 
-À deux serveurs, **arrêter réellement l’installation source et tous ses workers avant de déclarer sa neutralisation**. L’attestation administrative ne coupe aucun processus à distance. Ne jamais attester cet arrêt sur la seule base d’un ping absent. À trois serveurs ou plus, la reprise reste refusée tant que le futur module de décision de reprise n’existe pas.
+À deux serveurs (ADR [0026](../architecture/adr/0026-reprise-auto-reparatrice-deux-noeuds.md)), le service de maintenance (`ClusterTaskMaintenance`) opère de manière auto-réparatrice :
+- Lorsqu'un serveur redémarre alors que l'autre nœud est hors ligne, il débloque sa file locale dès que ses projections locales sont appliquées.
+- Lorsque l'unique autre serveur est hors ligne (> 90 s) et injoignable et qu'il bloque des tâches, des quarantaines ou des écritures source, il est neutralisé automatiquement ; après le délai de grâce de 135 s, ses tâches éligibles sont reprises automatiquement (au checkpoint ou depuis la source) et les quarantaines éligibles sont levées.
+- Dès que le pair neutralisé revient en ligne et confirme son rattrapage, sa neutralisation est levée automatiquement (`ReadmitAsync`).
+- Les commandes manuelles ci-dessous restent disponibles à tout moment pour forcer immédiatement une décision administrative. À trois serveurs ou plus, la reprise reste refusée tant que le futur module de décision de reprise n’existe pas.
 
 ## Procédure
 

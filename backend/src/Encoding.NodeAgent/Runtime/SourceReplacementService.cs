@@ -16,17 +16,25 @@ public sealed class SourceReplacementService(NodeAgentOptions options,WorkerIden
                 var identity=await identities.GetAsync(ct);
                 if(identity.IsEnrolled)
                 {
-                    using var client=new RuntimeClient(identity);
-                    try
+                    foreach(var serverUrl in identity.GetCandidateServerUrls(options))
                     {
-                        if(await client.PostAsync<PendingSourceWrite>("source-writes/claim",new {},ct) is {} pending)
+                        try
                         {
-                            handled=await PendingSourceWriteHandler.HandleAsync(pending,client,guards,ct);
-                        }
-                    }
-                    catch(HttpRequestException exception) when(exception.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.MethodNotAllowed) { }
+                            using var client=new RuntimeClient(identity,serverUrl);
+                            try
+                            {
+                                if(await client.PostAsync<PendingSourceWrite>("source-writes/claim",new {},ct) is {} pending)
+                                {
+                                    handled|=await PendingSourceWriteHandler.HandleAsync(pending,client,guards,ct);
+                                }
+                            }
+                            catch(HttpRequestException exception) when(exception.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.MethodNotAllowed) { }
 
-                    foreach(var task in await client.GetAsync<RuntimeReplacementTask[]>("replacements",ct)) {handled=true;await HandleAsync(task,client,ct);}
+                            foreach(var task in await client.GetAsync<RuntimeReplacementTask[]>("replacements",ct)) {handled=true;await HandleAsync(task,client,ct);}
+                        }
+                        catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
+                        catch(Exception) { }
+                    }
                 }
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }

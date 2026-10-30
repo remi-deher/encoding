@@ -153,6 +153,9 @@ public static class NodeEndpoints
             Guid nodeId,
             NodeHeartbeatRequest request,
             NodeRepository repository,
+            LocalNodeRegistry localNode,
+            ClusterReconciliationRepository reconciliationRepository,
+            IConfiguration configuration,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
@@ -169,7 +172,20 @@ public static class NodeEndpoints
             }
 
             var node = await repository.RecordHeartbeatAsync(nodeId, providedToken, request, cancellationToken);
-            if (node is not null) return Results.Ok(node);
+            if (node is not null)
+            {
+                if (LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], httpContext.Request.Headers[LocalEnrollment.HeaderName].ToString()))
+                    await localNode.RegisterAsync(node.Id, cancellationToken);
+                var serverUrls = new List<string>();
+                if (ClusterReconciliationRepository.NormalizeUrl(configuration["Cluster:Reconciliation:AdvertisedApiBaseUrl"]) is { } advertised)
+                    serverUrls.Add(advertised);
+                foreach (var peerUrl in await reconciliationRepository.GetPeerEndpointsAsync(cancellationToken))
+                {
+                    if (!serverUrls.Contains(peerUrl, StringComparer.OrdinalIgnoreCase))
+                        serverUrls.Add(peerUrl);
+                }
+                return Results.Ok(node with { ClusterServerUrls = serverUrls });
+            }
             // 410 : l'identité a été retirée du cluster ; le jeton est effacé à ce retrait, donc seul l'identifiant permet de le reconnaître.
             // Le nœud abandonne alors cette identité au lieu de rester « enrôlé » sans jamais être vu.
             return await repository.IsRemovedAsync(nodeId, cancellationToken)

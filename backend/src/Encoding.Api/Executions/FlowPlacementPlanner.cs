@@ -75,7 +75,7 @@ public sealed class FlowPlacementPlanner(FlowComponentRegistry registry)
         IReadOnlyList<NodePlacementCandidate> candidates,
         DateTimeOffset now)
     {
-        var paths = ExtractPathRequirements(flow, sourceMetadata);
+        var paths = ExtractPathRequirements(flow, sourceMetadata, candidates);
         if (paths.Count == 0)
         {
             return new(
@@ -293,7 +293,7 @@ public sealed class FlowPlacementPlanner(FlowComponentRegistry registry)
     private static bool IsWorkerHandoff(FlowNodeDefinition node) => RuntimeHandoffPolicy.IsHandoff(node)
         && !(node.Configuration.TryGetValue("mode",out var mode) && mode.ValueKind==JsonValueKind.String && mode.GetString()=="server");
 
-    public IReadOnlyList<FlowPathRequirements> ExtractPathRequirements(FlowDefinition flow, JsonElement? sourceMetadata)
+    public IReadOnlyList<FlowPathRequirements> ExtractPathRequirements(FlowDefinition flow, JsonElement? sourceMetadata, IReadOnlyList<NodePlacementCandidate>? candidates = null)
     {
         var inputNode = flow.Nodes.FirstOrDefault(n => registry.Resolve(n.Component)?.Kind == "input");
         if (inputNode is null) return [];
@@ -331,6 +331,35 @@ public sealed class FlowPlacementPlanner(FlowComponentRegistry registry)
                         filterOutput = null;
                     }
                 }
+                else if (sourceMetadata is { } matchMeta && node.Component.PluginId == "conditions" && node.Component.ComponentId == "conditions-match"
+                    && node.Configuration.TryGetValue("rules", out var rulesJson))
+                {
+                    try
+                    {
+                        var tree = ConditionTree.Parse(rulesJson, flow.MediaType);
+                        if (IsPureMediaCondition(tree))
+                        {
+                            var ctx = new ConditionEvaluationContext(
+                                new("", ".mkv", new Dictionary<string, JsonElement>(StringComparer.Ordinal), matchMeta, matchMeta),
+                                Guid.Empty, Guid.Empty, null, "", "");
+                            filterOutput = ConditionTree.Evaluate(tree, ctx) ? "yes" : "no";
+                        }
+                    }
+                    catch
+                    {
+                        filterOutput = null;
+                    }
+                }
+                else if (candidates is not null && node.Component.PluginId == "nodes" && node.Component.ComponentId == "nodes-library-access" && RuntimeHandoffPolicy.LibraryAccessNeedsEncoder(node))
+                {
+                    // Si aucun nœud à accès direct ne possède d'encodeur matériel compatible avec le profil du flow,
+                    // la branche « oui » ne sera jamais empruntée par le nœud source direct : ne pas l'imposer.
+                    var anyDirectCanEncode = candidates.Any(c =>
+                        c.IsOnline && c.IsWorker
+                        && c.Access is { IsEnabled: true, Mode: "direct", CanRead: true, LocalPath: not null }
+                        && MediaCodecPolicy.ProfileEncoderUsable(flow, c.Capabilities.FirstOrDefault(cap => cap.ToolId == "ffmpeg")));
+                    if (!anyDirectCanEncode) filterOutput = "no";
+                }
 
                 var relevantEdges = filterOutput is not null
                     ? edges.Where(e => e.SourceOutputId == filterOutput).ToList()
@@ -357,6 +386,16 @@ public sealed class FlowPlacementPlanner(FlowComponentRegistry registry)
 
         return paths.Select(path=>BuildRequirements(path,sourceMetadata)).ToList();
     }
+
+    private static bool IsPureMediaCondition(ConditionExpression tree) => tree switch
+    {
+        ConditionGroup group => group.Children.All(IsPureMediaCondition),
+        ConditionRule rule => rule.Field.StartsWith("video.", StringComparison.Ordinal)
+            || rule.Field.StartsWith("audio.", StringComparison.Ordinal)
+            || rule.Field.StartsWith("subtitles.", StringComparison.Ordinal)
+            || rule.Field is "file.duration" or "file.size",
+        _ => false
+    };
 
     private FlowPathRequirements BuildRequirements(List<FlowNodeDefinition> nodes,JsonElement? sourceMetadata)
     {
@@ -455,9 +494,13 @@ public sealed class FlowPlacementPlanner(FlowComponentRegistry registry)
             if (node.Component.ComponentId is "base-add-fonts" or "subtitles-add-fonts"
                 || (node.Component.ComponentId == "base-assemble-media" && node.Configuration.TryGetValue("addFonts", out var af) && af.ValueKind == JsonValueKind.True))
             {
-                var fontSet = node.Configuration.TryGetValue("fontSet", out var configuredSet) && configuredSet.ValueKind == JsonValueKind.String
-                    ? configuredSet.GetString()! : "Crunchyroll";
-                fontSets.Add(fontSet);
+                var fromResource = node.Configuration.TryGetValue("resource", out var resource) && resource.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(resource.GetString());
+                if (!fromResource)
+                {
+                    var fontSet = node.Configuration.TryGetValue("fontSet", out var configuredSet) && configuredSet.ValueKind == JsonValueKind.String
+                        ? configuredSet.GetString()! : "Crunchyroll";
+                    fontSets.Add(fontSet);
+                }
             }
 
             if (node.Component.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node")

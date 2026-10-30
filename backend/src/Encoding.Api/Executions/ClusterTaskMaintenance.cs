@@ -20,7 +20,7 @@ public sealed class ClusterTaskMaintenance(DbDataSource db,ClusterPeerIdentitySt
             try {await Task.Delay(delay,ct);} catch(OperationCanceledException) when(ct.IsCancellationRequested) {return;}
         }
     }
-    private async Task ObserveAsync(CancellationToken ct)
+    internal async Task ObserveAsync(CancellationToken ct)
     {
         var peers=new List<Guid>();Guid cluster;
         await using(var c=await db.OpenConnectionAsync(ct))
@@ -30,13 +30,107 @@ public sealed class ClusterTaskMaintenance(DbDataSource db,ClusterPeerIdentitySt
             {read.Parameters.AddWithValue("cluster",cluster);read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)) peers.Add(r.GetGuid(0));}
         }
         if(peers.Count==0) return;
-        await using var connection=await db.OpenConnectionAsync(ct);await using var tx=await connection.BeginTransactionAsync(ct);
-        foreach(var peer in peers.Take(128))
+        await using(var connection=await db.OpenConnectionAsync(ct))
+        await using(var tx=await connection.BeginTransactionAsync(ct))
         {
-            await using var seq=Sql.Command("UPDATE task_observation_sequence SET sequence=sequence+1 WHERE singleton=1 RETURNING sequence",connection,tx);var sequence=Convert.ToInt64(await seq.ExecuteScalarAsync(ct));
-            await coordinator.AppendAsync(new(2,Guid.NewGuid(),cluster,identity.PeerId,"observation",Guid.Empty,0,Guid.Empty,SubjectPeerId:peer,RecordedAt:DateTimeOffset.UtcNow,Sequence:sequence,Reachable:health.HasFreshAuthenticated(peer,TimeSpan.FromSeconds(45))),connection,tx,ct);
+            foreach(var peer in peers.Take(128))
+            {
+                await using var seq=Sql.Command("UPDATE task_observation_sequence SET sequence=sequence+1 WHERE singleton=1 RETURNING sequence",connection,tx);var sequence=Convert.ToInt64(await seq.ExecuteScalarAsync(ct));
+                await coordinator.AppendAsync(new(2,Guid.NewGuid(),cluster,identity.PeerId,"observation",Guid.Empty,0,Guid.Empty,SubjectPeerId:peer,RecordedAt:DateTimeOffset.UtcNow,Sequence:sequence,Reachable:health.HasFreshAuthenticated(peer,TimeSpan.FromSeconds(45))),connection,tx,ct);
+            }
+            await tx.CommitAsync(ct);
         }
-        await tx.CommitAsync(ct);
+        await HealTwoServerClusterAsync(ct);
+    }
+
+    internal async Task HealTwoServerClusterAsync(CancellationToken ct)
+    {
+        await projection.ProjectAsync(ct);
+        var readmitPeers=new List<Guid>();
+        await using(var c=await db.OpenConnectionAsync(ct))
+        await using(var read=Sql.Command("SELECT peer_id FROM task_neutralizations WHERE author_peer_id=@local AND released_at IS NULL",c))
+        {
+            read.Parameters.AddWithValue("local",identity.PeerId);
+            await using var r=await read.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct))
+            {
+                var peer=r.GetGuid(0);
+                if(health.HasFreshCatchUp(peer,TimeSpan.FromSeconds(45))) readmitPeers.Add(peer);
+            }
+        }
+        foreach(var peer in readmitPeers)
+            await coordinator.ReadmitAsync(peer,ct);
+
+        await using(var stopped=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@local AND released_at IS NULL)"))
+        {stopped.Parameters.AddWithValue("local",identity.PeerId);if(await stopped.ScalarBoolAsync(ct)) return;}
+
+        var serverPeers=new List<(Guid Peer,bool NodeOffline,bool Neutralized)>();
+        await using(var c=await db.OpenConnectionAsync(ct))
+        await using(var read=Sql.Command("""
+          SELECT DISTINCT a.peer_id,
+            CASE WHEN n.id IS NOT NULL THEN n.last_seen_at<=clock_timestamp()-interval '90 seconds'
+            ELSE EXISTS(
+              SELECT 1 FROM cluster_nodes rn
+              WHERE rn.deleted_at IS NULL AND 'server'=ANY(rn.roles)
+                AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions la WHERE la.peer_id=@local AND la.node_id=rn.id AND la.revoked_at IS NULL)
+                AND rn.last_seen_at<=clock_timestamp()-interval '90 seconds'
+            ) END,
+            EXISTS(SELECT 1 FROM task_neutralizations s WHERE s.peer_id=a.peer_id AND s.released_at IS NULL)
+          FROM cluster_peer_admissions a
+          JOIN cluster_identity i ON i.id=a.cluster_id
+          LEFT JOIN cluster_nodes n ON n.id=a.node_id
+          WHERE a.revoked_at IS NULL AND a.peer_id<>@local
+            AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))
+          """,c))
+        {
+            read.Parameters.AddWithValue("local",identity.PeerId);
+            await using var r=await read.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) serverPeers.Add((r.GetGuid(0),r.GetBoolean(1),r.GetBoolean(2)));
+        }
+        if(serverPeers.Count!=1) return;
+        var remote=serverPeers[0];
+        if(!remote.Neutralized && remote.NodeOffline && !health.HasFreshAuthenticated(remote.Peer,TimeSpan.FromSeconds(45)))
+        {
+            bool hasBlockedWork;
+            await using(var c=await db.OpenConnectionAsync(ct))
+            await using(var check=Sql.Command("""
+              SELECT EXISTS(
+                SELECT 1 FROM task_ownership o LEFT JOIN executions e ON e.id=o.execution_id
+                WHERE o.owner_peer_id=@peer AND o.state IN ('active','frozen') AND (e.id IS NULL OR e.state IN ('queued','running'))
+              ) OR EXISTS(
+                SELECT 1 FROM task_quarantines q JOIN task_ownership winner ON winner.execution_id=q.winner_id
+                WHERE winner.owner_peer_id=@peer
+              ) OR EXISTS(
+                SELECT 1 FROM runtime_source_write_waits
+              ) OR EXISTS(
+                SELECT 1 FROM pending_source_writes WHERE state IN ('waiting','claimed')
+              )
+              """,c))
+            {
+                check.Parameters.AddWithValue("peer",remote.Peer);
+                hasBlockedWork=await check.ScalarBoolAsync(ct);
+            }
+            if(hasBlockedWork)
+                await coordinator.NeutralizeAsync(remote.Peer,new(true,"Neutralisation automatique : second nœud serveur hors ligne et injoignable."),ct);
+        }
+
+        var recoverable=new List<Guid>();
+        await using(var c=await db.OpenConnectionAsync(ct))
+        await using(var read=Sql.Command("""
+          SELECT o.execution_id
+          FROM task_ownership o
+          JOIN task_neutralizations n ON n.peer_id=o.owner_peer_id AND n.released_at IS NULL AND n.author_peer_id=@local
+          LEFT JOIN executions e ON e.id=o.execution_id
+          WHERE o.owner_peer_id<>@local AND o.state='active' AND (e.id IS NULL OR e.state IN ('queued','running'))
+          ORDER BY o.queued_at,o.execution_id LIMIT 16
+          """,c))
+        {
+            read.Parameters.AddWithValue("local",identity.PeerId);
+            await using var r=await read.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) recoverable.Add(r.GetGuid(0));
+        }
+        foreach(var id in recoverable)
+            await coordinator.RecoverAsync(id,ct);
     }
     internal async Task CaptureDirtyAsync(CancellationToken ct)
     {
@@ -74,23 +168,15 @@ public sealed class ClusterTaskMaintenance(DbDataSource db,ClusterPeerIdentitySt
             await using var cached=db.CreateCommand("INSERT INTO task_checkpoint_cached(execution_id,body) VALUES(@id,@body) ON CONFLICT(execution_id) DO UPDATE SET body=excluded.body");cached.Parameters.AddWithValue("id",candidate.Id);cached.Parameters.AddWithValue("body",candidate.Body);await cached.ExecuteNonQueryAsync(ct);
         }
     }
-    private async Task HandoffsAsync(CancellationToken ct)
+    internal async Task HandoffsAsync(CancellationToken ct)
     {
         await using(var stopped=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@local AND released_at IS NULL)")) {stopped.Parameters.AddWithValue("local",identity.PeerId);if(await stopped.ScalarBoolAsync(ct)) return;}
         Guid? id=null;Guid? target=null;
         await using(var read=db.CreateCommand("SELECT w.execution_id,w.handoff_selector->>'targetNodeId' FROM execution_work w JOIN task_ownership o ON o.execution_id=w.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id WHERE o.state='active' AND s.ready=1 AND w.handoff_pending AND w.handoff_selector->>'mode'='server' ORDER BY w.execution_id LIMIT 1"))
         await using(var r=await read.ExecuteReaderAsync(ct)) if(await r.ReadAsync(ct)) {id=r.GetGuid(0);if(Guid.TryParse(r.GetString(1),out var peer)) target=peer;}
-        if(id is not null&&target is not null)
+        if(id is not null&&target is not null && health.HasFreshCatchUp(target.Value,TimeSpan.FromSeconds(45)))
         {
-            await using var attempts=db.CreateCommand("SELECT count(*) FROM task_transfers WHERE execution_id=@id AND source_peer_id=@local AND state='aborted'");attempts.Parameters.AddWithValue("id",id.Value);attempts.Parameters.AddWithValue("local",identity.PeerId);
-            if(Convert.ToInt64(await attempts.ExecuteScalarAsync(ct))<3) await coordinator.MoveAsync(id.Value,target.Value,ct);
-            else
-            {
-                await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
-                await using var current=Sql.Command("SELECT revision,node_id FROM executions WHERE id=@id",c,tx);current.Parameters.AddWithValue("id",id.Value);await using var r=await current.ExecuteReaderAsync(ct);
-                if(await r.ReadAsync(ct)) {var revision=r.GetInt32(0);Guid? node=r.IsDBNull(1)?null:r.GetGuid(1);await r.DisposeAsync();if(await ExecutionRepository.RecordInTransactionAsync(id.Value,new(Guid.NewGuid(),revision,"failed",node,null,"Relais inter-serveurs refusé après trois réceptions infructueuses ; vérifier les capacités, accès et versions avant relance."),c,tx,ct)) await RuntimeRepository.ReleaseAsync(id.Value,c,tx,ct);}
-                await tx.CommitAsync(ct);
-            }
+            await coordinator.MoveAsync(id.Value,target.Value,ct);
         }
         // A crashed source can safely undo only proposals for which no activation was ever emitted.
         var stale=new List<string>();

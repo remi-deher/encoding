@@ -80,6 +80,12 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
         {read.Parameters.AddWithValue("id",id);await using var r=await read.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)) inputs.Add(r.GetString(0),r.GetString(1));}
         snapshot=snapshot with {Steps=steps,Artifacts=blobs,Inputs=inputs};
         var plain=JsonSerializer.SerializeToUtf8Bytes(snapshot,Json);if(plain.Length>192*1024) return null;
+        return ProtectSnapshot(cluster,id,epoch,previous,snapshot);
+    }
+    internal ClusterTaskEvent ProtectSnapshot(Guid cluster,Guid id,long epoch,Guid previous,ClusterTaskSnapshot snapshot)
+    {
+        if(!keys.HasKey(cluster)) keys.GetOrCreate(cluster);
+        var plain=JsonSerializer.SerializeToUtf8Bytes(snapshot,Json);
         return new(2,Guid.NewGuid(),cluster,identity.PeerId,"checkpoint",id,epoch,previous,Snapshot:ClusterPayloadProtection.Protect(keys.GetRequired(cluster),plain,"task-checkpoint/"+id.ToString("D")),Revision:snapshot.Revision);
     }
     public ClusterTaskSnapshot Decode(ClusterTaskEvent e)

@@ -3,7 +3,7 @@ using Encoding.Contracts.Libraries;
 using Encoding.NodeAgent.Services;
 namespace Encoding.NodeAgent.Runtime;
 
-public sealed class LibraryDiscoveryService(WorkerIdentityStore identities,ILogger<LibraryDiscoveryService> logger):BackgroundService
+public sealed class LibraryDiscoveryService(NodeAgentOptions options,WorkerIdentityStore identities,ILogger<LibraryDiscoveryService> logger):BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -15,10 +15,18 @@ public sealed class LibraryDiscoveryService(WorkerIdentityStore identities,ILogg
                 var identity=await identities.GetAsync(ct);
                 if(identity.IsEnrolled)
                 {
-                    using var client=new RuntimeClient(identity);
-                    using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
-                    var lease=await client.PostAsync<LibraryScanLease>("library-scans/claim",new{},timeout.Token);
-                    if(lease is not null) await ScanAsync(lease,client,ct);
+                    foreach(var serverUrl in identity.GetCandidateServerUrls(options))
+                    {
+                        try
+                        {
+                            using var client=new RuntimeClient(identity,serverUrl);
+                            using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                            var lease=await client.PostAsync<LibraryScanLease>("library-scans/claim",new{},timeout.Token);
+                            if(lease is not null) { await ScanAsync(lease,client,ct); break; }
+                        }
+                        catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
+                        catch(Exception) { }
+                    }
                 }
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested) {break;}

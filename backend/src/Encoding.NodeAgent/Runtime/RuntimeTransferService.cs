@@ -20,14 +20,23 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                     var identity=await identities.GetAsync(ct);
                     if(identity.IsEnrolled)
                     {
-                        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
-                        using var client=new RuntimeClient(identity);
-                        var transfers=await client.GetAsync<RuntimeTransfer[]>("transfers",timeout.Token);
-                        foreach(var transfer in transfers)
+                        foreach(var serverUrl in identity.GetCandidateServerUrls(options))
                         {
-                            if(active.Count>=Math.Max(1,options.MaxConcurrentTasks)||active.ContainsKey(transfer.ExecutionId)) continue;
-                            var task=Task.Run(async()=> { using var transferClient=new RuntimeClient(identity); await TransferAsync(transfer,transferClient,ct); },CancellationToken.None);
-                            active.TryAdd(transfer.ExecutionId,task);
+                            try
+                            {
+                                using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                                using var client=new RuntimeClient(identity,serverUrl);
+                                var transfers=await client.GetAsync<RuntimeTransfer[]>("transfers",timeout.Token);
+                                foreach(var transfer in transfers)
+                                {
+                                    if(active.Count>=Math.Max(1,options.MaxConcurrentTasks)||active.ContainsKey(transfer.ExecutionId)) continue;
+                                    var boundUrl=serverUrl;
+                                    var task=Task.Run(async()=> { using var transferClient=new RuntimeClient(identity,boundUrl); await TransferAsync(transfer,transferClient,ct); },CancellationToken.None);
+                                    active.TryAdd(transfer.ExecutionId,task);
+                                }
+                            }
+                            catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
+                            catch(Exception) { }
                         }
                     }
                 }

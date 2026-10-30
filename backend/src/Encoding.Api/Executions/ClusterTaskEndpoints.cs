@@ -53,8 +53,9 @@ public static class ClusterTaskCoordinationEndpoints
             }
             else if(message.Kind=="ready")
             {
+                await ownership.ProjectAsync(ct);
                 await projection.ProjectAsync(ct);
-                await using var pending=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_ownership_inbox) OR EXISTS(SELECT 1 FROM task_coordination_inbox) OR EXISTS(SELECT 1 FROM cluster_sync_pending_projections)");
+                await using var pending=db.CreateCommand($"SELECT {TaskOwnershipRepository.BlockingPendingSql}");
                 reply=new(2,cluster.Id,identity.PeerId,message.Nonce,!await pending.ScalarBoolAsync(ct),JsonSerializer.Serialize(await new ClusterReconciliationRepository(db).GetVectorAsync(ct),TaskCheckpointRepository.Json));
             }
             else if(message.Kind=="activate" && message.Payload is {} payload)

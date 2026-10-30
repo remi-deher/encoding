@@ -61,7 +61,7 @@ public sealed class ClusterSourceWriteBarrier(DbDataSource db,ClusterReconciliat
     }
     internal async Task<string?> CheckAsync(DbConnection c,DbTransaction? tx,CancellationToken ct)
     {
-        await using(var ownership=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=0) OR EXISTS(SELECT 1 FROM task_ownership_inbox) OR EXISTS(SELECT 1 FROM task_coordination_inbox) OR EXISTS(SELECT 1 FROM task_neutralizations stopped JOIN task_server_identity s ON s.peer_id=stopped.peer_id WHERE stopped.released_at IS NULL)",c,tx))
+        await using(var ownership=Sql.Command($"SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=0) OR {TaskOwnershipRepository.BlockingPendingSql} OR EXISTS(SELECT 1 FROM task_neutralizations stopped JOIN task_server_identity s ON s.peer_id=stopped.peer_id WHERE stopped.released_at IS NULL)",c,tx))
             if(await ownership.ScalarBoolAsync(ct)) return "Écriture source différée : propriété des tâches à réconcilier.";
         await using var cmd=Sql.Command("""
           SELECT DISTINCT a.peer_id FROM cluster_peer_admissions a
@@ -75,7 +75,7 @@ public sealed class ClusterSourceWriteBarrier(DbDataSource db,ClusterReconciliat
         while(await r.ReadAsync(ct)) peers.Add(r.GetGuid(0));
         if(peers.Count==0) return null; // An autonomous installation does not wait for a nonexistent peer.
         await r.DisposeAsync();
-        await using(var pending=Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_sync_pending_projections)",c,tx))
+        await using(var pending=Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_sync_pending_projections p WHERE NOT EXISTS(SELECT 1 FROM cluster_projection_diagnostics d WHERE d.event_id=p.event_id))",c,tx))
             if(await pending.ScalarBoolAsync(ct)) return "Écriture sur la source différée : des projections du journal restent à réconcilier.";
         if(!health.GetStatus().Enabled || peers.Any(peer=>!health.HasFreshCatchUp(peer,TimeSpan.FromSeconds(45))))
             return "Écriture sur la source différée : attendre les échanges signés et le rattrapage des serveurs du cluster.";

@@ -36,35 +36,53 @@ public sealed class NodeHeartbeatService(
                     var capabilities = await capabilityProbe.DiscoverAsync(stoppingToken);
                     var inventory = HardwareInventory.Current();
                     var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory, ClusterProtocol.Current, sessionNonce);
-                    using var request = new HttpRequestMessage(HttpMethod.Put,
-                        new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/heartbeat"))
+                    var candidates = identity.IsEnrolled
+                        ? identity.GetCandidateServerUrls(options)
+                        : [identity.ApiBaseUrl!];
+                    foreach (var serverUrl in candidates)
                     {
-                        Content = JsonContent.Create(heartbeat, options: AgentJson.Options)
-                    };
-                    request.Headers.Add("X-Node-Token", identity.NodeToken);
-                    using var response = await httpClient.SendAsync(request, stoppingToken);
-                    if (response.StatusCode == System.Net.HttpStatusCode.Gone)
-                    {
-                        // Le cluster a retiré cette identité (0017) et ne la réactivera jamais : sans nouvelle identité, le nœud resterait
-                        // « enrôlé » sans jamais être revu. Le nœud local se réenrôle seul ; un nœud distant redevient autonome.
-                        logger.LogWarning("Le cluster a retiré le nœud {NodeId} ; l'identité locale est abandonnée.", identity.Id);
-                        await enrollment.ForgetRemovedIdentityAsync(identity.Id, stoppingToken);
-                    }
-                    else if (!response.IsSuccessStatusCode && !(response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !identity.IsEnrolled))
-                        logger.LogWarning("Le heartbeat du nœud {NodeId} a reçu HTTP {StatusCode}.", identity.Id, (int)response.StatusCode);
-                    else if (response.IsSuccessStatusCode)
-                    {
-                        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(AgentJson.Options, stoppingToken);
-                        if (!identity.IsEnrolled)
+                        try
                         {
-                            await enrollment.AdoptApprovedClusterAsync(identity, identity.Id, stoppingToken);
-                            await identityStore.MarkEnrolledAsync(stoppingToken);
-                            logger.LogInformation("L’enrôlement en attente du worker {NodeId} a été confirmé par le cluster.", identity.Id);
-                            await enrollment.CompleteSwitchAsync(stoppingToken);
+                            using var request = new HttpRequestMessage(HttpMethod.Put,
+                                new Uri(new Uri(serverUrl), $"api/v1/nodes/{identity.Id:D}/heartbeat"))
+                            {
+                                Content = JsonContent.Create(heartbeat, options: AgentJson.Options)
+                            };
+                            request.Headers.Add("X-Node-Token", identity.NodeToken);
+                            if (enrollment.IsLocalUrl(serverUrl) && LocalEnrollment.Read(options.LocalEnrollmentSecretFile) is { } secret)
+                                request.Headers.Add(LocalEnrollment.HeaderName, secret);
+                            using var response = await httpClient.SendAsync(request, stoppingToken);
+                            if (response.StatusCode == System.Net.HttpStatusCode.Gone && string.Equals(serverUrl.TrimEnd('/'), identity.ApiBaseUrl?.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Le cluster a retiré cette identité (0017) et ne la réactivera jamais : sans nouvelle identité, le nœud resterait
+                                // « enrôlé » sans jamais être revu. Le nœud local se réenrôle seul ; un nœud distant redevient autonome.
+                                logger.LogWarning("Le cluster a retiré le nœud {NodeId} ; l'identité locale est abandonnée.", identity.Id);
+                                await enrollment.ForgetRemovedIdentityAsync(identity.Id, stoppingToken);
+                                break;
+                            }
+                            else if (!response.IsSuccessStatusCode && !(response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !identity.IsEnrolled))
+                                logger.LogWarning("Le heartbeat du nœud {NodeId} vers {ServerUrl} a reçu HTTP {StatusCode}.", identity.Id, serverUrl, (int)response.StatusCode);
+                            else if (response.IsSuccessStatusCode)
+                            {
+                                var node = await response.Content.ReadFromJsonAsync<NodeResponse>(AgentJson.Options, stoppingToken);
+                                if (!identity.IsEnrolled)
+                                {
+                                    await enrollment.AdoptApprovedClusterAsync(identity, identity.Id, stoppingToken);
+                                    await identityStore.MarkEnrolledAsync(stoppingToken);
+                                    logger.LogInformation("L’enrôlement en attente du worker {NodeId} a été confirmé par le cluster.", identity.Id);
+                                    await enrollment.CompleteSwitchAsync(stoppingToken);
+                                }
+                                if (node?.ClusterServerUrls is { Count: > 0 })
+                                    await identityStore.UpdateKnownServersAsync(node.ClusterServerUrls, stoppingToken);
+                                logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId} vers {ServerUrl}.", identity.Id, serverUrl);
+                                ReportLifecycle(node);
+                                await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
+                            }
                         }
-                        logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
-                        ReportLifecycle(node);
-                        await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
+                        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !stoppingToken.IsCancellationRequested)
+                        {
+                            logger.LogDebug(exception, "Le serveur {ServerUrl} est momentanément indisponible pour le heartbeat.", serverUrl);
+                        }
                     }
                 }
             }

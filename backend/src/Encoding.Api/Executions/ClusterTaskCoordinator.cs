@@ -77,9 +77,28 @@ public sealed class ClusterTaskCoordinator(DbDataSource db,ClusterPeerIdentitySt
         await using var insert=Sql.Command("INSERT INTO task_transfers(id,execution_id,source_peer_id,target_peer_id,epoch,previous_event_id,snapshot,state,target_source_node_id) VALUES(@id,@execution,@from,@to,@epoch,@previous,@snapshot,@state,@source) ON CONFLICT(id) DO NOTHING",c,tx);
         insert.Parameters.AddWithValue("id",proposal.TransferId!.Value);insert.Parameters.AddWithValue("execution",proposal.ExecutionId);insert.Parameters.AddWithValue("from",proposal.AuthorPeerId);insert.Parameters.AddWithValue("to",proposal.TargetPeerId!.Value);insert.Parameters.AddWithValue("epoch",proposal.Epoch);insert.Parameters.AddWithValue("previous",proposal.PreviousEventId);insert.Parameters.AddWithValue("snapshot",signed);insert.Parameters.AddWithValue("state",state);insert.Parameters.AddWithValue("source",(object?)source??DBNull.Value);await insert.ExecuteNonQueryAsync(ct);
     }
+    internal async Task<Guid?> ResolveLocalNodeIdAsync(CancellationToken ct)
+    {
+        if(local.NodeId is {} known) return known;
+        await using var c=await db.OpenConnectionAsync(ct);
+        await using(var cmd=Sql.Command("SELECT node_id FROM cluster_peer_admissions WHERE peer_id=@local AND revoked_at IS NULL AND node_id IS NOT NULL LIMIT 1",c))
+        {
+            cmd.Parameters.AddWithValue("local",identity.PeerId);
+            if(await cmd.ScalarGuidAsync(ct) is {} admitted) {await local.RegisterAsync(admitted,ct);return admitted;}
+        }
+        await using(var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a WHERE a.node_id=n.id AND a.peer_id<>@local AND a.revoked_at IS NULL) ORDER BY n.enrolled_at LIMIT 2",c))
+        {
+            cmd.Parameters.AddWithValue("local",identity.PeerId);
+            var candidates=new List<Guid>();
+            await using var r=await cmd.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) candidates.Add(r.GetGuid(0));
+            if(candidates.Count==1) {await local.RegisterAsync(candidates[0],ct);return candidates[0];}
+        }
+        return null;
+    }
     internal async Task<Guid?> EligibleSourceAsync(ClusterTaskSnapshot value,CancellationToken ct)
     {
-        if(local.NodeId is not {} node) return null;
+        if(await ResolveLocalNodeIdAsync(ct) is not {} node) return null;
         await using var cmd=db.CreateCommand("SELECT n.capabilities,n.inventory FROM cluster_nodes n JOIN library_node_accesses a ON a.node_id=n.id WHERE n.id=@node AND n.deleted_at IS NULL AND n.accepts_work AND 'worker'=ANY(n.roles) AND n.last_seen_at>clock_timestamp()-interval '45 seconds' AND a.library_id=@library AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.can_write AND a.local_path IS NOT NULL");cmd.Parameters.AddWithValue("node",node);cmd.Parameters.AddWithValue("library",value.LibraryId);await using var r=await cmd.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct)) return null;
         var caps=JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(0),TaskCheckpointRepository.Json)??[];var inventory=r.IsDBNull(1)?null:JsonSerializer.Deserialize<NodeInventory>(r.GetString(1),TaskCheckpointRepository.Json);
         var cp=value.Steps.LastOrDefault()?.Checkpoint;var selector=await groups.GetNodeIdentityAsync(node,ct);
@@ -115,12 +134,13 @@ public sealed class ClusterTaskCoordinator(DbDataSource db,ClusterPeerIdentitySt
     }
     public async Task<ClusterTaskResult> ReadmitAsync(Guid peer,CancellationToken ct)
     {
+        var localVector=await new ClusterReconciliationRepository(db).GetVectorAsync(ct);
         if(!await barrier.VerifyAsync(ct)||!health.HasFreshCatchUp(peer,TimeSpan.FromSeconds(45))) return new(false,"Réconcilier directement le serveur revenu avant de lever sa neutralisation.");
         await ownership.PrepareClaimsAsync(ct);
+        await projection.ProjectAsync(ct);
         var ready=await transport.CallAsync(peer,"ready",null,ct);
         if(ready is not {Success:true,Payload:not null}) return new(false,"Le serveur revenu doit projeter son journal avant réadmission.");
         var remoteVector=JsonSerializer.Deserialize<Dictionary<Guid,long>>(ready.Payload,TaskCheckpointRepository.Json);
-        var localVector=await new ClusterReconciliationRepository(db).GetVectorAsync(ct);
         if(remoteVector is null||localVector.Any(p=>remoteVector.GetValueOrDefault(p.Key)<p.Value)) return new(false,"Rattrapage incomplet du serveur revenu.");
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
         await using var read=Sql.Command("SELECT n.event_id,i.id FROM task_neutralizations n CROSS JOIN cluster_identity i WHERE n.peer_id=@peer AND n.author_peer_id=@local AND n.released_at IS NULL",c,tx);read.Parameters.AddWithValue("peer",peer);read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct)) return new(false,"Neutralisation active de ce serveur requise.");var proof=r.GetGuid(0);var cluster=r.GetGuid(1);await r.DisposeAsync();
@@ -288,16 +308,22 @@ public sealed class ClusterTaskCoordinator(DbDataSource db,ClusterPeerIdentitySt
     public async Task<ClusterTaskResult> RecoverAsync(Guid id,CancellationToken ct)
     {
         if(!await TwoServerRecoveryAsync(ct)) return new(false,"La reprise à trois serveurs exige un témoin ou une décision majoritaire dédiée.");
+        await ownership.ProjectAsync(ct);
         await projection.ProjectAsync(ct);
-        await using(var pending=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_coordination_inbox) OR EXISTS(SELECT 1 FROM task_ownership_inbox) OR EXISTS(SELECT 1 FROM cluster_sync_pending_projections)")) if(await pending.ScalarBoolAsync(ct)) return new(false,"Rattrapage des projections requis avant reprise.");
-        ClusterTaskEvent saved;Guid neutralization;Guid oldOwner;DateTimeOffset at;
+        await using(var pending=db.CreateCommand($"SELECT {TaskOwnershipRepository.BlockingPendingSql}")) if(await pending.ScalarBoolAsync(ct)) return new(false,"Rattrapage des projections requis avant reprise.");
+        ClusterTaskEvent? saved=null;Guid neutralization;Guid oldOwner;DateTimeOffset at;
         await using(var c=await db.OpenConnectionAsync(ct))
         await using(var tx=await c.BeginTransactionAsync(ct))
         {
-            await using var read=Sql.Command("SELECT p.body,n.event_id,o.owner_peer_id,n.recorded_at FROM task_ownership o JOIN task_checkpoints p ON p.execution_id=o.execution_id AND p.epoch=o.epoch JOIN task_neutralizations n ON n.peer_id=o.owner_peer_id AND n.released_at IS NULL AND n.author_peer_id=@local LEFT JOIN executions e ON e.id=o.execution_id WHERE (e.id IS NULL OR e.state IN ('queued','running')) AND o.execution_id=@id AND o.owner_peer_id<>@local AND o.state='active'",c,tx);read.Parameters.AddWithValue("id",id);read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct)) return new(false,"Propriétaire neutralisé et checkpoint répliqué requis.");var body=r.GetString(0);neutralization=r.GetGuid(1);oldOwner=r.GetGuid(2);at=r.GetFieldValue<DateTimeOffset>(3);await r.DisposeAsync();
-            var(value,_)=await checkpoints.VerifyAsync(body,c,tx,ct);if(value is null) return new(false,"Checkpoint signé indisponible.");saved=value;
+            await using var read=Sql.Command("SELECT p.body,n.event_id,o.owner_peer_id,n.recorded_at FROM task_ownership o JOIN task_neutralizations n ON n.peer_id=o.owner_peer_id AND n.released_at IS NULL AND n.author_peer_id=@local LEFT JOIN task_checkpoints p ON p.execution_id=o.execution_id AND p.epoch=o.epoch LEFT JOIN executions e ON e.id=o.execution_id WHERE (e.id IS NULL OR e.state IN ('queued','running')) AND o.execution_id=@id AND o.owner_peer_id<>@local AND o.state='active'",c,tx);read.Parameters.AddWithValue("id",id);read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct)) return new(false,"Propriétaire neutralisé et checkpoint répliqué requis.");var body=r.IsDBNull(0)?null:r.GetString(0);neutralization=r.GetGuid(1);oldOwner=r.GetGuid(2);at=r.GetFieldValue<DateTimeOffset>(3);await r.DisposeAsync();
+            if(body is not null)
+            {
+                var(value,_)=await checkpoints.VerifyAsync(body,c,tx,ct);if(value is null) return new(false,"Checkpoint signé indisponible.");saved=value;
+            }
         }
         if(clock.GetUtcNow()-at<TaskCoordinationProjection.RecoveryGrace) return new(false,"Délai de grâce non écoulé (135 secondes).");
+        if(saved is null)
+            return await RecoverFromSourceWithoutCheckpointAsync(id,oldOwner,neutralization,ct);
         var snapshot=checkpoints.Decode(saved);
         await using(var newer=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM execution_steps WHERE execution_id=@id AND completed_revision>@revision)")) {newer.Parameters.AddWithValue("id",id);newer.Parameters.AddWithValue("revision",snapshot.Revision);if(await newer.ScalarBoolAsync(ct)) return new(false,"Un checkpoint plus récent doit être reçu avant la reprise.");}
         if(snapshot.Flow.Nodes.Any(n=>!RuntimeStepEffects.IsReplayable(n.Component.PluginId,n.Component.ComponentId))) return new(false,"Reprise refusée : ce flow peut avoir un effet externe incertain.");
@@ -313,5 +339,47 @@ public sealed class ClusterTaskCoordinator(DbDataSource db,ClusterPeerIdentitySt
             await AppendAsync(new(2,Guid.NewGuid(),saved.ClusterId,identity.PeerId,"recover",id,saved.Epoch+1,saved.PreviousEventId,identity.PeerId,transfer,RecordedAt:clock.GetUtcNow(),NeutralizationId:neutralization),c,tx,ct);await tx.CommitAsync(ct);
         }
         await projection.ProjectAsync(ct);var owner=await ownership.GetAsync(id,ct);return new(owner?.OwnerPeerId==identity.PeerId,"Reprise manuelle journalisée après neutralisation ; ancien propriétaire exclu.",transfer);
+    }
+
+    private async Task<ClusterTaskResult> RecoverFromSourceWithoutCheckpointAsync(Guid id,Guid oldOwner,Guid neutralization,CancellationToken ct)
+    {
+        ClusterTaskSnapshot snapshot;Guid cluster;Guid previousEvent;long epoch;
+        await using(var c=await db.OpenConnectionAsync(ct))
+        await using(var tx=await c.BeginTransactionAsync(ct))
+        {
+            await using var read=Sql.Command("""
+              SELECT o.cluster_id,o.last_event_id,o.epoch,o.library_id,o.media_key,e.media,e.library_name,e.flow_definition,e.attempt,e.queued_at
+              FROM task_ownership o JOIN executions e ON e.id=o.execution_id JOIN libraries l ON l.id=o.library_id AND l.is_active AND NOT l.is_deleted
+              LEFT JOIN execution_work w ON w.execution_id=e.id
+              WHERE o.execution_id=@id AND o.owner_peer_id=@peer AND o.state='active' AND e.state IN ('queued','running')
+                AND w.published_path IS NULL AND NOT COALESCE(w.publication_requested,FALSE)
+                AND NOT EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id AND NOT s.idempotent)
+                AND NOT EXISTS(SELECT 1 FROM task_checkpoints p WHERE p.execution_id=o.execution_id AND p.epoch=o.epoch)
+              """,c,tx);
+            read.Parameters.AddWithValue("id",id);read.Parameters.AddWithValue("peer",oldOwner);
+            await using var r=await read.ExecuteReaderAsync(ct);
+            if(!await r.ReadAsync(ct)) return new(false,"Propriétaire neutralisé et checkpoint répliqué requis.");
+            cluster=r.GetGuid(0);previousEvent=r.GetGuid(1);epoch=r.GetInt64(2);
+            var flow=JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(7),TaskCheckpointRepository.Json)!;
+            snapshot=new(id,r.GetGuid(3),r.GetString(5),r.GetString(4),r.GetString(6),flow,r.GetInt32(8),0,r.GetFieldValue<DateTimeOffset>(9),1,null,null,[],[],new Dictionary<string,string>(),new Dictionary<string,IReadOnlyDictionary<string,JsonElement>>(),"beside");
+        }
+        if(snapshot.Flow.Nodes.Any(n=>!RuntimeStepEffects.IsReplayable(n.Component.PluginId,n.Component.ComponentId)))
+            return new(false,"Reprise refusée : ce flow peut avoir un effet externe incertain.");
+        var source=await EligibleSourceAsync(snapshot,ct);
+        if(source is null) return new(false,"Reprise refusée : capacités, accès direct ou artefacts vérifiés manquants.");
+        var transfer=Guid.NewGuid();
+        var proposal= checkpoints.ProtectSnapshot(cluster,id,epoch,previousEvent,snapshot) with {TransferId=transfer,TargetPeerId=identity.PeerId};
+        var signed=checkpoints.Sign(proposal);
+        await using(var c=await db.OpenConnectionAsync(ct))
+        await using(var tx=await c.BeginTransactionAsync(ct))
+        {
+            await using(var abandoned=Sql.Command("UPDATE task_transfers SET state='aborted' WHERE execution_id=@id AND source_peer_id=@peer AND state='received'",c,tx)) {abandoned.Parameters.AddWithValue("id",id);abandoned.Parameters.AddWithValue("peer",oldOwner);await abandoned.ExecuteNonQueryAsync(ct);}
+            await InsertTransferAsync(proposal,signed,"received",source,c,tx,ct);
+            await AppendAsync(new(2,Guid.NewGuid(),cluster,identity.PeerId,"recover",id,epoch+1,previousEvent,identity.PeerId,transfer,RecordedAt:clock.GetUtcNow(),NeutralizationId:neutralization),c,tx,ct);
+            await tx.CommitAsync(ct);
+        }
+        await projection.ProjectAsync(ct);
+        var owner=await ownership.GetAsync(id,ct);
+        return new(owner?.OwnerPeerId==identity.PeerId,"Reprise depuis la source journalisée après neutralisation ; ancien propriétaire exclu.",transfer);
     }
 }
