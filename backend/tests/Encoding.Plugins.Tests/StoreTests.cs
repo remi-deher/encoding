@@ -91,9 +91,14 @@ internal static class StoreTests
 
     private static (PluginStoreService Store, FlowComponentRegistry Registry) Create(string directory)
     {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["PluginStore:Directory"] = directory,
+            ["ToolStore:Directory"] = Path.Combine(directory, "tools")
+        }).Build();
         var registry = StoreCatalogFixture.Create();
-        return (new PluginStoreService(configuration, registry, NullLogger<PluginStoreService>.Instance), registry);
+        var tools = new ToolStoreService(configuration, NullLogger<ToolStoreService>.Instance);
+        return (new PluginStoreService(configuration, registry, tools, NullLogger<PluginStoreService>.Instance), registry);
     }
 
     private static async Task InstallLifecycle()
@@ -133,7 +138,13 @@ internal static class StoreTests
 
             File.WriteAllBytes(restarted.PackagePath("acme.tools", "1.1.0"), Package("acme.tools", "1.1.0", m => m["name"] = "Tampered"));
             var (_, tamperedRegistry) = Create(directory);
-            var tamperedStore = new PluginStoreService(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build(), tamperedRegistry, NullLogger<PluginStoreService>.Instance);
+            var tamperedConfiguration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginStore:Directory"] = directory,
+                ["ToolStore:Directory"] = Path.Combine(directory, "tools")
+            }).Build();
+            var tamperedTools = new ToolStoreService(tamperedConfiguration, NullLogger<ToolStoreService>.Instance);
+            var tamperedStore = new PluginStoreService(tamperedConfiguration, tamperedRegistry, tamperedTools, NullLogger<PluginStoreService>.Instance);
             tamperedStore.LoadInstalled();
             Check(tamperedRegistry.Rejected.Any(item => item.File.StartsWith("acme.tools@")) && tamperedRegistry.Plugins.All(item => item.Id != "acme.tools"), "A package altered on disk is reported and not loaded.");
 
@@ -177,10 +188,15 @@ internal static class StoreTests
         baseUrl = app.Urls.Single();
         try
         {
-            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build();
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginStore:Directory"] = directory,
+                ["ToolStore:Directory"] = Path.Combine(directory, "tools")
+            }).Build();
             var registry = StoreCatalogFixture.Create();
-            var store = new PluginStoreService(configuration, registry, NullLogger<PluginStoreService>.Instance);
-            var repositories = new PluginRepositoryService(configuration, new Factory(), store, NullLogger<PluginRepositoryService>.Instance);
+            var tools = new ToolStoreService(configuration, NullLogger<ToolStoreService>.Instance);
+            var store = new PluginStoreService(configuration, registry, tools, NullLogger<PluginStoreService>.Instance);
+            var repositories = new PluginRepositoryService(configuration, new Factory(), store, tools, NullLogger<PluginRepositoryService>.Instance);
 
             async Task<string> Fails(Func<Task> action)
             {
