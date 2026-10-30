@@ -92,7 +92,8 @@ public sealed record NodeResponse(
     IReadOnlyList<NodeRole>? DesiredRoles = null,
     NodeLifecycle? Lifecycle = null,
     string? LifecycleReason = null,
-    ClusterJoinBootstrap? ClusterBootstrap = null);
+    ClusterJoinBootstrap? ClusterBootstrap = null,
+    IReadOnlyList<string>? ClusterServerUrls = null);
 
 /// <summary>Demande d'un administrateur : mode de fonctionnement voulu pour un nœud, appliqué par le nœud à son prochain signal de présence (architecture 0036).</summary>
 public sealed record ChangeNodeModeRequest(bool Server, bool Worker);

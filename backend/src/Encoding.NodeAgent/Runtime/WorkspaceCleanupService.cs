@@ -70,13 +70,25 @@ public sealed class WorkspaceCleanupService(NodeAgentOptions options, WorkerIden
         if (candidates.Count == 0) return 0;
 
         var states = new Dictionary<Guid, string>();
-        using var client = new RuntimeClient(identity);
-        foreach (var batch in candidates.Keys.Chunk(200))
+        var queried = false;
+        foreach (var serverUrl in identity.GetCandidateServerUrls(options))
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            var answer = await client.PostAsync<RuntimeExecutionState[]>("execution-states", new RuntimeExecutionStatesRequest(batch), timeout.Token) ?? [];
-            foreach (var item in answer) states[item.Id] = item.State;
+            try
+            {
+                using var client = new RuntimeClient(identity, serverUrl);
+                foreach (var batch in candidates.Keys.Chunk(200))
+                {
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                    var answer = await client.PostAsync<RuntimeExecutionState[]>("execution-states", new RuntimeExecutionStatesRequest(batch), timeout.Token) ?? [];
+                    foreach (var item in answer) states[item.Id] = item.State;
+                }
+                queried = true;
+                break;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception) { }
         }
+        if (!queried) return 0;
 
         var removed = 0; long freed = 0;
         foreach (var (id, directories) in candidates)

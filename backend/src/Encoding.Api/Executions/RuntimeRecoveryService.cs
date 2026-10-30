@@ -35,9 +35,8 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     private static readonly TimeSpan FreshPlacementGrace=TimeSpan.FromMinutes(2);
 
     private static readonly string ExpiredWorkPredicate = $"""
-        ((e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()))
-        OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp()))
-        AND {TaskOwnershipRepository.ActiveSql("e.id")}
+        ((e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()) AND {TaskOwnershipRepository.ActiveSql("e.id",true)})
+        OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp() AND {TaskOwnershipRepository.ActiveSql("e.id")}))
         """;
 
     private async Task<bool> HasExpiredWorkAsync(CancellationToken ct)
@@ -203,8 +202,9 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         (Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated,FlowPlacementPlan? Plan) item,
         FlowDefinition flow,RuntimeHandoffSelector selector,RuntimeCheckpoint? checkpoint,bool fresh,CancellationToken ct)
     {
-        // Exécution neuve : un nœud momentanément hors ligne, en drainage ou hors plage horaire reste un destinataire possible.
-        var offline=fresh?TimeSpan.FromDays(36500):offlineAfter;
+        // Un nœud momentanément hors ligne, en drainage ou hors plage horaire reste un destinataire possible :
+        // les relais, reprises et relances attendent le retour du nœud sans mettre la tâche en échec.
+        var offline=TimeSpan.FromDays(36500);
         var candidates=new List<(Guid Id,NodeToolCapability[] Capabilities,int Capacity,bool ScheduleEnabled,string? Timezone,string? Slots,NodeInventory? Inventory)>();
         await using(var c=await dataSource.OpenConnectionAsync(ct))
         await using(var cmd=Sql.Command("""

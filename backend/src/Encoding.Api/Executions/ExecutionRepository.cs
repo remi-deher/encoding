@@ -220,10 +220,21 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         if (inserted) await AddEvent(c, tx, request.Id, Guid.NewGuid(), 0, "queued", "En attente du moteur d’exécution.", ct);
         return inserted;
     }
+    private async Task<bool> IsPeerNeutralizedAsync(Guid peer, CancellationToken ct)
+    {
+        await using var cmd = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@peer AND released_at IS NULL)");
+        cmd.Parameters.AddWithValue("peer", peer);
+        return await cmd.ScalarBoolAsync(ct);
+    }
+
     public async Task<bool> CancelAsync(Guid id, CancellationToken ct, int? expectedRevision = null)
     {
         if(coordinator is not null && ownership is not null && await ownership.GetAsync(id,ct) is {} owner && !ownership.IsLocalPeer(owner.OwnerPeerId))
-            return (await coordinator.ControlAsync(owner.OwnerPeerId,"cancel",id,expectedRevision,ct)).Success;
+        {
+            var result = await coordinator.ControlAsync(owner.OwnerPeerId,"cancel",id,expectedRevision,ct);
+            if(result.Success) return true;
+            if(!await IsPeerNeutralizedAsync(owner.OwnerPeerId,ct)) return false;
+        }
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
         await using var cmd = Sql.Command($"""
    UPDATE executions SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancelling' END,
@@ -231,7 +242,9 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
    finished_at=CASE WHEN state='queued' THEN clock_timestamp() ELSE NULL END,
    updated_at=clock_timestamp(),revision=revision+1 WHERE id=@id AND state IN ('queued','running')
    AND (@expectedRevision IS NULL OR revision=@expectedRevision)
-   AND ({TaskOwnershipRepository.ActiveSql("@id",control:true)} OR (NOT EXISTS(SELECT 1 FROM task_ownership WHERE execution_id=@id) AND NOT EXISTS(SELECT 1 FROM execution_work WHERE execution_id=@id)))
+   AND ({TaskOwnershipRepository.ActiveSql("@id",control:true)}
+     OR (NOT EXISTS(SELECT 1 FROM task_ownership WHERE execution_id=@id) AND NOT EXISTS(SELECT 1 FROM execution_work WHERE execution_id=@id))
+     OR EXISTS(SELECT 1 FROM task_ownership own JOIN task_neutralizations stopped ON stopped.peer_id=own.owner_peer_id WHERE own.execution_id=@id AND stopped.released_at IS NULL))
    RETURNING revision,state,detail
    """, c, tx); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("expectedRevision", (object?)expectedRevision ?? DBNull.Value);
         int revision; string state, detail;
@@ -243,7 +256,11 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     public async Task<Guid?> RetryAsync(Guid id, CancellationToken ct)
     {
         if(coordinator is not null && ownership is not null && await ownership.GetAsync(id,ct) is {} owner && !ownership.IsLocalPeer(owner.OwnerPeerId))
-        {var result=await coordinator.ControlAsync(owner.OwnerPeerId,"retry",id,null,ct);return result.Success&&Guid.TryParse(result.Payload,out var remoteCreated)?remoteCreated:null;}
+        {
+            var result=await coordinator.ControlAsync(owner.OwnerPeerId,"retry",id,null,ct);
+            if(result.Success&&Guid.TryParse(result.Payload,out var remoteCreated)) return remoteCreated;
+            if(!await IsPeerNeutralizedAsync(owner.OwnerPeerId,ct)) return null;
+        }
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
         var created=await RetryInTransactionAsync(id,null,null,"Nouvelle tentative demandée.",c,tx,ct,ownership);
         if(created is null) return null;
@@ -256,7 +273,11 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     public async Task<Guid?> ResumeAsync(Guid id, CancellationToken ct)
     {
         if(coordinator is not null && ownership is not null && await ownership.GetAsync(id,ct) is {} owner && !ownership.IsLocalPeer(owner.OwnerPeerId))
-        {var result=await coordinator.ControlAsync(owner.OwnerPeerId,"resume",id,null,ct);return result.Success&&Guid.TryParse(result.Payload,out var remoteCreated)?remoteCreated:null;}
+        {
+            var result=await coordinator.ControlAsync(owner.OwnerPeerId,"resume",id,null,ct);
+            if(result.Success&&Guid.TryParse(result.Payload,out var remoteCreated)) return remoteCreated;
+            if(!await IsPeerNeutralizedAsync(owner.OwnerPeerId,ct)) return null;
+        }
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
         var next = Guid.NewGuid();
@@ -264,19 +285,24 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await using (var create = Sql.Command("""
             INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
             SELECT @next,e.media,e.library_name,e.flow_name,e.flow_version,e.flow_definition,'queued',e.attempt+1,e.id,@detail
-            FROM executions e JOIN execution_work source ON source.execution_id=e.id
+            FROM executions e
+            LEFT JOIN execution_work source ON source.execution_id=e.id
+            LEFT JOIN task_ownership own_source ON own_source.execution_id=e.id
             WHERE e.id=@id AND e.state='cancelled'
+              AND (source.library_id IS NOT NULL OR own_source.library_id IS NOT NULL)
               AND NOT EXISTS(SELECT 1 FROM task_ownership own WHERE own.execution_id=e.id AND own.state='quarantined')
               AND NOT EXISTS(SELECT 1 FROM task_quarantines quarantine WHERE quarantine.execution_id=e.id)
               AND NOT EXISTS(
                 SELECT 1 FROM execution_work sibling
                 JOIN executions active ON active.id=sibling.execution_id
-                WHERE sibling.library_id=source.library_id AND sibling.media_key=source.media_key
+                WHERE sibling.library_id=COALESCE(source.library_id,own_source.library_id)
+                  AND sibling.media_key=COALESCE(source.media_key,own_source.media_key)
                   AND sibling.execution_id<>e.id AND active.state IN ('queued','running','cancelling'))
               AND NOT EXISTS(
                 SELECT 1 FROM task_ownership sibling
                 JOIN executions active ON active.id=sibling.execution_id
-                WHERE sibling.library_id=source.library_id AND sibling.media_key=source.media_key
+                WHERE sibling.library_id=COALESCE(source.library_id,own_source.library_id)
+                  AND sibling.media_key=COALESCE(source.media_key,own_source.media_key)
                   AND sibling.execution_id<>e.id AND active.state IN ('queued','running','cancelling'))
             ON CONFLICT(retry_of) DO NOTHING RETURNING id
             """, c, tx))
@@ -290,8 +316,9 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await AddEvent(c, tx, next, Guid.NewGuid(), 0, "queued", detail, ct);
         await using (var work = Sql.Command("""
             INSERT INTO execution_work(execution_id,library_id,media_path,media_key,available_at,placement_plan)
-            SELECT @next,library_id,media_path,media_key,clock_timestamp(),NULL
-            FROM execution_work WHERE execution_id=@id
+            SELECT @next,COALESCE(w.library_id,o.library_id),COALESCE(w.media_path,e.media),COALESCE(w.media_key,o.media_key,upper(e.media)),clock_timestamp(),NULL
+            FROM executions e LEFT JOIN execution_work w ON w.execution_id=e.id LEFT JOIN task_ownership o ON o.execution_id=e.id
+            WHERE e.id=@id AND COALESCE(w.library_id,o.library_id) IS NOT NULL
             """, c, tx))
         {
             work.Parameters.AddWithValue("id", id);
@@ -322,7 +349,9 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await AddEvent(c,tx,next,Guid.NewGuid(),0,"queued",detail,ct);
         await using(var work=Sql.Command("""
           INSERT INTO execution_work(execution_id,library_id,media_path,media_key,handoff_selector,previous_worker_node_id,placement_plan)
-          SELECT @next,library_id,media_path,media_key,@selector,@previous,NULL FROM execution_work WHERE execution_id=@id
+          SELECT @next,COALESCE(w.library_id,o.library_id),COALESCE(w.media_path,e.media),COALESCE(w.media_key,o.media_key,upper(e.media)),@selector,@previous,NULL
+          FROM executions e LEFT JOIN execution_work w ON w.execution_id=e.id LEFT JOIN task_ownership o ON o.execution_id=e.id
+          WHERE e.id=@id AND COALESCE(w.library_id,o.library_id) IS NOT NULL
           """,c,tx))
         {
             work.Parameters.AddWithValue("next",next);work.Parameters.AddWithValue("id",id);
@@ -354,7 +383,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
    started_at=CASE WHEN @state='running' THEN COALESCE(started_at,clock_timestamp()) ELSE started_at END,
    finished_at=CASE WHEN @state IN ('succeeded','failed','cancelled','deferred') THEN clock_timestamp() ELSE finished_at END
    WHERE id=@id AND revision=@revision AND (node_id IS NULL OR node_id=@node)
-   AND (NOT EXISTS(SELECT 1 FROM execution_work w WHERE w.execution_id=@id) OR {TaskOwnershipRepository.ActiveSql("@id")})
+   AND (NOT EXISTS(SELECT 1 FROM execution_work w WHERE w.execution_id=@id) OR {TaskOwnershipRepository.ActiveSql("@id")} OR (state='cancelling' AND @state IN ('cancelled','failed') AND {TaskOwnershipRepository.ActiveSql("@id",true)}))
    AND ((state='queued' AND @state IN ('running','failed','cancelled'))
     OR (state='running' AND @state IN ('running','succeeded','failed','cancelled','deferred'))
     OR (state='cancelling' AND @state IN ('cancelled','failed')))

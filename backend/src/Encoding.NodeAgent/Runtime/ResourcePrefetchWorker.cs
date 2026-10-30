@@ -18,9 +18,18 @@ public sealed class ResourcePrefetchWorker(NodeAgentOptions options, WorkerIdent
                 var identity = await identities.GetAsync(ct);
                 if (identity.IsEnrolled && options.Roles.Contains(NodeRole.Worker))
                 {
-                    using var client = new RuntimeClient(identity);
-                    foreach (var version in await client.LatestResourceVersionsAsync(ct))
-                        await client.EnsureResourceAsync(version, ResourceCache.Root(options), null, ct);
+                    foreach (var serverUrl in identity.GetCandidateServerUrls(options))
+                    {
+                        try
+                        {
+                            using var client = new RuntimeClient(identity, serverUrl);
+                            foreach (var version in await client.LatestResourceVersionsAsync(ct))
+                                await client.EnsureResourceAsync(version, ResourceCache.Root(options), null, ct);
+                            break;
+                        }
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                        catch (Exception) { }
+                    }
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }

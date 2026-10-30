@@ -20,18 +20,28 @@ public sealed class RuntimeWorkerService(NodeAgentOptions options,WorkerIdentity
                     var identity=await identities.GetAsync(ct);
                     if(identity.IsEnrolled && options.Roles.Contains(NodeRole.Worker))
                     {
-                        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
-                        using var client=new RuntimeClient(identity);
-                        var capacity=await client.GetAsync<RuntimeCapacity>("capacity",timeout.Token);
-                        if(tasks.Count>=capacity.MaxConcurrentTasks) {await WorkerPolling.DelayAsync(2000,ct);continue;}
-                        var lease=await client.PostAsync<RuntimeLease>("claim",new { },timeout.Token);
-                        if(lease is not null)
+                        foreach(var serverUrl in identity.GetCandidateServerUrls(options))
                         {
-                            tasks.Add(Task.Run(async()=>
+                            try
                             {
-                                using var executionClient=new RuntimeClient(identity);
-                                await runner.RunAsync(lease,executionClient,ct);
-                            },CancellationToken.None));
+                                using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                                using var client=new RuntimeClient(identity,serverUrl);
+                                var capacity=await client.GetAsync<RuntimeCapacity>("capacity",timeout.Token);
+                                if(tasks.Count>=capacity.MaxConcurrentTasks) break;
+                                var lease=await client.PostAsync<RuntimeLease>("claim",new { },timeout.Token);
+                                if(lease is not null)
+                                {
+                                    var boundUrl=serverUrl;
+                                    tasks.Add(Task.Run(async()=>
+                                    {
+                                        using var executionClient=new RuntimeClient(identity,boundUrl);
+                                        await runner.RunAsync(lease,executionClient,ct);
+                                    },CancellationToken.None));
+                                    break;
+                                }
+                            }
+                            catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
+                            catch(Exception) { }
                         }
                     }
                 }

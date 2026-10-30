@@ -4,6 +4,7 @@ using Encoding.NodeAgent.Services;
 namespace Encoding.NodeAgent.Runtime;
 
 public sealed class NodeDirectoryBrowserService(
+    NodeAgentOptions options,
     WorkerIdentityStore identities,
     ILogger<NodeDirectoryBrowserService> logger) : BackgroundService
 {
@@ -18,18 +19,29 @@ public sealed class NodeDirectoryBrowserService(
                 var identity = await identities.GetAsync(stoppingToken);
                 if (identity.IsEnrolled)
                 {
-                    using var client = new RuntimeClient(identity);
-                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                    timeout.CancelAfter(TimeSpan.FromSeconds(10));
-                    var claim = await client.PostAsync<NodeDirectoryBrowseClaim>("directory-browser/claim", new { }, timeout.Token);
-                    if (claim is not null)
+                    var handled = false;
+                    foreach (var serverUrl in identity.GetCandidateServerUrls(options))
                     {
-                        var completion = await Task.Run(() => Browse(claim.Path, stoppingToken), stoppingToken);
-                        using var submitTimeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                        submitTimeout.CancelAfter(TimeSpan.FromSeconds(10));
-                        await client.PostAsync<object>($"directory-browser/{claim.Id:D}/complete", completion, submitTimeout.Token);
-                        continue;
+                        try
+                        {
+                            using var client = new RuntimeClient(identity, serverUrl);
+                            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                            var claim = await client.PostAsync<NodeDirectoryBrowseClaim>("directory-browser/claim", new { }, timeout.Token);
+                            if (claim is not null)
+                            {
+                                var completion = await Task.Run(() => Browse(claim.Path, stoppingToken), stoppingToken);
+                                using var submitTimeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                                submitTimeout.CancelAfter(TimeSpan.FromSeconds(10));
+                                await client.PostAsync<object>($"directory-browser/{claim.Id:D}/complete", completion, submitTimeout.Token);
+                                handled = true;
+                                break;
+                            }
+                        }
+                        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+                        catch (Exception) { }
                     }
+                    if (handled) continue;
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }

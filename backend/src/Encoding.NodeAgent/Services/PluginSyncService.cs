@@ -36,14 +36,28 @@ public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentitySt
         var identity = await identityStore.GetAsync(ct);
         if (!identity.HasCredentials || identity.ApiBaseUrl is null) return;
         var root = CustomPluginCatalog.DirectoryFor(configuration);
-        var listed = await Get<List<Listed>>(identity, "api/v1/store/installed", ct) ?? [];
+        List<Listed>? listed = null;
+        string? activeServerUrl = null;
+        var candidates = identity.IsEnrolled ? identity.GetCandidateServerUrls(options) : [identity.ApiBaseUrl];
+        foreach (var serverUrl in candidates)
+        {
+            try
+            {
+                listed = await Get<List<Listed>>(identity, serverUrl, "api/v1/store/installed", ct) ?? [];
+                activeServerUrl = serverUrl;
+                break;
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException && !ct.IsCancellationRequested) { }
+        }
+        if (listed is null || activeServerUrl is null)
+            throw new HttpRequestException("Aucun serveur du cluster n'est joignable pour synchroniser les plugins.");
         Directory.CreateDirectory(root);
         foreach (var plugin in listed)
         {
             var target = Path.Combine(root, plugin.Id, plugin.Version);
             if (File.Exists(Path.Combine(target, CustomPluginCatalog.VerifiedMarker))
                 && File.ReadAllText(Path.Combine(target, CustomPluginCatalog.VerifiedMarker)).Trim() == plugin.Sha256) continue;
-            try { await InstallAsync(identity, plugin, target, ct); }
+            try { await InstallAsync(identity, activeServerUrl, plugin, target, ct); }
             catch (PluginPackageException exception) { logger.LogError("Le plugin {PluginId} {Version} est refusé : {Reason}", plugin.Id, plugin.Version, exception.Message); }
         }
         // Ménage : seulement quand la liste a bien été reçue, jamais sur une panne.
@@ -53,9 +67,9 @@ public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentitySt
                     TryDelete(versionDirectory);
     }
 
-    private async Task InstallAsync(WorkerIdentityState identity, Listed plugin, string target, CancellationToken ct)
+    private async Task InstallAsync(WorkerIdentityState identity, string serverUrl, Listed plugin, string target, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/store/packages/{plugin.Id}/{plugin.Version}/download"));
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(serverUrl), $"api/v1/store/packages/{plugin.Id}/{plugin.Version}/download"));
         request.Headers.Add("X-Node-Token", identity.NodeToken);
         using var response = await http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
@@ -73,9 +87,9 @@ public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentitySt
         logger.LogInformation("Plugin {PluginId} {Version} installé sur ce worker.", plugin.Id, plugin.Version);
     }
 
-    private async Task<T?> Get<T>(WorkerIdentityState identity, string path, CancellationToken ct)
+    private async Task<T?> Get<T>(WorkerIdentityState identity, string serverUrl, string path, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(identity.ApiBaseUrl!), path));
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(serverUrl), path));
         request.Headers.Add("X-Node-Token", identity.NodeToken);
         using var response = await http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();

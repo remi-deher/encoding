@@ -321,4 +321,30 @@ public sealed partial class ClusterTaskTransferTests(ITestOutputHelper output)
         await pair.B.Transport.FetchAsync(pair.A.Identity.PeerId,id,blob,default);Assert.Equal(1,pair.Wire.BlobRequests);
     }
 
+    [Fact]
+    public async Task TwoServerSelfHealingAutomaticallyNeutralizesRecoversAndReadmits()
+    {
+        await using var pair=await Pair.CreateAsync();
+        await using(var link=pair.A.Db.Db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '3 minutes' WHERE id=@node; UPDATE cluster_peer_admissions SET node_id=@node WHERE peer_id=@peer"))
+        {link.Parameters.AddWithValue("node",pair.A.Node);link.Parameters.AddWithValue("peer",pair.A.Identity.PeerId);await link.ExecuteNonQueryAsync();}
+        await using(var link=pair.B.Db.Db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at) VALUES(@node,'peer-a',ARRAY['server','worker'],2,'[]',clock_timestamp()-interval '3 minutes'); UPDATE cluster_peer_admissions SET node_id=@node WHERE peer_id=@peer"))
+        {link.Parameters.AddWithValue("node",pair.A.Node);link.Parameters.AddWithValue("peer",pair.A.Identity.PeerId);await link.ExecuteNonQueryAsync();}
+        var id=await pair.A.EnqueueAsync();var sha=await pair.A.AddCheckpointAsync(id,[2,4,6,8]);
+        await pair.SyncAsync(pair.A,pair.B,metadata:true);
+        await pair.B.Artifacts.CacheAsync(id,sha,4,new MemoryStream([2,4,6,8]),default);
+        pair.B.Health.Fail("http://a.test/","offline");
+        await pair.B.Maintenance.HealTwoServerClusterAsync(default);
+        await using(var neutralized=pair.B.Db.Db.CreateCommand("SELECT count(*) FROM task_neutralizations WHERE peer_id=@peer AND released_at IS NULL"))
+        {neutralized.Parameters.AddWithValue("peer",pair.A.Identity.PeerId);Assert.Equal(1L,Convert.ToInt64(await neutralized.ExecuteScalarAsync()));}
+        pair.Clock.Advance();
+        await pair.B.Maintenance.HealTwoServerClusterAsync(default);
+        Assert.Equal(pair.B.Identity.PeerId,(await pair.B.Ownership.GetAsync(id,default))!.OwnerPeerId);
+        await pair.SyncAsync(pair.B,pair.A);
+        pair.B.Health.ConfirmCatchUp("http://a.test/",pair.A.Identity.PeerId,true);
+        pair.B.Health.ConfirmSourceWriteSupport(pair.A.Identity.PeerId,true);
+        await pair.B.Maintenance.HealTwoServerClusterAsync(default);
+        await using(var released=pair.B.Db.Db.CreateCommand("SELECT count(*) FROM task_neutralizations WHERE peer_id=@peer AND released_at IS NULL"))
+        {released.Parameters.AddWithValue("peer",pair.A.Identity.PeerId);Assert.Equal(0L,Convert.ToInt64(await released.ExecuteScalarAsync()));}
+    }
+
 }

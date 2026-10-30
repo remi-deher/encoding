@@ -195,6 +195,8 @@ public sealed class TaskCoordinationProjection(DbDataSource db,ClusterPeerIdenti
           ORDER BY winner.queued_at,winner.owner_peer_id,winner.execution_id ON CONFLICT(execution_id) DO NOTHING;
           UPDATE task_ownership SET state='quarantined' WHERE execution_id IN (SELECT execution_id FROM task_quarantines);
           UPDATE execution_work SET lease_until=NULL,worker_node_id=NULL,lease_epoch=lease_epoch+1 WHERE execution_id IN (SELECT q.execution_id FROM task_quarantines q JOIN task_ownership o ON o.execution_id=q.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id) AND lease_until IS NOT NULL;
+          DELETE FROM disk_locks WHERE execution_id IN (SELECT q.execution_id FROM task_quarantines q JOIN task_ownership o ON o.execution_id=q.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id);
+          DELETE FROM media_reservations WHERE execution_id IN (SELECT q.execution_id FROM task_quarantines q JOIN task_ownership o ON o.execution_id=q.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id) AND NOT EXISTS(SELECT 1 FROM pending_source_writes p WHERE p.execution_id=media_reservations.execution_id AND p.state IN ('waiting','claimed'));
           """,c,tx);await dedup.ExecuteNonQueryAsync(ct);
     }
 }
