@@ -1,13 +1,12 @@
 using Encoding.Api.Flows;
 using Encoding.Contracts.Flows;
-using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
 public sealed class GuidedFlowTests
 {
-    private static FlowComponentRegistry Registry() => new(new ConfigurationBuilder().Build());
+    private static FlowComponentRegistry Registry() => StoreCatalogFixture.Create();
 
     [Theory]
     [InlineData("hevc", "automatic", "keep", "balanced")]

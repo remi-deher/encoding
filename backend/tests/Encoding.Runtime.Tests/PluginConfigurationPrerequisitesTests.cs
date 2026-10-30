@@ -12,7 +12,7 @@ public sealed class PluginConfigurationPrerequisitesTests
     [Fact]
     public void IdentifiesBlockAndMissingFieldsWithoutExposingConfiguredSecrets()
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         var plex = registry.Plugins.Single(plugin => plugin.Id == "plex");
         var component = plex.Components.First();
         var reference = new FlowComponentReference(plex.Id, plex.Version, component.Id, component.Version, component.ConfigurationSchema.Version);

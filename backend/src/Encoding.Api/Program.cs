@@ -95,9 +95,9 @@ builder.Services.AddSingleton<Encoding.Api.Resources.ResourceBlobFetcher>();
 builder.Services.AddHostedService<Encoding.Api.Resources.ResourcePrefetchService>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
 builder.Services.AddSingleton<WebhookAuthThrottle>();
+builder.Services.AddSingleton<ToolStoreService>();
 builder.Services.AddSingleton<PluginStoreService>();
 builder.Services.AddSingleton<PluginRepositoryService>();
-builder.Services.AddHostedService<PluginStoreStartup>();
 builder.Services.AddHttpClient(PluginRepositoryService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromSeconds(60);
@@ -194,12 +194,16 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
 var flowRegistry = app.Services.GetRequiredService<FlowComponentRegistry>();
+// Store descriptors and their tool dependencies must be active before default flows are validated or seeded.
+app.Services.GetRequiredService<ToolStoreService>().LoadInstalled();
+app.Services.GetRequiredService<PluginStoreService>().LoadInstalled();
 await DatabaseMigrator.ApplyAsync(localDatabase, app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
 await StandardFlowTemplateSeeder.EnsureAsync(
     localDatabase,
     flowRegistry,
     app.Services.GetRequiredService<FlowDefinitionValidator>(),
-    app.Lifetime.ApplicationStopping);
+    app.Lifetime.ApplicationStopping,
+    app.Logger);
 await app.Services.GetRequiredService<Encoding.Api.Plugins.ClusterExtensionActivationState>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 await app.Services.GetRequiredService<TaskOwnershipRepository>().InitializeAsync(app.Lifetime.ApplicationStopping);

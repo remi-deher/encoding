@@ -762,14 +762,18 @@ export class PluginCatalogPageComponent {
 
   protected installPackage(pkg: StorePackage): void {
     void this.runStoreAction(
-      () => this.extensionsService.installPackage(pkg.repositoryId, pkg.id, pkg.version),
-      `« ${pkg.name} » ${pkg.version} est installé sur ce serveur ; les workers le téléchargent dans la minute.`,
+      () => pkg.kind === 'tool'
+        ? this.extensionsService.installToolPackage(pkg.repositoryId, pkg.id, pkg.version)
+        : this.extensionsService.installPackage(pkg.repositoryId, pkg.id, pkg.version),
+      `« ${pkg.name} » ${pkg.version} est installé ; les workers le téléchargent dans la minute.`,
     );
   }
 
   protected removePackage(pkg: StorePackage): void {
     void this.runStoreAction(
-      () => this.extensionsService.removePackage(pkg.id),
+      () => pkg.kind === 'tool'
+        ? this.extensionsService.removeToolPackage(pkg.id, pkg.platform ?? 'unsupported')
+        : this.extensionsService.removePackage(pkg.id),
       `« ${pkg.name} » est retiré.`,
     );
   }

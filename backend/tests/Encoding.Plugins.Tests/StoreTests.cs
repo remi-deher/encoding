@@ -25,7 +25,7 @@ internal static class StoreTests
 
     public static byte[] Package(string id, string version, Action<JsonObject>? tweak = null, Dictionary<string, string>? extra = null, bool withEntrypoint = true)
     {
-        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "backend", "plugins", "example", "manifest.json")))!.AsObject();
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "backend", "tests", "Fixtures", "StoreCatalog", "example.json")))!.AsObject();
         manifest["id"] = id;
         manifest["version"] = version;
         foreach (var component in manifest["components"]!.AsArray()) component!["id"] = id.Replace('.', '-') + "-" + component["id"]!.GetValue<string>()["example-".Length..];
@@ -91,9 +91,14 @@ internal static class StoreTests
 
     private static (PluginStoreService Store, FlowComponentRegistry Registry) Create(string directory)
     {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build();
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
-        return (new PluginStoreService(configuration, registry, NullLogger<PluginStoreService>.Instance), registry);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["PluginStore:Directory"] = directory,
+            ["ToolStore:Directory"] = Path.Combine(directory, "tools")
+        }).Build();
+        var registry = StoreCatalogFixture.Create();
+        var tools = new ToolStoreService(configuration, NullLogger<ToolStoreService>.Instance);
+        return (new PluginStoreService(configuration, registry, tools, NullLogger<PluginStoreService>.Instance), registry);
     }
 
     private static async Task InstallLifecycle()
@@ -118,7 +123,7 @@ internal static class StoreTests
             }
             Check((await Refused(Package("acme.tools", "1.0.0", m => m["name"] = "Modifié"))).Contains("immuable"), "A published version cannot be replaced by different content.");
             Check((await Refused(Package("official.sneaky", "1.0.0"))).Contains("official"), "The official namespace is reserved to the official repository.");
-            Check((await Refused(Package("plex", "1.0.0"))).Length > 0 && (await Refused(Package("acme.tools", "0.9.0"))).Contains("plus récente"), "Downgrades and built-in ids are refused.");
+            Check((await Refused(Package("plex", "1.0.0"))).Length > 0 && (await Refused(Package("acme.tools", "0.9.0"))).Contains("plus récente"), "Downgrades and official historical ids are refused.");
             Check((await Refused(Package("acme.other", "1.0.0", m => m["components"]![0]!["id"] = "acme-tools-tag-file"))).Contains("existe déjà"), "A component id cannot shadow another plugin's component.");
 
             var v2 = Package("acme.tools", "1.1.0");
@@ -133,12 +138,18 @@ internal static class StoreTests
 
             File.WriteAllBytes(restarted.PackagePath("acme.tools", "1.1.0"), Package("acme.tools", "1.1.0", m => m["name"] = "Tampered"));
             var (_, tamperedRegistry) = Create(directory);
-            var tamperedStore = new PluginStoreService(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build(), tamperedRegistry, NullLogger<PluginStoreService>.Instance);
+            var tamperedConfiguration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginStore:Directory"] = directory,
+                ["ToolStore:Directory"] = Path.Combine(directory, "tools")
+            }).Build();
+            var tamperedTools = new ToolStoreService(tamperedConfiguration, NullLogger<ToolStoreService>.Instance);
+            var tamperedStore = new PluginStoreService(tamperedConfiguration, tamperedRegistry, tamperedTools, NullLogger<PluginStoreService>.Instance);
             tamperedStore.LoadInstalled();
             Check(tamperedRegistry.Rejected.Any(item => item.File.StartsWith("acme.tools@")) && tamperedRegistry.Plugins.All(item => item.Id != "acme.tools"), "A package altered on disk is reported and not loaded.");
 
             Check(await store.RemoveAsync("acme.tools") && registry.Plugins.All(item => item.Id != "acme.tools") && registry.Resolve(oldReference) is null, "Removing a package unregisters it.");
-            Check(!registry.Uninstall("plex") && registry.Plugins.Any(item => item.Id == "plex"), "A built-in plugin can never be uninstalled.");
+            Check(registry.Uninstall("plex") && registry.Plugins.All(item => item.Id != "plex"), "A Store-installed plugin can be uninstalled.");
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
         Console.WriteLine("PASS: store lifecycle (hot install, idempotence, immutability, namespaces, update compatibility, reload, tamper detection, removal).");
@@ -177,10 +188,15 @@ internal static class StoreTests
         baseUrl = app.Urls.Single();
         try
         {
-            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginStore:Directory"] = directory }).Build();
-            var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
-            var store = new PluginStoreService(configuration, registry, NullLogger<PluginStoreService>.Instance);
-            var repositories = new PluginRepositoryService(configuration, new Factory(), store, NullLogger<PluginRepositoryService>.Instance);
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginStore:Directory"] = directory,
+                ["ToolStore:Directory"] = Path.Combine(directory, "tools")
+            }).Build();
+            var registry = StoreCatalogFixture.Create();
+            var tools = new ToolStoreService(configuration, NullLogger<ToolStoreService>.Instance);
+            var store = new PluginStoreService(configuration, registry, tools, NullLogger<PluginStoreService>.Instance);
+            var repositories = new PluginRepositoryService(configuration, new Factory(), store, tools, NullLogger<PluginRepositoryService>.Instance);
 
             async Task<string> Fails(Func<Task> action)
             {

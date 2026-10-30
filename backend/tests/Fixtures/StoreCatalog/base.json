@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "base",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "name": "Base",
   "supportedHostContractVersions": [
     1
@@ -43,7 +43,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "inputs"
     },
@@ -80,7 +81,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "inputs"
     },
@@ -117,7 +119,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "inputs"
     },
@@ -154,7 +157,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "inputs"
     },
@@ -191,7 +195,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "inputs"
     },
@@ -297,7 +302,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "scripts"
     },
@@ -370,7 +376,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "orchestration"
     },
@@ -427,7 +434,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "orchestration"
     },
@@ -480,7 +488,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "orchestration"
     },
@@ -544,7 +553,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "orchestration"
     },
@@ -606,7 +616,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "variables"
     },
@@ -864,7 +875,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "orchestration"
     },
@@ -920,7 +932,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "files"
     },
@@ -971,7 +984,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0",
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "files"
     },
@@ -1013,7 +1027,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.8.0"
+        "1.8.0",
+        "1.9.0"
       ],
       "category": "files"
     },
@@ -1056,7 +1071,9 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.9.0"
+      ],
       "mediaEffect": "readOnly",
       "category": "encoding"
     },
@@ -1106,14 +1123,16 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.9.0"
+      ],
       "category": "encoding"
     },
     {
       "id": "base-assemble-media",
       "version": "1.0.0",
       "name": "Assembler le résultat MKV",
-      "description": "Prépare les sous-titres, ajoute les polices et nomme les pistes dans une même sortie temporaire. Les propriétés sont modifiées sur cette sortie sans recopier le média entre chaque opération.",
+      "description": "Conserve toutes les pistes audio et sous-titres d’origine. La préparation des sous-titres, l’ajout de polices et le renommage des pistes sont des opérations facultatives dans une même sortie temporaire.",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -1143,9 +1162,10 @@
             "id": "manageSubtitles",
             "label": "Préparer les sous-titres",
             "type": "boolean",
-            "defaultValue": true,
+            "defaultValue": false,
             "importance": "basic",
-            "section": "Opérations"
+            "section": "Opérations",
+            "description": "Désactivé par défaut : les sous-titres d’origine sont copiés tels quels avec leurs langues. Activez-le uniquement pour convertir, uniformiser ou dédupliquer les pistes."
           },
           {
             "id": "addFonts",
@@ -1153,7 +1173,8 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Opérations"
+            "section": "Opérations",
+            "description": "Ajoute uniquement les polices explicitement configurées dans ce flow ou sa ressource sélectionnée."
           },
           {
             "id": "nameTracks",
@@ -1402,8 +1423,67 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": [],
+      "compatiblePluginVersions": [
+        "1.9.0"
+      ],
       "category": "containers"
+    },
+    {
+      "id": "base-condition",
+      "version": "1.0.0",
+      "name": "Tester une condition",
+      "description": "Évalue une règle et dirige le flow selon le résultat.",
+      "kind": "condition",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "La condition est satisfaite."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "La condition n’est pas satisfaite."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "La condition n’a pas pu être évaluée."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "expression",
+            "type": "text",
+            "label": "Expression",
+            "description": "Règle à évaluer pour choisir la sortie.",
+            "placeholder": "Ex. codec vidéo = HEVC",
+            "required": true,
+            "multiline": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.0.0",
+        "1.1.0",
+        "1.2.0",
+        "1.3.0",
+        "1.4.0",
+        "1.5.0",
+        "1.6.0"
+      ]
     }
   ]
 }

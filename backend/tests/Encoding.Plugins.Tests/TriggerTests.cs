@@ -47,7 +47,7 @@ internal static class TriggerTests
 
     private static async Task ScenarioAsync(System.Data.Common.DbDataSource db, string directory)
     {
-        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var registry = StoreCatalogFixture.Create();
         var validator = new FlowDefinitionValidator(registry);
         var presence = new NodePresenceOptions(TimeSpan.FromHours(1));
         var workflow = new LibraryWorkflowRepository(db, validator, presence);

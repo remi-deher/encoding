@@ -11,7 +11,6 @@ public sealed class FlowComponentRegistry
 {
     private readonly ConcurrentDictionary<FlowComponentReference, FlowComponentDescriptor> components = [];
     private readonly ConcurrentDictionary<FlowComponentReference,string> runtimeVersions=[];
-    private readonly FlowComponentDescriptor legacyCondition;
     private readonly object installGate = new();
     private readonly HashSet<string> storeInstalled = new(StringComparer.Ordinal);
     private volatile IReadOnlyList<PluginManifest> plugins = [];
@@ -20,24 +19,15 @@ public sealed class FlowComponentRegistry
 
     public FlowComponentRegistry(IConfiguration configuration)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Flows", "Catalog", "base.json");
-        var manifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web))
-            ?? throw new InvalidOperationException("Le manifeste Base est vide.");
-        if (manifest.ContractVersion != 1 || !manifest.SupportedHostContractVersions.Contains(1)
-            || manifest.Id != "base" || string.IsNullOrWhiteSpace(manifest.Version))
-            throw new InvalidOperationException("Le manifeste Base est incompatible.");
-        var legacyPath = Path.Combine(AppContext.BaseDirectory, "Flows", "Legacy", "base-condition.json");
-        legacyCondition = JsonSerializer.Deserialize<FlowComponentDescriptor>(File.ReadAllText(legacyPath), new JsonSerializerOptions(JsonSerializerDefaults.Web))
-            ?? throw new InvalidOperationException("Le composant Base historique est vide.");
-        var manifests = new List<PluginManifest> { manifest };
+        var manifests = new List<PluginManifest>();
         var catalogDirectory = Path.Combine(AppContext.BaseDirectory, "Flows", "Catalog");
-        foreach (var file in Directory.EnumerateFiles(catalogDirectory, "*.json")
-                     .Where(file => !Path.GetFileName(file).Equals("base.json", StringComparison.OrdinalIgnoreCase))
-                     .Order())
+        foreach (var file in Directory.Exists(catalogDirectory)
+                     ? Directory.EnumerateFiles(catalogDirectory, "*.json").Order()
+                     : Enumerable.Empty<string>())
         {
             var extra = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(file), new JsonSerializerOptions(JsonSerializerDefaults.Web))
                 ?? throw new InvalidOperationException("Manifeste plugin intégré invalide.");
-            if (extra.Id == "base" || extra.ContractVersion != 1 || !extra.SupportedHostContractVersions.Contains(1))
+            if (extra.ContractVersion != 1 || !extra.SupportedHostContractVersions.Contains(1))
                 throw new InvalidOperationException("Manifeste plugin intégré incompatible.");
             manifests.Add(extra);
         }
@@ -47,17 +37,6 @@ public sealed class FlowComponentRegistry
             Validate(installed);
             Register(installed, installed.Components.Select(component => Reference(installed, component)).ToList());
         }
-        var legacyReference = new FlowComponentReference(manifest.Id, manifest.Version, legacyCondition.Id,
-            legacyCondition.Version, legacyCondition.ConfigurationSchema.Version);
-        components[legacyReference] = legacyCondition;
-        runtimeVersions[legacyReference] = manifest.Version;
-        foreach (var version in legacyCondition.CompatiblePluginVersions ?? [])
-        {
-            var compatible = legacyReference with { PluginVersion = version };
-            components[compatible] = legacyCondition;
-            runtimeVersions[compatible] = manifest.Version;
-        }
-
         // Plugins tiers : un manifeste défaillant est écarté et signalé, il ne doit jamais empêcher le serveur de démarrer.
         var rejected = new List<RejectedPluginManifest>();
         var additional = configuration["FlowPlugins:ManifestDirectory"];
@@ -88,10 +67,14 @@ public sealed class FlowComponentRegistry
     /// Contrôle un manifeste tiers (fichier du dossier de manifestes ou paquet du Store) et retourne sa forme normalisée avec
     /// ses références. <paramref name="replacing"/> : identifiant du plugin que ce manifeste remplace (mise à jour d'un paquet).
     /// </summary>
-    private (PluginManifest Manifest, List<FlowComponentReference> References) CheckThirdParty(PluginManifest extra, IReadOnlyList<PluginManifest> existing, string? replacing)
+    private (PluginManifest Manifest, List<FlowComponentReference> References) CheckThirdParty(PluginManifest extra, IReadOnlyList<PluginManifest> existing, string? replacing, bool native = false)
     {
-        if (extra.Id is null || !PluginIdentity.IsValidPluginId(extra.Id))
+        if (extra.Id is null || (native
+                ? !Encoding.Core.Plugins.PluginPackage.NativeComponentPluginIds.Contains(extra.Id)
+                : !PluginIdentity.IsValidPluginId(extra.Id)))
             throw new InvalidOperationException($"Identifiant de plugin invalide : « {extra.Id} » (minuscules, chiffres et tirets, avec un espace de noms optionnel « espace.nom »).");
+        if (!native && Encoding.Core.Plugins.PluginPackage.NativeComponentPluginIds.Contains(extra.Id))
+            throw new InvalidOperationException($"L'identifiant « {extra.Id} » est réservé à un paquet natif distribué par le Store.");
         var others = existing.Where(item => item.Id != replacing).ToList();
         if (others.Any(item => item.Id == extra.Id) || replacing is null && existing.Any(item => item.Id == extra.Id))
             throw new InvalidOperationException($"L’identifiant « {extra.Id} » est déjà utilisé par un autre plugin.");
@@ -121,7 +104,7 @@ public sealed class FlowComponentRegistry
     /// restent résolubles par les flows existants : leurs références pointent vers le descripteur de la nouvelle version, qui doit
     /// donc rester compatible avec son schéma (un changement incompatible exige un nouvel identifiant de composant).
     /// </summary>
-    public bool TryInstall(PluginManifest manifest, out string reason)
+    public bool TryInstall(PluginManifest manifest, out string reason, bool native = false)
     {
         lock (installGate)
         {
@@ -140,7 +123,9 @@ public sealed class FlowComponentRegistry
                         CompatiblePluginVersions = (component.CompatiblePluginVersions ?? []).Concat(inherited).Distinct().ToArray()
                     }).ToArray()
                 };
-                var (normalized, references) = CheckThirdParty(withHistory, plugins, previous?.Id);
+                if (native && !Encoding.Core.Plugins.PluginPackage.NativeComponentPluginIds.Contains(manifest.Id))
+                    throw new InvalidOperationException("Ce plugin natif n'est pas une famille de composants moteur autorisée.");
+                var (normalized, references) = CheckThirdParty(withHistory, plugins, previous?.Id, native);
                 if (previous is not null) RemoveRegistrations(previous.Id);
                 Register(normalized, references);
                 plugins = plugins.Where(item => item.Id != normalized.Id).Append(normalized).ToList();
@@ -440,14 +425,6 @@ public sealed class FlowComponentRegistry
         if (LegacyAliases.TryGetValue(componentId, out var target))
         {
             return FindReference(target.ComponentId, target.PluginId);
-        }
-
-        if (string.Equals(componentId, "base-condition", StringComparison.OrdinalIgnoreCase)
-            && (pluginId is null || string.Equals(pluginId, "base", StringComparison.OrdinalIgnoreCase)))
-        {
-            var manifest = Plugins.Single(plugin => plugin.Id == "base");
-            return new FlowComponentReference(manifest.Id, manifest.Version, legacyCondition.Id,
-                legacyCondition.Version, legacyCondition.ConfigurationSchema.Version);
         }
 
         return null;

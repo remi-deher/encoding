@@ -55,7 +55,8 @@ public sealed record NodeToolCapability(
     IReadOnlyList<string> AccelerationTypes,
     IReadOnlyList<string>? Encoders = null,
     IReadOnlyList<NodeEncoderCapability>? EncoderChecks = null,
-    string? ManifestFingerprint = null);
+    string? ManifestFingerprint = null,
+    string? ToolPackageSha256 = null);
 
 /// <summary>Result of a safe synthetic encode check for a catalogued video encoder.</summary>
 public sealed record NodeEncoderCapability(string EncoderId, string Status);

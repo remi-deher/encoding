@@ -17,6 +17,8 @@ if (args.FirstOrDefault() == "--isolated-process")
 }
 var builder = WebApplication.CreateBuilder(args);
 var options = NodeAgentOptions.FromConfiguration(builder.Configuration);
+Environment.SetEnvironmentVariable(ManagedToolCatalog.DirectoryEnvironmentVariable,
+    builder.Configuration["Runtime:ManagedToolDirectory"] is { Length: > 0 } managedToolDirectory ? managedToolDirectory : ManagedToolCatalog.DefaultDirectory);
 builder.WebHost.ConfigureKestrel(server => server.ListenLocalhost(options.LocalApiPort));
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<WorkerIdentityStore>();
@@ -44,13 +46,15 @@ builder.Services.AddHostedService<LibraryDiscoveryService>();
 builder.Services.AddHostedService<NodeDirectoryBrowserService>();
 builder.Services.AddHostedService<RuntimeWorkerService>();
 builder.Services.AddHostedService<ResourcePrefetchWorker>();
-builder.Services.AddSingleton<IToolCapabilityProbe, ToolCapabilityProbe>();
+builder.Services.AddSingleton<ToolCapabilityProbe>();
+builder.Services.AddSingleton<IToolCapabilityProbe>(provider => provider.GetRequiredService<ToolCapabilityProbe>());
 builder.Services.AddSingleton<WorkerClusterDiscovery>();
 builder.Services.AddSingleton<WorkerEnrollmentService>();
 builder.Services.AddHostedService<WorkerClusterDiscovery>(provider => provider.GetRequiredService<WorkerClusterDiscovery>());
 builder.Services.AddHostedService<WorkerAutoEnrollmentService>();
 builder.Services.AddHostedService<NodeHeartbeatService>();
 builder.Services.AddHostedService<PluginSyncService>();
+builder.Services.AddHostedService<ToolPackageSyncService>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.ConfigureHttpJsonOptions(json =>
     json.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));

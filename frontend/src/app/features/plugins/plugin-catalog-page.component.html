@@ -289,6 +289,13 @@
 
             <p class="store-description">{{ pkg.description }}</p>
 
+            @if (pkg.kind === 'tool' && (pkg.installedSha256 || pkg.sha256)) {
+              <div class="tool-details">
+                <strong>SHA-256 de l’archive</strong>
+                <code>{{ pkg.installedSha256 || pkg.sha256 }}</code>
+              </div>
+            }
+
             @if (pkg.requiredTools.length > 0) {
               <div class="tool-details">
                 <div>

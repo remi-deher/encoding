@@ -1,16 +1,11 @@
-# Plugins d’intégration
+# Écrire et empaqueter des plugins
 
-Un plugin ajoute des composants de flow (actions, conditions) fournis par un processus séparé. Le contrat est décrit dans [0012](../../docs/architecture/domains/flows.md) et [0015](../../docs/architecture/domains/runtime.md) ; les plugins Sonarr/Radarr/Plex/Jellyfin et ce SDK dans [0032](../../docs/architecture/domains/plugins.md).
+Un plugin ajoute des composants de flow (actions, conditions) fournis par un processus séparé. Le code source des plugins maintenus par le projet, leur SDK, leurs exemples et leurs tests vivent dans le dépôt public [remi-deher/encoding-store](https://github.com/remi-deher/encoding-store). Le moteur ne les copie plus dans l'image. Le contrat d'exécution est décrit dans [la fiche plugins](../../docs/architecture/domains/plugins.md) et [le guide du Store](https://github.com/remi-deher/encoding-store).
 
 ```
-sdk/encoding_plugin_sdk.py   SDK Python (un seul fichier, bibliothèque standard)
-sdk/encoding-plugin-sdk.mjs  SDK JavaScript (un seul fichier, Node.js, sans dépendance), même API
-arr/plugin.py                Sonarr et Radarr (python3 plugin.py sonarr|radarr)
-plex/plugin.py               Plex
-jellyfin/plugin.py           Jellyfin
-example/                     plugin tiers minimal en Python : plugin.py + manifest.json
-example-js/                  le même en JavaScript : plugin.mjs + manifest.json
-tests/                       tests Python (python3 -m unittest discover -s backend/plugins/tests)
+plugin.json                  manifeste + runtime (`python3` ou `node`)
+main.py                      point d'entrée isolé
+encoding_plugin_sdk.py       SDK copié dans l'archive, aucune dépendance installée
 ```
 
 ## Modèle d’exécution
@@ -95,7 +90,43 @@ Exactement un de `outputId` ou `terminalResult` (`unchanged`, `success`, `failed
 
 ## Installer un plugin tiers
 
-**Par le Store (recommandé)** : empaquetez le plugin en `.zip` avec un `plugin.json` à la racine (le manifeste habituel plus `"runtime": { "type": "python3", "entrypoint": "main.py" }`, identifiant `espace.nom`), copiez-y le SDK à côté du point d'entrée, puis *Plugins & Outils → Store & Dépôts → Importer une archive*. Le serveur contrôle le paquet, l'enregistre à chaud, et chaque worker le télécharge et le vérifie dans la minute. Voir 0063 (état d'implémentation, limites en cluster multi-serveurs).
+**Par le Store (recommandé)** : empaquetez le plugin en `.zip` avec un `plugin.json` à la racine (manifeste habituel plus `"runtime": { "type": "python3", "entrypoint": "main.py" }`, identifiant `espace.nom`), copiez-y le SDK à côté du point d'entrée, puis utilisez *Plugins & Outils → Store & Dépôts*. Les plugins d'intégration du projet (Plex, Sonarr, Radarr et Jellyfin) sont publiés dans le dépôt public et installables depuis ce Store. Le serveur contrôle l'archive ; chaque worker la télécharge et vérifie son empreinte. Le code plugin et ses tests peuvent ainsi évoluer dans le dépôt Store sans compiler l'application.
+
+### Paquets d'outils du Store
+
+Les binaires sont publiés comme paquets indépendants, jamais copiés dans chaque archive plugin. Un plugin déclare ses dépendances au niveau du manifeste :
+
+```json
+"requiredToolPackages": [
+  {
+    "toolPackageId": "ffmpeg",
+    "minimumVersion": "7.1.0",
+    "maximumVersionExclusive": "8.0.0",
+    "requiredCapabilities": ["libx264"]
+  }
+]
+```
+
+Le dépôt doit inclure une version compatible pour la plateforme du serveur. Le Store installe aussi les variantes compatibles publiées pour les autres plateformes ; chaque nœud ne télécharge que son architecture. L'administrateur peut installer un autre paquet fournisseur global pour le rôle après avoir retiré celui en conflit. Il n'y a qu'un fournisseur d'un rôle par plateforme, donc deux plugins qui demandent `ffmpeg` utilisent le même binaire installé.
+
+Chaque archive outil contient `tool.json` à sa racine. Exemple de manifeste :
+
+```json
+{
+  "contractVersion": 1,
+  "id": "ffmpeg",
+  "version": "7.1.0",
+  "name": "FFmpeg",
+  "platform": "linux-x64",
+  "executables": [
+    { "toolId": "ffmpeg", "path": "bin/ffmpeg", "sha256": "<sha256 du fichier ffmpeg>" },
+    { "toolId": "ffprobe", "path": "bin/ffprobe", "sha256": "<sha256 du fichier ffprobe>" }
+  ],
+  "capabilities": ["libx264", "libx265"]
+}
+```
+
+Dans `repository.json`, chaque paquet `tools[]` donne `id`, `name`, `summary`, `latestVersion` et `versions[]`; chaque version donne la plateforme, l'URL d'archive et son SHA-256. Le serveur vérifie le hash de l'archive puis ceux des exécutables dans `tool.json`. Le worker répète ces contrôles avant extraction. Les hashes garantissent que l'archive et ses binaires n'ont pas changé depuis publication du manifeste ; ils ne remplacent pas une signature du dépôt.
 
 **À la main** (plugin fourni avec l'image, ou besoin d'un lancement particulier) :
 

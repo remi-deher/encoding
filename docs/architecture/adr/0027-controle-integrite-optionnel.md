@@ -21,7 +21,7 @@ Le décodage complet avant publication peut prendre plusieurs minutes pour un fi
 - Tous les flows, y compris ceux déjà publiés, gardent le scan structurel de sortie, la cohérence de durée, les empreintes SHA-256 des artefacts et la publication atomique sans écrasement de la source.
 - Seul le bloc explicite `probe-check-integrity` déclenche un contrôle d'intégrité média : `quick` vérifie la structure et échantillonne des passages ; `deep` décode intégralement les flux audio et vidéo. L'empreinte du fichier contrôlé est liée au checkpoint durable et doit correspondre exactement au résultat publié.
 - Sans ce bloc, aucun décodage média complet n'est implicite. Le champ historique `probe-validate-output.verifyDecoding` reste accepté pour lire et valider les anciennes définitions, mais il est ignoré ; les flows et versions stockés ne sont pas réécrits.
-- Les flows guidés continuent d'insérer un contrôle rapide explicite. Les flows sans bloc n'ont pas besoin de la capacité `media-integrity-policy/v1`.
+- Le flow guidé et les modèles standards n'insèrent pas le contrôle par défaut ; un opérateur peut ajouter le bloc explicitement. Les flows sans bloc n'ont pas besoin de la capacité `media-integrity-policy/v1`.
 - Cette décision remplace le décodage final obligatoire de l'ADR 0007 et la politique des flows historiques dans l'ADR 0022. Les décisions de l'ADR 0022 sur l'admission des nœuds et les permissions de bibliothèque restent en vigueur.
 
 ## Alternatives écartées

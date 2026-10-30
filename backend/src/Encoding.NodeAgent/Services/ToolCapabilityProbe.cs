@@ -22,6 +22,13 @@ public sealed class ToolCapabilityProbe(
     private DateTimeOffset refreshed;
     private string? lastHardwareSummary;
 
+    public async Task InvalidateCacheAsync(CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try { cached = null; refreshed = default; }
+        finally { gate.Release(); }
+    }
+
     public async Task<IReadOnlyList<NodeToolCapability>> DiscoverAsync(CancellationToken ct)
     {
         await gate.WaitAsync(ct);
@@ -37,13 +44,7 @@ public sealed class ToolCapabilityProbe(
                 new(Encoding.Contracts.Executions.SourceWriteProtocol.Capability, "1.0.0", ["general"], []),
                 new(FlowArtifactReference.Capability, "1.0.0", ["general"], []),
                 new(Encoding.Contracts.Executions.RuntimeSourceObservation.Capability, "1.0.0", ["general"], []),
-                new("plugin/video", "1.3.0", ["general"], []),
-                new("plugin/audio", "1.1.0", ["general"], []),
-                new("plugin/subtitles", "1.3.0", ["general"], []),
-                new("plugin/mkv", "1.1.0", ["general"], []),
-                new("plugin/images", "1.0.0", ["general"], []),
                 new(MediaIntegrityPolicy.Capability, "1.0.0", ["general"], []),
-                new("plugin/probe", "1.1.0", ["general"], []),
                 new("ai-runtime", "1.0.0", ["subtitles", "video", "music"], []),
                 new("plugin/nodes", "1.8.0", ["general"], []),
                 new("plugin/conditions", "1.2.0", ["general"], [])
@@ -97,7 +98,7 @@ public sealed class ToolCapabilityProbe(
 
                     if (id == "ffmpeg") LogHardwareEncoding(encoders, checks);
                     list.Add(new(id, version, ["video", "audio", "image", "subtitles", "general"],
-                        acceleration, encoders, id == "ffmpeg" ? checks : null));
+                        acceleration, encoders, id == "ffmpeg" ? checks : null, ToolPackageSha256: ManagedToolCatalog.PackageSha256ForCapability(id)));
                 }
                 catch (Exception) when (!ct.IsCancellationRequested) { }
             }
@@ -107,7 +108,9 @@ public sealed class ToolCapabilityProbe(
                 try
                 {
                     var manifest = await plugins.DescribeAsync(plugin, ct);
-                    list.Add(new("plugin/" + manifest.Id, manifest.Version, ["general"], ["process"], ManifestFingerprint: PluginManifestFingerprint.Compute(manifest)));
+                    if ((manifest.RequiredToolPackages ?? []).Any(dependency => !ManagedToolCatalog.Satisfies(dependency))) continue;
+                    if (plugin.IsNative) list.Add(new("plugin/" + manifest.Id, manifest.Version, ["general"], ["engine"], ManifestFingerprint: PluginManifestFingerprint.Compute(manifest)));
+                    else list.Add(new("plugin/" + manifest.Id, manifest.Version, ["general"], ["process"], ManifestFingerprint: PluginManifestFingerprint.Compute(manifest)));
                 }
                 catch (Exception) when (!ct.IsCancellationRequested) { }
             }

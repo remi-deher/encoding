@@ -20,7 +20,7 @@ public static class PluginStoreEndpoints
                 item.IsOfficial,
                 IsLocked = item.IsOfficial,
                 item.Enabled,
-                PackagesCount = item.Packages.Count,
+                PackagesCount = item.Packages.Count + (item.Tools?.Count ?? 0),
                 UpdatedAt = item.LastSyncAt,
                 item.LastError
             }))).AllowViewer().WithName("ListStoreRepositories");
@@ -43,7 +43,7 @@ public static class PluginStoreEndpoints
             catch (PluginRepositoryException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
         }).WithName("RemoveStoreRepository");
 
-        store.MapGet("/packages", (PluginRepositoryService repositories, PluginStoreService plugins) =>
+        store.MapGet("/packages", (PluginRepositoryService repositories, PluginStoreService plugins, ToolStoreService tools) =>
         {
             var installed = plugins.Installed().ToDictionary(item => item.Id, StringComparer.Ordinal);
             var listed = new HashSet<string>(StringComparer.Ordinal);
@@ -87,6 +87,40 @@ public static class PluginStoreEndpoints
                     RepositoryId = current.Source,
                     Icon = "📦"
                 });
+            var installedTools = tools.Available().ToDictionary(item => (item.Id, item.Platform));
+            var seenTools = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var repository in repositories.List().Where(item => item.Enabled))
+                foreach (var package in repository.Tools ?? [])
+                {
+                    if (seenTools.Contains(package.Id)) continue;
+                    var platform = Encoding.Contracts.Tools.ToolPackagePlatform.Current;
+                    var currentTool = installedTools.GetValueOrDefault((package.Id, platform));
+                    var available = package.Versions.Where(item => item.Platform == platform)
+                        .OrderByDescending(item => Version.TryParse(item.Version, out var parsed) ? parsed : new Version(0, 0)).FirstOrDefault();
+                    if (available is null) continue;
+                    seenTools.Add(package.Id);
+                    result.Add(new
+                    {
+                        Id = package.Id, package.Name, Kind = "tool", Category = "tools", CategoryLabel = "Outil média",
+                        Platform = platform,
+                        Sha256 = available.Sha256,
+                        InstalledSha256 = currentTool?.ArchiveSha256,
+                        Version = available.Version, InstalledVersion = currentTool?.Version,
+                        HasUpdate = currentTool is not null && Version.TryParse(available.Version, out var latest) && Version.TryParse(currentTool.Version, out var have) && latest > have,
+                        Author = "", Description = package.Summary, RequiredTools = Array.Empty<string>(), RepositoryId = repository.Id, Icon = "🛠️"
+                    });
+                }
+            foreach (var currentTool in installedTools.Values.Where(item => !seenTools.Contains(item.Id)))
+                result.Add(new
+                {
+                    Id = currentTool.Id, Name = currentTool.Id, Kind = "tool", Category = "tools", CategoryLabel = "Installé localement",
+                    Platform = currentTool.Platform,
+                    Sha256 = currentTool.ArchiveSha256,
+                    InstalledSha256 = currentTool.ArchiveSha256,
+                    Version = currentTool.Version, InstalledVersion = (string?)currentTool.Version, HasUpdate = false,
+                    Author = "", Description = $"Paquet {currentTool.Platform}, SHA-256 {currentTool.ArchiveSha256}.",
+                    RequiredTools = Array.Empty<string>(), RepositoryId = currentTool.Source, Icon = "🛠️"
+                });
             return Results.Ok(result);
         }).AllowViewer().WithName("ListStorePackages");
 
@@ -95,6 +129,12 @@ public static class PluginStoreEndpoints
             try { return Results.Ok(await repositories.InstallAsync(request.RepositoryId, request.Id, request.Version, ct)); }
             catch (PluginRepositoryException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
         }).WithName("InstallStorePackage");
+
+        store.MapPost("/tools/install", async (InstallToolPackageRequest request, PluginRepositoryService repositories, CancellationToken ct) =>
+        {
+            try { return Results.Ok(await repositories.InstallToolAsync(request.RepositoryId, request.Id, request.Version, request.Platform, ct)); }
+            catch (PluginRepositoryException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
+        }).WithName("InstallStoreToolPackage");
 
         // Import d'une archive .zip (développement local, environnement isolé). Corps brut : 32 Mo au plus.
         store.MapPost("/packages/import", async (HttpRequest request, PluginStoreService plugins, CancellationToken ct) =>
@@ -114,12 +154,40 @@ public static class PluginStoreEndpoints
             catch (PluginPackageException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
         }).WithName("ImportStorePackage");
 
+        store.MapPost("/tools/import", async (HttpRequest request, ToolStoreService tools, CancellationToken ct) =>
+        {
+            var max = Encoding.Core.Tools.ToolPackageArchive.MaxArchiveBytes;
+            if (request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit)
+                limit.MaxRequestBodySize = max + 1024;
+            if (request.ContentLength > max) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            using var memory = new MemoryStream();
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await request.Body.ReadAsync(buffer, ct)) > 0)
+            {
+                if (memory.Length + read > max) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                memory.Write(buffer, 0, read);
+            }
+            try { return Results.Ok(await tools.ImportAsync(memory.ToArray(), "sideload", ct: ct)); }
+            catch (Encoding.Core.Tools.ToolPackageException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
+        }).WithName("ImportStoreToolPackage");
+
+        store.MapDelete("/tools/{toolId}/{platform}", async (string toolId, string platform, ToolStoreService tools, PluginStoreService plugins, CancellationToken ct) =>
+        {
+            if (plugins.RequiresToolPackage(toolId)) return Results.Conflict(new { title = $"L'outil {toolId} est encore requis par un plugin installé." });
+            return await tools.RemoveAsync(toolId, platform, ct) ? Results.NoContent() : Results.NotFound();
+        }).WithName("RemoveStoreToolPackage");
+
         store.MapDelete("/packages/{pluginId}", async (string pluginId, PluginStoreService plugins) =>
             await plugins.RemoveAsync(pluginId) ? Results.NoContent() : Results.NotFound()).WithName("RemoveStorePackage");
 
         // Distribution aux workers, authentifiés par le jeton de leur nœud (lecture seule).
         store.MapGet("/installed", (PluginStoreService plugins) =>
             Results.Ok(plugins.Installed().Select(item => new { item.Id, item.Version, item.Sha256 }))).AllowNodeCredentials().WithName("ListInstalledPluginPackages");
+
+        store.MapGet("/tools/installed", (ToolStoreService tools) =>
+            Results.Ok(tools.Available().Select(item => new { item.Id, item.Version, item.Platform, item.ArchiveSha256 })))
+            .AllowNodeCredentials().WithName("ListInstalledToolPackages");
 
         store.MapGet("/packages/{pluginId}/{version}/download", (string pluginId, string version, PluginStoreService plugins) =>
         {
@@ -128,15 +196,24 @@ public static class PluginStoreEndpoints
             var path = plugins.PackagePath(installed.Id, installed.Version);
             return File.Exists(path) ? Results.File(path, "application/zip", $"{pluginId}-{version}.zip") : Results.NotFound();
         }).AllowNodeCredentials().WithName("DownloadPluginPackage");
+
+        store.MapGet("/tools/packages/{toolId}/{version}/{platform}/download", (string toolId, string version, string platform, ToolStoreService tools) =>
+        {
+            var installed = tools.Available().SingleOrDefault(item => item.Id == toolId && item.Version == version && item.Platform == platform);
+            if (installed is null) return Results.NotFound();
+            var path = tools.PackagePath(installed.Id, installed.Version, installed.Platform);
+            return File.Exists(path) ? Results.File(path, "application/zip", $"{toolId}-{version}-{platform}.zip") : Results.NotFound();
+        }).AllowNodeCredentials().WithName("DownloadToolPackage");
     }
 
     private static object Summary(PluginRepository item) => new
     {
         item.Id, item.Name, item.Url, item.Description, item.IsOfficial, IsLocked = item.IsOfficial, item.Enabled,
-        PackagesCount = item.Packages.Count, UpdatedAt = item.LastSyncAt, item.LastError
+        PackagesCount = item.Packages.Count + (item.Tools?.Count ?? 0), UpdatedAt = item.LastSyncAt, item.LastError
     };
 }
 
 public sealed record AddRepositoryRequest(string? Url);
 public sealed record SetRepositoryEnabledRequest(bool Enabled);
 public sealed record InstallPackageRequest(string RepositoryId, string Id, string? Version);
+public sealed record InstallToolPackageRequest(string RepositoryId, string Id, string? Version, string? Platform);

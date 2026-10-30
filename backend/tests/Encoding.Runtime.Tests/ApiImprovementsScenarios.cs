@@ -13,6 +13,7 @@ using Encoding.Contracts.Libraries;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using ApiAssembly = Encoding.Api.Auth.AuthOptions;
 
@@ -785,6 +786,8 @@ internal static class ApiImprovementsScenarios
             foreach (var (key, value) in settings) builder.UseSetting(key, value);
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<Encoding.Api.Flows.FlowComponentRegistry>();
+                services.AddSingleton(StoreCatalogFixture.Create());
                 foreach (var descriptor in services.Where(item => item.ServiceType == typeof(IHostedService)).ToArray())
                     services.Remove(descriptor);
             });

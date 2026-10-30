@@ -87,6 +87,10 @@
   strong {
     color: var(--text-primary);
   }
+
+  code {
+    overflow-wrap: anywhere;
+  }
 }
 
 .tool-card-actions,

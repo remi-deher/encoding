@@ -10,7 +10,8 @@ namespace Encoding.NodeAgent.Services;
 /// l'empreinte SHA-256 annoncée, extrait dans un dossier temporaire puis le renomme, et retire les versions que le serveur ne
 /// propose plus. Une panne réseau ne retire rien : le worker garde ce qu'il a.
 /// </summary>
-public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentityStore identityStore, IConfiguration configuration, ILogger<PluginSyncService> logger) : BackgroundService
+public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentityStore identityStore, IConfiguration configuration,
+    ToolCapabilityProbe capabilityProbe, ILogger<PluginSyncService> logger) : BackgroundService
 {
     private sealed record Listed(string Id, string Version, string Sha256);
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
@@ -52,19 +53,21 @@ public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentitySt
         if (listed is null || activeServerUrl is null)
             throw new HttpRequestException("Aucun serveur du cluster n'est joignable pour synchroniser les plugins.");
         Directory.CreateDirectory(root);
+        var changed = false;
         foreach (var plugin in listed)
         {
             var target = Path.Combine(root, plugin.Id, plugin.Version);
             if (File.Exists(Path.Combine(target, CustomPluginCatalog.VerifiedMarker))
                 && File.ReadAllText(Path.Combine(target, CustomPluginCatalog.VerifiedMarker)).Trim() == plugin.Sha256) continue;
-            try { await InstallAsync(identity, activeServerUrl, plugin, target, ct); }
+            try { await InstallAsync(identity, activeServerUrl, plugin, target, ct); changed = true; }
             catch (PluginPackageException exception) { logger.LogError("Le plugin {PluginId} {Version} est refusé : {Reason}", plugin.Id, plugin.Version, exception.Message); }
         }
         // Ménage : seulement quand la liste a bien été reçue, jamais sur une panne.
         foreach (var pluginDirectory in Directory.EnumerateDirectories(root))
             foreach (var versionDirectory in Directory.EnumerateDirectories(pluginDirectory))
                 if (!listed.Any(item => item.Id == Path.GetFileName(pluginDirectory) && item.Version == Path.GetFileName(versionDirectory)))
-                    TryDelete(versionDirectory);
+                { TryDelete(versionDirectory); changed = true; }
+        if (changed) await capabilityProbe.InvalidateCacheAsync(ct);
     }
 
     private async Task InstallAsync(WorkerIdentityState identity, string serverUrl, Listed plugin, string target, CancellationToken ct)

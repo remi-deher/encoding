@@ -40,6 +40,12 @@ public static class CustomPluginCatalog
         var root = document.RootElement;
         if (!root.TryGetProperty("id", out var id) || !root.TryGetProperty("version", out var version) || !root.TryGetProperty("runtime", out var runtime)) return null;
         var type = runtime.GetProperty("type").GetString();
+        if (type == "native")
+        {
+            if (!PluginPackage.NativeComponentPluginIds.Contains(id.GetString() ?? "")) return null;
+            return new PluginLaunch { Id = id.GetString() ?? "", Version = version.GetString() ?? "", IsNative = true,
+                ReadOnlyPaths = [Path.GetFullPath(versionDirectory)] };
+        }
         var entrypoint = Path.GetFullPath(Path.Combine(versionDirectory, PluginPackage.SafeRelativePath(runtime.GetProperty("entrypoint").GetString() ?? "")));
         var directory = Path.GetFullPath(versionDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!entrypoint.StartsWith(directory, StringComparison.Ordinal) || !File.Exists(entrypoint)) return null;

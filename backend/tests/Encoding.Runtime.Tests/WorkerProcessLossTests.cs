@@ -5,6 +5,8 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.IO.Compression;
 using Encoding.Api.Infrastructure;
 using Encoding.NodeAgent;
 using Xunit;
@@ -43,6 +45,7 @@ public sealed class WorkerProcessLossTests
             var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
 
             var apiPort = FreePort();
+            PrepareStorePackages(Path.Combine(root, "api"));
             var secret = Path.Combine(root, "local-enrollment.secret");
             File.WriteAllText(secret, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
             var api = Start("api", typeof(ClusterReconciliationRepository).Assembly.Location, processes, env =>
@@ -192,6 +195,37 @@ public sealed class WorkerProcessLossTests
         var proc = new Proc(process, output, name);
         processes.Add(proc);
         return proc;
+    }
+
+    private static void PrepareStorePackages(string dataDirectory)
+    {
+        var fixtureDirectory = Path.Combine(Harness.RepositoryRoot(), "tests", "Fixtures", "StoreCatalog");
+        var installed = new List<object>();
+        foreach (var (id, version) in new[] { ("base", "1.10.0"), ("video", "1.3.0") })
+        {
+            var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(fixtureDirectory, id + ".json")))!.AsObject();
+            manifest["runtime"] = new JsonObject { ["type"] = "native", ["entrypoint"] = "" };
+            using var buffer = new MemoryStream();
+            using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+            using (var writer = new StreamWriter(archive.CreateEntry("plugin.json").Open()))
+                writer.Write(manifest.ToJsonString());
+            var bytes = buffer.ToArray();
+            var packageDirectory = Path.Combine(dataDirectory, "plugin-store", "packages", id, version);
+            Directory.CreateDirectory(packageDirectory);
+            File.WriteAllBytes(Path.Combine(packageDirectory, "package.zip"), bytes);
+            installed.Add(new
+            {
+                id,
+                version,
+                name = manifest["name"]!.GetValue<string>(),
+                sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+                source = "repo:test",
+                installedAt = DateTimeOffset.UtcNow
+            });
+        }
+        var storeDirectory = Path.Combine(dataDirectory, "plugin-store");
+        File.WriteAllText(Path.Combine(storeDirectory, "installed.json"),
+            JsonSerializer.Serialize(installed, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     }
 
     private static async Task WaitAsync(Func<Task<bool>> condition, int seconds, string description, List<Proc> processes)
