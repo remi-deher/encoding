@@ -1,12 +1,12 @@
 ---
 id: 0007
 title: Un seul décodage complet, juste avant la publication
-status: accepted
+status: superseded
 domain: runtime
 date: 2026-10-23
 decided_by: Rémi (2026-10-23) : un décodage unique ; pas d'option pour rétablir l'ancien comportement
 supersedes: []
-superseded_by: []
+superseded_by: [0027]
 tags: [validation, decodage, performance, integrite, publication]
 ---
 

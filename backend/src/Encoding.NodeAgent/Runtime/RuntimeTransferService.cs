@@ -5,7 +5,7 @@ using Encoding.NodeAgent.Services;
 
 namespace Encoding.NodeAgent.Runtime;
 
-public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdentityStore identities,MediaScanner scanner,PublicationGuardRunner guards,ILogger<RuntimeTransferService> logger) : BackgroundService
+public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdentityStore identities,MediaScanner scanner,PublicationGuardRunner guards,LocalPublicationArtifactStore localArtifacts,ILogger<RuntimeTransferService> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid,Task> active=new();
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -75,7 +75,13 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
         try
         {
             var original=SafeMediaPaths.Resolve(transfer.Root,transfer.MediaPath);
-            if (transfer.CanWrite && (transfer.Publish || transfer.VerifyPublicationAccess)) await LibraryAccessVerifier.VerifyPublicationAsync(transfer.Root, ct, transfer.VerifyReplacementAccess ? transfer.MediaPath : null);
+            if (transfer.CanWrite && (transfer.Publish || transfer.VerifyPublicationAccess))
+            {
+                var accessId=Guid.NewGuid(); var accessStarted=DateTimeOffset.UtcNow;
+                await RecordOperationAsync(transfer,client,"Vérifier l’accès d’écriture à la bibliothèque",accessId,accessStarted,null,null,null,ct);
+                await LibraryAccessVerifier.VerifyPublicationAsync(transfer.Root, ct, transfer.VerifyReplacementAccess ? transfer.MediaPath : null);
+                await RecordOperationAsync(transfer,client,"Vérifier l’accès d’écriture à la bibliothèque",accessId,accessStarted,DateTimeOffset.UtcNow,0,null,ct);
+            }
             using var mediaLock=transfer.CanWrite?SafeMediaPaths.Lock(original,Path.Combine(options.DataDirectory,"media-locks")):null;
             if(!transfer.Publish)
             {
@@ -99,23 +105,46 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                     await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),current.Revision,$".encoding-results/{transfer.ExecutionId:D}/result{transfer.ResultExtension}",transfer.ResultSha256,resumed),ct);
                     return;
                 }
+                var sourceCheckId=Guid.NewGuid(); var sourceCheckStarted=DateTimeOffset.UtcNow;
+                await RecordOperationAsync(transfer,client,"Vérifier que la source n’a pas changé",sourceCheckId,sourceCheckStarted,null,null,null,ct);
                 var originalStamp=MediaFileStamp.Read(original);
                 if(transfer.Observation is {} obs && new MediaFileStamp(obs.Bytes,obs.LastWriteUtcTicks).Matches(original)) { }
                 else if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé depuis le début du traitement.");
+                await RecordOperationAsync(transfer,client,"Vérifier que la source n’a pas changé",sourceCheckId,sourceCheckStarted,DateTimeOffset.UtcNow,0,transfer.Observation?.Bytes,ct);
                 var incoming=Path.Combine(directory,"result"+transfer.ResultExtension);
-                await client.DownloadAsync(transfer.ExecutionId,transfer.Epoch,transfer.ResultSha256,incoming,ct);
+                var incomingPath=incoming;
+                var downloadId=Guid.NewGuid(); var downloadStarted=DateTimeOffset.UtcNow;
+                await RecordOperationAsync(transfer,client,"Télécharger l’artefact depuis le serveur",downloadId,downloadStarted,null,null,null,ct);
+                if(localArtifacts.TryGet(transfer.ExecutionId,transfer.Epoch,transfer.ResultSha256,out var localPath))
+                {
+                    incomingPath=localPath;
+                    await RecordOperationAsync(transfer,client,"Réutiliser l’artefact local ; téléchargement réseau évité",downloadId,downloadStarted,DateTimeOffset.UtcNow,0,0,ct);
+                }
+                else
+                {
+                    var bytes=await client.DownloadAsync(transfer.ExecutionId,transfer.Epoch,transfer.ResultSha256,incoming,ct);
+                    await RecordOperationAsync(transfer,client,"Télécharger l’artefact depuis le serveur",downloadId,downloadStarted,DateTimeOffset.UtcNow,0,bytes,ct);
+                }
+                var validationId=Guid.NewGuid(); var validationStarted=DateTimeOffset.UtcNow;
+                await RecordOperationAsync(transfer,client,"Scanner et vérifier le résultat avant publication",validationId,validationStarted,null,null,null,ct);
                 var before=await scanner.ScanAsync(original,ct);
-                await scanner.ValidateAsync(incoming,transfer.MediaType,before,ct);
+                await scanner.ValidateAsync(incomingPath,transfer.MediaType,before,ct);
+                var incomingBytes=new FileInfo(incomingPath).Length;
+                await RecordOperationAsync(transfer,client,"Scanner et vérifier le résultat avant publication",validationId,validationStarted,DateTimeOffset.UtcNow,0,incomingBytes,ct);
                 var relative=$".encoding-results/{transfer.ExecutionId:D}/result{transfer.ResultExtension}";
                 var target=SafeMediaPaths.Resolve(transfer.Root,relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!); target=SafeMediaPaths.Resolve(transfer.Root,relative);
                 var temporary=target+"."+Guid.NewGuid().ToString("N")+".tmp";
+                Guid? publicationId=null; DateTimeOffset? publicationStarted=null;
                 try
                 {
                     if(!File.Exists(target))
                     {
+                        var currentPublicationId=Guid.NewGuid(); var currentPublicationStarted=DateTimeOffset.UtcNow;
+                        publicationId=currentPublicationId; publicationStarted=currentPublicationStarted;
+                        await RecordOperationAsync(transfer,client,"Copier le résultat, calculer son SHA-256 et synchroniser le disque",currentPublicationId,currentPublicationStarted,null,null,null,ct);
                         using var shaStream=System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
-                        await using(var source=File.OpenRead(incoming))
+                        await using(var source=File.OpenRead(incomingPath))
                         await using(var destination=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
                         {
                             var buffer=new byte[81920]; int read;
@@ -137,16 +166,19 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                     }
                     else if(await SafeMediaPaths.DigestAsync(target,ct)!=transfer.ResultSha256) throw new IOException("La sortie existante est différente du résultat validé.");
                     Encoding.Core.AtomicFilePublication.Confirm(target);
+                    if(publicationId is { } completedOperation && publicationStarted is { } operationStarted)
+                        await RecordOperationAsync(transfer,client,"Copier le résultat, calculer son SHA-256 et synchroniser le disque",completedOperation,operationStarted,DateTimeOffset.UtcNow,0,incomingBytes,ct);
                     SourceReplacementReport? replacement=null;
                     if(transfer.ReplacementGraceHours is not null)
                     {
                         var verdict=await guards.CheckAsync(transfer,ct);
                         replacement=!verdict.Allowed?new SourceReplacementReport("failed",null,null,0,DateTimeOffset.UtcNow,verdict.Detail)
-                        :await SourceReplacer.ReplaceAsync(transfer.Root,transfer.ExecutionId,transfer.MediaPath,incoming,transfer.SourceSha256,transfer.ResultSha256,transfer.ResultExtension,
+                        :await SourceReplacer.ReplaceAsync(transfer.Root,transfer.ExecutionId,transfer.MediaPath,incomingPath,transfer.SourceSha256,transfer.ResultSha256,transfer.ResultExtension,
                             async token=>(await client.ExecutionAsync(transfer.ExecutionId,token)).State=="running" && await TryRenewSourceAsync(client,transfer,token),ct);
                     }
                     var status=await client.ExecutionAsync(transfer.ExecutionId,ct);
                     await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),status.Revision,relative,transfer.ResultSha256,replacement),ct);
+                    localArtifacts.Remove(transfer.ExecutionId,transfer.Epoch);
                 }
                 finally { if(File.Exists(temporary)) File.Delete(temporary); }
             }
@@ -164,5 +196,25 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
             catch(Exception) { }
         }
         finally { watch.Cancel(); await guard; }
+    }
+
+    private async Task RecordOperationAsync(RuntimeTransfer transfer,RuntimeClient client,string operation,Guid id,DateTimeOffset startedAt,
+        DateTimeOffset? finishedAt,int? exitCode,long? bytesProcessed,CancellationToken ct)
+    {
+        if(transfer.PublicationStepNodeId is not { } nodeId || transfer.PublicationStepInvocationId is not { } invocationId) return;
+        if(RuntimeCommandCapture.RecordForExecution(transfer.ExecutionId,nodeId,invocationId,operation,id,startedAt,finishedAt,exitCode,bytesProcessed)) return;
+        try
+        {
+            await client.ReportSourceOperationAsync(transfer.ExecutionId,transfer.Epoch,nodeId,invocationId,
+                RuntimeCommandCapture.CreateOperationLog(operation,id,startedAt,finishedAt,exitCode,bytesProcessed),ct);
+        }
+        catch(HttpRequestException exception)
+        {
+            logger.LogDebug("Journal de publication indisponible pour {ExecutionId} ({Type}).",transfer.ExecutionId,exception.GetType().Name);
+        }
+        catch(OperationCanceledException) when(!ct.IsCancellationRequested)
+        {
+            logger.LogDebug("Journal de publication expiré pour {ExecutionId}.",transfer.ExecutionId);
+        }
     }
 }

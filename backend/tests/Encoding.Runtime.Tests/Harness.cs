@@ -214,6 +214,7 @@ internal static partial class Harness
         private WebApplication app = null!;
         private RuntimeRepository runtime = null!;
         private RuntimeArtifactStore artifacts = null!;
+        private readonly LocalPublicationArtifactStore localPublicationArtifacts = new();
         private PluginConfigurationRepository configurations = null!;
         private ExecutionRepository executions = null!;
         private readonly bool sourceWriteGuards;
@@ -673,7 +674,7 @@ internal static partial class Harness
             options=NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Node:DataDirectory"]=Path.Combine(directory,name) }).Build());
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
             var probe=capabilities??new Probe();
-            return new(options,scanner,new MediaActions(tools,scanner,probe),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),probe,NullLogger<RuntimeFlowRunner>.Instance);
+            return new(options,scanner,new MediaActions(tools,scanner,probe),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),probe,localPublicationArtifacts,NullLogger<RuntimeFlowRunner>.Instance);
         }
         public async Task ConflictDuringCheckpointFailsExecutionAsync()
         {
@@ -838,7 +839,7 @@ internal static partial class Harness
             Directory.CreateDirectory(sourceOptions.DataDirectory);
             await File.WriteAllTextAsync(Path.Combine(sourceOptions.DataDirectory,"node-identity.json"),
                 JsonSerializer.Serialize(new WorkerIdentityState(a,"fixture","fixture",app.Urls.Single()+"/",Token,true),Json),deadline.Token);
-            using var sourceService=new RuntimeTransferService(sourceOptions,new WorkerIdentityStore(sourceOptions),scanner,new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),NullLogger<RuntimeTransferService>.Instance);
+            using var sourceService=new RuntimeTransferService(sourceOptions,new WorkerIdentityStore(sourceOptions),scanner,new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance),localPublicationArtifacts,NullLogger<RuntimeTransferService>.Instance);
             await sourceService.StartAsync(deadline.Token);
             await run;
             await sourceService.StopAsync(CancellationToken.None);

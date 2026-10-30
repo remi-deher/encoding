@@ -22,7 +22,7 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0004](0004-reprise-au-checkpoint.md) | Reprise au checkpoint après perte du worker, blocs rejouables | implemented | runtime |
 | [0005](0005-bloc-bibliotheque-sur-ce-noeud.md) | Bloc « Bibliothèque sur ce nœud » : brancher un flow selon l'accès direct | implemented | flows |
 | [0006](0006-ressources-de-flow.md) | Ressources de flow : fichiers partagés du cluster (polices, images, audio) | accepted | flows |
-| [0007](0007-decodage-unique-avant-publication.md) | Un seul décodage complet, juste avant la publication | accepted | runtime |
+| [0007](0007-decodage-unique-avant-publication.md) | Un seul décodage complet, juste avant la publication | superseded | runtime |
 | [0008](0008-assistant-de-configuration-plex.md) | Assistant de configuration Plex : connexion plex.tv et correspondance des bibliothèques | implemented | plugins |
 | [0009](0009-ecrivain-sqlite-unique-par-noeud.md) | Écrivain SQLite unique par nœud | implemented | replication-storage |
 | [0010](0010-capture-incrementale-locale.md) | Capture incrémentale locale par clés modifiées | implemented | replication-storage |
@@ -37,7 +37,10 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0019](0019-recherche-contextuelle-du-shell.md) | Recherche contextuelle dans le shell | implemented | ui |
 | [0020](0020-gabarit-partage-de-sous-navigation.md) | Gabarit partagé de sous-navigation | implemented | ui |
 | [0021](0021-activation-cluster-plugins-outils.md) | Activation cluster des plugins et outils média | implemented | plugins |
-| [0022](0022-controle-media-explicite-et-rattachement.md) | Contrôle média explicite et prérequis de rattachement | implemented | runtime, cluster |
+| [0022](0022-controle-media-explicite-et-rattachement.md) | Contrôle média explicite et prérequis de rattachement | superseded | runtime, cluster |
 | [0023](0023-coordination-et-quarantaine.md) | Coordination des tâches en quarantaine sans blocage global | implemented | runtime, replication-storage |
 | [0024](0024-choix-du-noeud-avant-execution.md) | Choix du nœud avant exécution et minimisation des transferts | implemented | runtime |
 | [0025](0025-liberation-des-reprises-source-apres-neutralisation.md) | Libération d'une reprise source après neutralisation | implemented | runtime |
+| [0026](0026-reprise-auto-reparatrice-deux-noeuds.md) | Reprise auto-réparatrice à deux nœuds | implemented | runtime |
+| [0027](0027-controle-integrite-optionnel.md) | Contrôle d'intégrité facultatif par bloc de flow | implemented | runtime, flows |
+| [0028](0028-publication-locale-et-journaux-operations.md) | Publication locale et journaux d'opérations | implemented | runtime |

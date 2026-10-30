@@ -41,20 +41,38 @@ public sealed class RuntimeClient : IDisposable
         return (await response.Content.ReadFromJsonAsync<T>(AgentJson.Options,ct))!;
     }
     public Task<RuntimePublicationState> PublicationStateAsync(Guid id,long epoch,CancellationToken ct)=>GetAsync<RuntimePublicationState>($"executions/{id:D}/publication?epoch={epoch}",ct);
+    public Task ReportSourceOperationAsync(Guid id,long epoch,string stepNodeId,Guid invocationId,RuntimeCommandLog operation,CancellationToken ct)=>
+        PostAsync<object>($"executions/{id:D}/operation-logs",new RuntimeFence(epoch,[new RuntimeStepCommand(stepNodeId,invocationId,operation)]),ct);
     public async Task<ExecutionResponse> ExecutionAsync(Guid id,CancellationToken ct)=>(await http.GetFromJsonAsync<ExecutionResponse>($"api/v1/executions/{id:D}",AgentJson.Options,ct))!;
     public async Task PutAsync(Guid id,long epoch,string file,string sha,bool original,CancellationToken ct,string? inputPath=null)
     {
-        await using var stream=File.OpenRead(file); using var content=new StreamContent(stream);
-        using var response=await http.PutAsync(Route($"executions/{id:D}/dav/{sha}?epoch={epoch}&original={original.ToString().ToLowerInvariant()}{(inputPath is null?string.Empty:"&inputPath="+Uri.EscapeDataString(inputPath))}"),content,ct);
-        if(!response.IsSuccessStatusCode)
+        var operationId=Guid.NewGuid(); var startedAt=DateTimeOffset.UtcNow; var bytes=new FileInfo(file).Length;
+        RuntimeCommandCapture.RecordOperation("Téléverser un artefact vers le serveur",operationId,startedAt,null,null,bytes);
+        try
         {
-            var err=await response.Content.ReadAsStringAsync(ct);
-            throw new HttpRequestException($"Response status code does not indicate success: {(int)response.StatusCode} ({response.ReasonPhrase}). Content: {err}", null, response.StatusCode);
+            await using var stream=File.OpenRead(file); using var content=new StreamContent(stream);
+            using var response=await http.PutAsync(Route($"executions/{id:D}/dav/{sha}?epoch={epoch}&original={original.ToString().ToLowerInvariant()}{(inputPath is null?string.Empty:"&inputPath="+Uri.EscapeDataString(inputPath))}"),content,ct);
+            if(!response.IsSuccessStatusCode)
+            {
+                var err=await response.Content.ReadAsStringAsync(ct);
+                throw new HttpRequestException($"Response status code does not indicate success: {(int)response.StatusCode} ({response.ReasonPhrase}). Content: {err}", null, response.StatusCode);
+            }
+            RuntimeCommandCapture.RecordOperation("Téléverser un artefact vers le serveur",operationId,startedAt,DateTimeOffset.UtcNow,0,bytes);
         }
+        catch { RuntimeCommandCapture.RecordOperation("Téléverser un artefact vers le serveur",operationId,startedAt,DateTimeOffset.UtcNow,1,bytes); throw; }
     }
-    public async Task DownloadAsync(Guid id,long epoch,string sha,string target,CancellationToken ct)
+    public async Task<long> DownloadAsync(Guid id,long epoch,string sha,string target,CancellationToken ct)
     {
-        if(File.Exists(target) && await SafeMediaPaths.DigestAsync(target,ct)==sha) return;
+        var operationId=Guid.NewGuid(); var startedAt=DateTimeOffset.UtcNow;
+        RuntimeCommandCapture.RecordOperation("Télécharger un artefact depuis le serveur",operationId,startedAt,null,null,null);
+        try
+        {
+        if(File.Exists(target) && await SafeMediaPaths.DigestAsync(target,ct)==sha)
+        {
+            var existingBytes=new FileInfo(target).Length;
+            RuntimeCommandCapture.RecordOperation("Télécharger un artefact depuis le serveur",operationId,startedAt,DateTimeOffset.UtcNow,0,existingBytes);
+            return existingBytes;
+        }
         var partial=target+".partial"; var offset=File.Exists(partial)?new FileInfo(partial).Length:0;
         using var request=new HttpRequestMessage(HttpMethod.Get,Route($"executions/{id:D}/dav/{sha}?epoch={epoch}"));
         if(offset>0) request.Headers.Range=new RangeHeaderValue(offset,null);
@@ -69,6 +87,11 @@ public sealed class RuntimeClient : IDisposable
         { await response.Content.CopyToAsync(file,ct); await file.FlushAsync(ct); file.Flush(true); }
         if(await SafeMediaPaths.DigestAsync(partial,ct)!=sha) { File.Delete(partial); throw new IOException("Le téléchargement est incomplet ou corrompu."); }
         File.Move(partial,target,true);
+        var bytes=new FileInfo(target).Length;
+        RuntimeCommandCapture.RecordOperation("Télécharger un artefact depuis le serveur",operationId,startedAt,DateTimeOffset.UtcNow,0,bytes);
+        return bytes;
+        }
+        catch { RuntimeCommandCapture.RecordOperation("Télécharger un artefact depuis le serveur",operationId,startedAt,DateTimeOffset.UtcNow,1,null); throw; }
     }
     public Task<Encoding.Contracts.Flows.ResourceVersionInfo> ResourceVersionAsync(Encoding.Contracts.Flows.ResourceReference reference,CancellationToken ct)=>
         GetAsync<Encoding.Contracts.Flows.ResourceVersionInfo>($"resources/{reference.Id:D}/versions/{reference.Version}",ct);

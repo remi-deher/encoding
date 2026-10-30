@@ -727,11 +727,12 @@
           },
           {
             "id": "verifyDecoding",
-            "label": "Décoder les pistes vidéo et audio après assemblage",
+            "label": "Ancien réglage de décodage (inactif)",
             "type": "boolean",
             "defaultValue": false,
-            "importance": "basic",
-            "section": "Vidéo et intégrité"
+            "importance": "advanced",
+            "section": "Compatibilité historique",
+            "description": "Conservé pour lire les anciennes définitions. Le décodage d’intégrité se règle avec le bloc « Rechercher les erreurs média »."
           }
         ]
       },

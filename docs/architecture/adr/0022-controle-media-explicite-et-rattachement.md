@@ -1,6 +1,7 @@
 # ADR 0022 — Contrôle média explicite et prérequis de rattachement
 
-- Statut : implemented
+- Statut : superseded
+- Remplacé par : ADR 0027 pour la politique d’intégrité ; les décisions de rattachement et de permissions restent en vigueur.
 - Date : 2026-10-27
 
 ## Contexte
@@ -13,7 +14,7 @@ Le bloc `probe-check-integrity` du plugin `probe` 1.1.0 rend explicite la recher
 
 La présence de ce bloc dans le flow active la politique explicite v1. Chaque résultat modifié doit alors avoir un contrôle réussi pour son SHA-256 exact avant publication. La preuve est aussi vérifiée côté serveur dans les checkpoints durables du bloc, pas seulement dans une variable modifiable par un script. Les reprises peuvent réutiliser une preuve du même résultat. Toute modification de l’empreinte invalide cette preuve. Le contrôle structurel, l’intégrité des transferts, la publication atomique et la politique de conservation/remplacement des sources restent obligatoires.
 
-Les flows historiques sans ce bloc conservent leur décodage intégral obligatoire. Ils ne sont ni réécrits ni silencieusement affaiblis. Pour passer à la politique explicite, l’opérateur publie une nouvelle version contenant le bloc puis l’attribue à une bibliothèque. Les chemins qui contournent le contrôle ne peuvent publier un résultat modifié. Les anciens réglages `verifyDecoding` continuent de demander le contrôle qu’ils décrivent.
+La règle initiale qui imposait le décodage intégral aux flows sans bloc est remplacée par l’ADR 0027 : flows historiques et nouveaux n’effectuent pas de décodage d’intégrité sans `probe-check-integrity`. Les versions publiées ne sont pas réécrites. Les anciens réglages `verifyDecoding` restent lisibles, mais sont ignorés. Les chemins qui contournent un bloc d’intégrité présent ne peuvent publier un résultat modifié sans preuve pour son empreinte exacte.
 
 Les nouveaux flows exigent la capacité `media-integrity-policy/v1` sur tous les workers de leurs segments. Un serveur ou worker ancien ne doit pas exécuter une politique qu’il ne comprend pas. Le catalogue conserve les références `probe` 1.0.0 ; les champs de progression et de remontée des commandes sont optionnels. Les commandes en cours sont remontées avec le renouvellement du bail existant, bornées et liées à l’invocation ; un renouvellement tardif ne réécrit pas un audit terminé.
 
@@ -23,7 +24,7 @@ Pour les permissions personnalisées, le mécanisme pris en charge est un point 
 
 ## Alternatives écartées
 
-Retirer le décodage obligatoire de tous les flows existants affaiblirait silencieusement leur garantie. Conserver uniquement un champ UID/GID ne donnerait aucun droit système réel. Fusionner ou renommer automatiquement des comptes homonymes confondrait des identités ou supprimerait le choix de l’opérateur. Ces trois options sont écartées.
+Rendre facultatif le contrôle des flows historiques sans signaler le changement de garantie a été écarté ; l’ADR 0027 tranche explicitement ce changement au niveau du projet. Conserver uniquement un champ UID/GID ne donnerait aucun droit système réel. Fusionner ou renommer automatiquement des comptes homonymes confondrait des identités ou supprimerait le choix de l’opérateur.
 
 ## Conséquences
 

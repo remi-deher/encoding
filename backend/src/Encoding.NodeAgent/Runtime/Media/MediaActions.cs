@@ -467,7 +467,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         return new(file,[],JsonSerializer.SerializeToElement(new { removed=true,removedTracks=toRemove.ToArray() }));
     }
 
-    public async Task<JsonElement> ValidateOutputAsync(string current,string original,JsonElement before,JsonElement after,IReadOnlyDictionary<string,JsonElement> config,string directory,CancellationToken ct,Func<Task>? verifyDecoding=null)
+    public async Task<JsonElement> ValidateOutputAsync(string current,string original,JsonElement before,JsonElement after,IReadOnlyDictionary<string,JsonElement> config,string directory,CancellationToken ct)
     {
         var issues=new List<string>();
         var sourceStreams=Streams(before).Where(stream=>!IsAttachedPicture(stream)).ToArray();
@@ -609,12 +609,6 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
                 if(!sourceEvents.SequenceEqual(outputEvents,StringComparer.Ordinal))
                 { issues.Add($"Les événements ASS de la piste de sous-titres {i+1} ont changé."); break; }
             }
-        }
-
-        if(Flag(config,"verifyDecoding"))
-        {
-            if(verifyDecoding is not null) await verifyDecoding();
-            else await scanner.DecodeAsync(current,"video",ct);
         }
 
         return JsonSerializer.SerializeToElement(new { valid=issues.Count==0,issues });

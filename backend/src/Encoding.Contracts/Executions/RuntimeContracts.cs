@@ -25,7 +25,8 @@ public sealed record RuntimeLeaseStatus(bool CancelRequested, int Revision, Date
 public sealed record RuntimeSourceState(string? SourceSha256, IReadOnlyDictionary<string,string>? Inputs = null);
 public sealed record RuntimeTransfer(Guid ExecutionId, long Epoch, string Root, string MediaPath, string? SourceSha256,
     string? ResultSha256, string? ResultExtension, bool Publish, IReadOnlyList<string>? InputPaths = null, string MediaType = "video", bool CanWrite = true, int? ReplacementGraceHours = null,
-    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, RuntimeSourceObservation? Observation = null, bool VerifyPublicationAccess = false, bool VerifyReplacementAccess = false);
+    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, RuntimeSourceObservation? Observation = null, bool VerifyPublicationAccess = false, bool VerifyReplacementAccess = false,
+    string? PublicationStepNodeId = null, Guid? PublicationStepInvocationId = null);
 /// <summary>Garde de publication à consulter avant un remplacement de source (architecture 0059) : composant de plugin à invoquer sur le nœud d'accès.</summary>
 public sealed record RuntimePublicationGuard(string PluginId, string PluginVersion, string ComponentId, string ComponentVersion, int ConfigurationSchemaVersion,
     IReadOnlyDictionary<string,JsonElement> Configuration, IReadOnlyDictionary<string,JsonElement> PluginConfiguration, int MaxWaitMinutes,
@@ -48,7 +49,8 @@ public sealed record RuntimePlanStep(string ComponentId, IReadOnlyDictionary<str
 public sealed record RuntimeCheckpoint(string NodeId, Guid InvocationId, string? OutputId, string? NextNodeId, RuntimeContext Context, string? TerminalResult,
     RuntimeHandoffSelector? Handoff = null, RuntimeWait? Wait = null, bool PlacementHandoff = false);
 public sealed record RuntimeCommandLog(Guid Id, string Command, string StandardOutput, string StandardError, int? ExitCode,
-    DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, bool Truncated, decimal? ProgressPercent = null);
+    DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, bool Truncated, decimal? ProgressPercent = null,
+    string? Kind = null, long? BytesProcessed = null);
 public sealed record RuntimeStepCommand(string NodeId, Guid InvocationId, RuntimeCommandLog Command);
 public sealed record ExecutionPipelineStepResponse(string NodeId, string NodeName, Guid InvocationId,
     string ComponentKind, string Status, DateTimeOffset StartedAt, DateTimeOffset? CompletedAt,

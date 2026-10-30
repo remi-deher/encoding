@@ -6,11 +6,11 @@ using Encoding.NodeAgent.Runtime.Media;
 
 namespace Encoding.NodeAgent.Runtime;
 
-public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scanner,MediaActions actions,ProcessToolRunner tools,PluginProcessHost plugins,PublicationGuardRunner guards,Encoding.NodeAgent.Services.IToolCapabilityProbe capabilities,ILogger<RuntimeFlowRunner> logger)
+public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scanner,MediaActions actions,ProcessToolRunner tools,PluginProcessHost plugins,PublicationGuardRunner guards,Encoding.NodeAgent.Services.IToolCapabilityProbe capabilities,LocalPublicationArtifactStore localPublicationArtifacts,ILogger<RuntimeFlowRunner> logger)
 {
     public async Task RunAsync(RuntimeLease lease,RuntimeClient client,CancellationToken stoppingToken)
     {
-        using var commandCapture=RuntimeCommandCapture.Begin();
+        using var commandCapture=RuntimeCommandCapture.Begin(lease.ExecutionId);
         using var job=CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         using var leaseGate=new SemaphoreSlim(1,1);
         var publicationConfirmed = false;
@@ -163,26 +163,16 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 var file=Path.Combine(directory,"input-"+Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(path)))[..16]+Path.GetExtension(path));
                 await client.DownloadAsync(lease.ExecutionId,lease.Epoch,state.Inputs![path],file,job.Token); return file;
             }
-            // ADR 0007 : un seul décodage complet, du fichier exact qui va être publié ; mémorisé par SHA-256 (une reprise le refait).
-            string? decodedSha=null;
-            async Task EnsureDecodedAsync()
-            {
-                await EnsureFilesAsync();
-                if(currentStamp?.Matches(current) != true && await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256)
-                    throw new IOException("Le résultat a changé depuis sa validation ; publication refusée.");
-                if(decodedSha==context.CurrentSha256) return;
-                var hasVideoEncoding = context.VideoEncodings is { Count: > 0 };
-                var duration = context.CurrentMetadata is { } meta && meta.TryGetProperty("format", out var fmt)
-                    && fmt.TryGetProperty("duration", out var dProp) && double.TryParse(dProp.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var dVal) ? dVal : (double?)null;
-                await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token,decodeVideo:hasVideoEncoding,duration:duration);
-                decodedSha=context.CurrentSha256;
-            }
             async Task EnsurePublicationIntegrityAsync()
             {
-                if (!MediaIntegrityPolicy.IsExplicit(lease.Flow)) { await EnsureDecodedAsync(); return; }
                 await EnsureFilesAsync();
                 if (await SafeMediaPaths.DigestAsync(current, job.Token) != context.CurrentSha256)
                     throw new IOException("Le résultat a changé après son contrôle ; publication refusée.");
+                if (!MediaIntegrityPolicy.IsExplicit(lease.Flow))
+                {
+                    await scanner.ValidateAsync(current,lease.Flow.MediaType,context.BeforeMetadata,job.Token);
+                    return;
+                }
                 if (!variables.TryGetValue(MediaIntegrityPolicy.ReceiptVariable, out var value)
                     || value.Deserialize<MediaIntegrityReport>(new JsonSerializerOptions(JsonSerializerDefaults.Web)) is not { Output: "valid" } receipt
                     || receipt.Sha256 != context.CurrentSha256)
@@ -340,7 +330,6 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if (report.Output == "valid")
                         {
                             variables[cacheKey] = serialized;
-                            if (mode == "deep") decodedSha = context.CurrentSha256;
                         }
                     }
                     else if(node.Component.PluginId is "base" or "probe" && id!="probe-validate-output"
@@ -352,7 +341,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     else if(node.Component.PluginId=="probe" && id=="probe-validate-output")
                     {
                         await EnsureScanAsync();
-                        var report=await actions.ValidateOutputAsync(current,original,context.BeforeMetadata!.Value,context.CurrentMetadata!.Value,c,directory,job.Token,EnsureDecodedAsync);
+                        var report=await actions.ValidateOutputAsync(current,original,context.BeforeMetadata!.Value,context.CurrentMetadata!.Value,c,directory,job.Token);
                         output=report.GetProperty("valid").GetBoolean()?"valid":"invalid";
                         variables["validation."+node.Id]=report;
                         var issues=report.GetProperty("issues").EnumerateArray().Select(issue=>issue.GetString()).Where(issue=>!string.IsNullOrWhiteSpace(issue)).ToArray();
@@ -446,6 +435,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             // Rejouable après une reprise (ADR 0004) : une publication déjà demandée ou faite pour ce même résultat est adoptée, jamais refaite.
                             var already=await client.PublicationStateAsync(lease.ExecutionId,lease.Epoch,job.Token);
                             if(already.Requested && already.Sha256!=context.CurrentSha256) throw new PublishResultException("Un autre résultat a déjà été publié pour cette exécution.");
+                            if(lease.SourceNodeId==client.NodeId && lease.SourceRoot is not null)
+                                localPublicationArtifacts.Register(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current);
                             if(!already.Requested)
                                 await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),"succeeded",
                                     "Résultat validé ; publication demandée par le flow.",context.CurrentSha256,context.Extension,context.BeforeMetadata,context.CurrentMetadata,null,commandCapture.Pending(),true),job.Token);
@@ -813,6 +804,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             if(changed && publishedSha is not null) throw new IOException("Le média a été modifié après sa publication ; ce résultat ne peut pas être publié une seconde fois.");
             if(changed && variables.ContainsKey("runtime.inPlaceEdited")) throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
             if(changed) await EnsurePublicationIntegrityAsync();
+            if(changed && lease.SourceNodeId==client.NodeId && lease.SourceRoot is not null)
+                localPublicationArtifacts.Register(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current);
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),failed?"failed":terminal=="deferred"?"deferred":"succeeded",
                 failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null,
                 commandCapture.Pending()),job.Token);

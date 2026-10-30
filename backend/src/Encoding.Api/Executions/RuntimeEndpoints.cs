@@ -143,6 +143,8 @@ public static class RuntimeEndpoints
         });
         group.MapPost("/executions/{id:guid}/renew",async(Guid nodeId,Guid id,RuntimeFence request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.RenewAsync(id,nodeId,request.Epoch,ct,request.Commands) is { } status ? (IResult)Results.Ok(status) : Results.Conflict());
+        group.MapPost("/executions/{id:guid}/operation-logs",async(Guid nodeId,Guid id,RuntimeFence request,RuntimeRepository runtime,CancellationToken ct)=>
+            await runtime.ReportSourceOperationsAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPost("/executions/{id:guid}/placement-plan",async(Guid nodeId,Guid id,RuntimeFence request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.PersistPlacementPlanAsync(id,nodeId,request.Epoch,ct) is { } plan ? Results.Ok(plan) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/source-metadata",async(Guid nodeId,Guid id,ReportSourceMetadata request,RuntimeRepository runtime,CancellationToken ct)=>

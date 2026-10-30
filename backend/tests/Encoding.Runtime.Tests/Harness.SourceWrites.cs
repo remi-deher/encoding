@@ -42,7 +42,7 @@ internal static partial class Harness
             Runner("source-write-agent",out var options);Directory.CreateDirectory(options.DataDirectory);
             await File.WriteAllTextAsync(Path.Combine(options.DataDirectory,"node-identity.json"),JsonSerializer.Serialize(new WorkerIdentityState(a,"fixture","fixture",app.Urls.Single()+"/",Token,true),Json),ct);
             var guards=new PublicationGuardRunner(new NoGuardInvoker(),NullLogger<PublicationGuardRunner>.Instance);
-            using var service=new RuntimeTransferService(options,new WorkerIdentityStore(options),scanner,guards,NullLogger<RuntimeTransferService>.Instance);
+            using var service=new RuntimeTransferService(options,new WorkerIdentityStore(options),scanner,guards,localPublicationArtifacts,NullLogger<RuntimeTransferService>.Instance);
             await service.StartAsync(ct);
             var repository=new RuntimeTransferRepository(db,sourceWrites:sourceWriteBarrier);
             while((await repository.PublicationStateAsync(id,ct)) is not { Published:true }) await Task.Delay(50,ct);
