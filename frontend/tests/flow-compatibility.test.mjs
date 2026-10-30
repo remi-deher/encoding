@@ -27,7 +27,7 @@ test('les anciennes contraintes Nœuds restent éditables sans rendre le nouveau
   const { resolveFlowComponent } = await loadModel('flow-validation');
   const plugin = JSON.parse(
     await readFile(
-      new URL('../../backend/src/Encoding.Api/Flows/Catalog/nodes.json', import.meta.url),
+      new URL('../../backend/tests/Fixtures/StoreCatalog/nodes.json', import.meta.url),
       'utf8',
     ),
   );
