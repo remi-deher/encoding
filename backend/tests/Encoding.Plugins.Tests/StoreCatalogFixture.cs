@@ -16,7 +16,11 @@ internal static class StoreCatalogFixture
     {
         var registry = new FlowComponentRegistry(configuration ?? new ConfigurationBuilder().Build());
         var directory = Path.Combine(Support.RepositoryRoot(), "backend", "tests", "Fixtures", "StoreCatalog");
-        foreach (var file in Directory.EnumerateFiles(directory, "*.json").Order(StringComparer.Ordinal))
+        // example.json is the separately embedded third-party example used by plugin tests,
+        // not a package from the Store catalog.
+        foreach (var file in Directory.EnumerateFiles(directory, "*.json")
+                     .Where(file => !string.Equals(Path.GetFileName(file), "example.json", StringComparison.Ordinal))
+                     .Order(StringComparer.Ordinal))
         {
             var manifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(file), Json)
                 ?? throw new InvalidOperationException($"Manifeste de fixture illisible : {Path.GetFileName(file)}");
