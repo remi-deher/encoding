@@ -29,7 +29,7 @@ public static class StandardFlowTemplateSeeder
     public static async Task EnsureAsync(DbDataSource dataSource, FlowComponentRegistry registry,
         FlowDefinitionValidator validator, CancellationToken ct, ILogger? logger = null)
     {
-        List<Template> templates;
+        IReadOnlyList<Template> templates;
         try { templates = Build(registry); }
         catch (InvalidOperationException exception) when (exception.Message.StartsWith("Le composant intégré", StringComparison.Ordinal))
         {
