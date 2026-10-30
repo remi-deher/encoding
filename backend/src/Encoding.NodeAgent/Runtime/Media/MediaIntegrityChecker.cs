@@ -86,7 +86,7 @@ public sealed class MediaIntegrityChecker(ProcessToolRunner tools, MediaScanner 
         args.AddRange(hardware);
         args.AddRange(["-i", path]);
         if (length is { } seconds) args.AddRange(["-t", seconds.ToString("0.###", CultureInfo.InvariantCulture)]);
-        args.AddRange(["-map", "0:v?", "-map", "0:a?", "-f", "null", "-"]);
+        args.AddRange(["-map", "0:v?", "-map", "0:a?", "-fps_mode", "vfr", "-f", "null", "-"]);
         return tools.RunAsync(executable, args, Path.GetDirectoryName(path)!, TimeSpan.FromHours(6), ct, trackProgress: true, progressDurationSeconds: length ?? duration);
     }
 

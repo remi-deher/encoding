@@ -53,7 +53,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             }
             if(selected.Length>0) foreach(var track in selected) args.AddRange(["-map","0:"+track]);
             else if(Text(config,"trackType","all")!="all") args.AddRange(["-map","0:"+Text(config,"trackType")[0]+"?"]);
-            args.AddRange(["-f","null","-"]); await tools.CheckedAsync("ffmpeg",args,directory,ct); return new(null,[]);
+            args.AddRange(["-fps_mode","vfr","-f","null","-"]); await tools.CheckedAsync("ffmpeg",args,directory,ct); return new(null,[]);
         }
         if(id is "base-video-thumbnail" or "video-thumbnail")
         {

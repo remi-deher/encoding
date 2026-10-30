@@ -25,13 +25,6 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
                    AND e2.state='queued' AND e2.flow_name=v.definition->>'name'
                    AND e2.flow_version=a.flow_version
                  ORDER BY e2.updated_at DESC,e2.id DESC LIMIT 1),
-                (SELECT q2.execution_id FROM task_quarantines q2
-                 JOIN task_ownership o2 ON o2.execution_id=q2.execution_id
-                 JOIN executions e2 ON e2.id=q2.execution_id
-                 WHERE o2.library_id=m.library_id AND o2.media_key=upper(m.relative_path)
-                   AND o2.state='quarantined' AND e2.flow_name=v.definition->>'name'
-                   AND e2.flow_version=a.flow_version
-                 ORDER BY q2.created_at DESC,e2.updated_at DESC LIMIT 1),
                 (SELECT e2.id FROM execution_work w2 JOIN executions e2 ON e2.id=w2.execution_id
                  WHERE w2.library_id=m.library_id AND w2.media_key=upper(m.relative_path)
                    AND NOT EXISTS(SELECT 1 FROM task_ownership conflict WHERE conflict.execution_id=e2.id AND conflict.state='quarantined')
@@ -42,6 +35,13 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
                    AND NOT EXISTS(SELECT 1 FROM task_ownership conflict WHERE conflict.execution_id=e2.id AND conflict.state='quarantined')
                    AND e2.flow_name=v.definition->>'name' AND e2.flow_version=a.flow_version
                  ORDER BY e2.updated_at DESC,e2.id DESC LIMIT 1),
+                (SELECT q2.execution_id FROM task_quarantines q2
+                 JOIN task_ownership o2 ON o2.execution_id=q2.execution_id
+                 JOIN executions e2 ON e2.id=q2.execution_id
+                 WHERE o2.library_id=m.library_id AND o2.media_key=upper(m.relative_path)
+                   AND o2.state='quarantined' AND e2.flow_name=v.definition->>'name'
+                   AND e2.flow_version=a.flow_version
+                 ORDER BY q2.created_at DESC,e2.updated_at DESC LIMIT 1),
                 (SELECT r.execution_id FROM library_processing_receipts r
                  WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=a.flow_id
                    AND r.flow_version=a.flow_version AND r.byte_length=m.byte_length

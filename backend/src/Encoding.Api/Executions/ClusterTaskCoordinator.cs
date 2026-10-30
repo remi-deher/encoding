@@ -255,34 +255,51 @@ public sealed class ClusterTaskCoordinator(DbDataSource db,ClusterPeerIdentitySt
                 if(!await r.ReadAsync(ct)) return new(false,"Le conflit d’origine n’est plus présent dans cette bibliothèque.");
                 oldOwner=r.GetGuid(0);ownershipState=r.GetString(1);rootState=r.GetString(2);publishedPath=r.IsDBNull(3)?null:r.GetString(3);publicationRequested=!r.IsDBNull(4)&&r.GetBoolean(4);
             }
-            if(oldOwner==identity.PeerId||ownershipState is not ("active" or "quarantined")) return new(false,"Le conflit ne dépend pas d’un propriétaire distant neutralisable.");
+            if(ownershipState is not ("active" or "quarantined")) return new(false,"Le conflit ne dépend pas d’un propriétaire distant neutralisable.");
+            if(oldOwner==identity.PeerId && rootState is not ("cancelled" or "failed")) return new(false,"Le conflit ne dépend pas d’un propriétaire distant neutralisable.");
             if(rootState=="succeeded"||publishedPath is not null||publicationRequested) return new(false,"Une publication est confirmée ou incertaine ; vérifiez le média avant toute nouvelle tentative.");
 
             await using(var sibling=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id LEFT JOIN execution_work w ON w.execution_id=e.id WHERE o.library_id=@library AND o.media_key=@media AND o.execution_id<>@candidate AND o.execution_id<>@root AND (e.state='succeeded' OR w.published_path IS NOT NULL OR COALESCE(w.publication_requested,FALSE) OR e.state IN ('queued','running','cancelling')))",c,tx))
             {sibling.Parameters.AddWithValue("library",library);sibling.Parameters.AddWithValue("media",mediaKey);sibling.Parameters.AddWithValue("candidate",id);sibling.Parameters.AddWithValue("root",root);if(await sibling.ScalarBoolAsync(ct)) return new(false,"Une autre tentative du même média peut encore produire ou avoir publié un résultat ; réconciliez-la avant de forcer la reprise.");}
 
-            await using(var existingChild=Sql.Command("SELECT id FROM executions WHERE retry_of=@id",c,tx))
-            {existingChild.Parameters.AddWithValue("id",id);if(await existingChild.ScalarGuidAsync(ct) is {} child)return new(false,$"Une tentative liée ({child:D}) existe déjà ; actualisez Activité avant de relancer.");}
+            await using(var existingChild=Sql.Command("SELECT id,state FROM executions WHERE retry_of=@id",c,tx))
+            {
+                existingChild.Parameters.AddWithValue("id",id);await using var r=await existingChild.ExecuteReaderAsync(ct);
+                if(await r.ReadAsync(ct))
+                {
+                    var child=r.GetGuid(0);var childState=r.GetString(1);await r.DisposeAsync();
+                    if(childState is not ("cancelled" or "failed")) return new(false,$"Une tentative liée ({child:D}) existe déjà ; actualisez Activité avant de relancer.");
+                    await using var unlink=Sql.Command("UPDATE executions SET retry_of=NULL WHERE id=@child",c,tx);
+                    unlink.Parameters.AddWithValue("child",child);await unlink.ExecuteNonQueryAsync(ct);
+                }
+            }
 
             await using(var path=Sql.Command("SELECT relative_path FROM library_media WHERE library_id=@library AND upper(relative_path)=@media LIMIT 1",c,tx))
             {path.Parameters.AddWithValue("library",library);path.Parameters.AddWithValue("media",mediaKey);if(await path.ExecuteScalarAsync(ct) is not string source)return new(false,"Le fichier source n’est plus présent dans l’inventaire de la bibliothèque.");sourcePath=source;}
 
-            await using(var existing=Sql.Command("SELECT author_peer_id,recorded_at FROM task_neutralizations WHERE peer_id=@peer AND released_at IS NULL",c,tx))
+            if(oldOwner==identity.PeerId || rootState is "cancelled" or "failed")
             {
-                existing.Parameters.AddWithValue("peer",oldOwner);await using var r=await existing.ExecuteReaderAsync(ct);
-                if(await r.ReadAsync(ct))
-                {
-                    if(r.GetGuid(0)!=identity.PeerId) return new(false,"Ce serveur est déjà neutralisé par une autre décision ; faites converger les journaux avant de continuer.");
-                    alreadyNeutralized=true;neutralizedAt=r.GetFieldValue<DateTimeOffset>(1);
-                }
+                alreadyNeutralized=true;neutralizedAt=clock.GetUtcNow()-TaskCoordinationProjection.RecoveryGrace;
             }
-            if(!alreadyNeutralized)
+            else
             {
-                Guid cluster;
-                await using(var admitted=Sql.Command("SELECT cluster_id FROM cluster_peer_admissions WHERE peer_id=@peer AND revoked_at IS NULL",c,tx))
-                {admitted.Parameters.AddWithValue("peer",oldOwner);if(await admitted.ScalarGuidAsync(ct) is not {} clusterId) return new(false,"Le serveur propriétaire n’est plus admis dans ce cluster.");cluster=clusterId;}
-                neutralizedAt=clock.GetUtcNow();
-                await AppendAsync(new(2,Guid.NewGuid(),cluster,identity.PeerId,"neutralize",Guid.Empty,0,Guid.Empty,SubjectPeerId:oldOwner,RecordedAt:neutralizedAt,Reason:request.Reason.Trim()),c,tx,ct);
+                await using(var existing=Sql.Command("SELECT author_peer_id,recorded_at FROM task_neutralizations WHERE peer_id=@peer AND released_at IS NULL",c,tx))
+                {
+                    existing.Parameters.AddWithValue("peer",oldOwner);await using var r=await existing.ExecuteReaderAsync(ct);
+                    if(await r.ReadAsync(ct))
+                    {
+                        if(r.GetGuid(0)!=identity.PeerId) return new(false,"Ce serveur est déjà neutralisé par une autre décision ; faites converger les journaux avant de continuer.");
+                        alreadyNeutralized=true;neutralizedAt=r.GetFieldValue<DateTimeOffset>(1);
+                    }
+                }
+                if(!alreadyNeutralized)
+                {
+                    Guid cluster;
+                    await using(var admitted=Sql.Command("SELECT cluster_id FROM cluster_peer_admissions WHERE peer_id=@peer AND revoked_at IS NULL",c,tx))
+                    {admitted.Parameters.AddWithValue("peer",oldOwner);if(await admitted.ScalarGuidAsync(ct) is not {} clusterId) return new(false,"Le serveur propriétaire n’est plus admis dans ce cluster.");cluster=clusterId;}
+                    neutralizedAt=clock.GetUtcNow();
+                    await AppendAsync(new(2,Guid.NewGuid(),cluster,identity.PeerId,"neutralize",Guid.Empty,0,Guid.Empty,SubjectPeerId:oldOwner,RecordedAt:neutralizedAt,Reason:request.Reason.Trim()),c,tx,ct);
+                }
             }
 
             var next=Guid.NewGuid();var detail="Nouvelle exécution créée depuis la source après interruption.";
