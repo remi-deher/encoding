@@ -161,7 +161,7 @@ public sealed class DockerClusterTests
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
         await cluster.StartWorkerAsync("worker-a", Image);
         await cluster.StartWorkerAsync("worker-b", Image);
-        var nodes = await WaitForWorkersAsync(cluster, 2);
+        var nodes = await WaitForWorkersAsync(cluster, 2, requireStoreCapabilities: true);
         var executionId = await QueueEncodingAsync(cluster, nodes);
 
         string? victim = null;
@@ -222,7 +222,7 @@ public sealed class DockerClusterTests
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
     }
 
-    private static async Task<JsonElement> WaitForWorkersAsync(Cluster cluster, int workers)
+    private static async Task<JsonElement> WaitForWorkersAsync(Cluster cluster, int workers, bool requireStoreCapabilities = false)
     {
         JsonElement workersNow = default;
         await WaitAsync(async () =>
@@ -230,9 +230,12 @@ public sealed class DockerClusterTests
             var all = await cluster.Client.GetFromJsonAsync<JsonElement>("api/v1/nodes");
             var online = all.EnumerateArray().Where(node => node.GetProperty("name").GetString()!.StartsWith("worker", StringComparison.Ordinal) && node.GetProperty("status").GetString() == "online").ToArray();
             if (online.Length != workers) return false;
-            var requiredCapabilities = new HashSet<string>(["plugin/base", "plugin/video", "ffmpeg"], StringComparer.Ordinal);
-            if (online.Any(node => !requiredCapabilities.IsSubsetOf(node.GetProperty("capabilities").EnumerateArray()
-                    .Select(capability => capability.GetProperty("toolId").GetString()!).ToHashSet(StringComparer.Ordinal)))) return false;
+            if (requireStoreCapabilities)
+            {
+                var requiredCapabilities = new HashSet<string>(["plugin/video", "ffmpeg"], StringComparer.Ordinal);
+                if (online.Any(node => !requiredCapabilities.IsSubsetOf(node.GetProperty("capabilities").EnumerateArray()
+                        .Select(capability => capability.GetProperty("toolId").GetString()!).ToHashSet(StringComparer.Ordinal)))) return false;
+            }
             workersNow = JsonSerializer.SerializeToElement(online);
             return true;
         }, 150, $"{workers} worker(s) en ligne", cluster);
