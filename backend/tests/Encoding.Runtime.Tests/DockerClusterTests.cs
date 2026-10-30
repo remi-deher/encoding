@@ -165,15 +165,17 @@ public sealed class DockerClusterTests
         var executionId = await QueueEncodingAsync(cluster, nodes);
 
         string? victim = null;
+        string? executionDiagnostic = null;
         await WaitAsync(async () =>
         {
             var current = (await cluster.Client.GetFromJsonAsync<JsonElement>("api/v1/executions")).GetProperty("executions")[0];
+            executionDiagnostic = $"État : {current.GetProperty("state").GetString()} ; nœud : {current.GetProperty("node")} ; détail : {current.GetProperty("detail")}";
             if (current.GetProperty("state").GetString() != "running" || current.GetProperty("node").ValueKind != JsonValueKind.String) return false;
             var name = current.GetProperty("node").GetString()!;
             if (!(await cluster.ProcessesAsync(cluster.ContainerOf(name))).Contains("ffmpeg", StringComparison.Ordinal)) return false;
             victim = name;
             return true;
-        }, 240, "ffmpeg dans le conteneur du worker", cluster);
+        }, 240, "ffmpeg dans le conteneur du worker", cluster, () => executionDiagnostic);
 
         await DockerAsync("kill", cluster.ContainerOf(victim!));   // arrêt brutal du conteneur entier (SIGKILL), sans fermeture propre
 
@@ -289,7 +291,7 @@ public sealed class DockerClusterTests
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.OtherRead | UnixFileMode.OtherWrite);
     }
 
-    private static async Task WaitAsync(Func<Task<bool>> condition, int seconds, string description, Cluster? cluster = null)
+    private static async Task WaitAsync(Func<Task<bool>> condition, int seconds, string description, Cluster? cluster = null, Func<string?>? diagnostic = null)
     {
         var timer = Stopwatch.StartNew();
         while (timer.Elapsed < TimeSpan.FromSeconds(seconds))
@@ -298,7 +300,7 @@ public sealed class DockerClusterTests
             catch (Exception exception) when (exception is HttpRequestException or JsonException or TaskCanceledException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException or ArgumentOutOfRangeException) { }
             await Task.Delay(1000);
         }
-        throw new TimeoutException($"Délai dépassé : {description}\n{(cluster is null ? "" : await cluster.LogsAsync())}");
+        throw new TimeoutException($"Délai dépassé : {description}\n{diagnostic?.Invoke()}\n{(cluster is null ? "" : await cluster.LogsAsync())}");
     }
 
     private static int FreePort()
