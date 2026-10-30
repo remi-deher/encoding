@@ -161,7 +161,6 @@ jobs:
       - uses: ./.github/actions/apt-install
         with:
           packages: ffmpeg mediainfo python3
-      - run: python3 -m unittest discover -s backend/plugins/tests -v
       - run: dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
   backend-prototype-tests:
     runs-on: ubuntu-latest

@@ -15,7 +15,7 @@ internal static class StoreCatalogFixture
     public static FlowComponentRegistry Create(IConfiguration? configuration = null)
     {
         var registry = new FlowComponentRegistry(configuration ?? new ConfigurationBuilder().Build());
-        var directory = Path.Combine(Harness.RepositoryRoot(), "backend", "tests", "Fixtures", "StoreCatalog");
+        var directory = Path.Combine(Harness.RepositoryRoot(), "tests", "Fixtures", "StoreCatalog");
         foreach (var file in Directory.EnumerateFiles(directory, "*.json").Order(StringComparer.Ordinal))
         {
             var manifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(file), Json)
