@@ -87,7 +87,7 @@ Les contrats de préparation se trouvent dans Encoding.Contracts/Flows et Encodi
 
 GET /api/v1/flows/components expose les manifestes installés (Base 1.0.0, 44 composants). POST /api/v1/flows/validate reçoit le document FlowDefinition et retourne isValid et issues ; une définition invalide reçoit HTTP 422. Les erreurs comprennent code, path (JSON Pointer) et message. POST /api/v1/executions utilise la même validation et contrôle la concordance de flowVersion. Il n’accepte plus un objet JSON arbitraire comme définition.
 
-Le manifeste déclaratif Base est dans src/Encoding.Api/Flows/Catalog/base.json. Le registre le charge au démarrage ; une absence ou incohérence bloque le démarrage. La présence d’un descripteur ne signifie pas qu’un handler d’exécution est disponible. Les manifestes tiers configurés sont chargés comme descripteurs ; leur exécution reste dans un processus séparé sur le worker.
+Les manifestes des composants historiques sont distribués par le Store et installés explicitement sur chaque serveur. Le registre démarre sans composant préinstallé ; installer un manifeste ne garantit pas à lui seul qu'un handler existe. Les composants natifs autorisés sont exécutés par les handlers C# du moteur ; les plugins tiers configurés sont chargés comme descripteurs et s'exécutent dans un processus séparé sur le worker.
 
 ## Bibliothèque de scripts
 

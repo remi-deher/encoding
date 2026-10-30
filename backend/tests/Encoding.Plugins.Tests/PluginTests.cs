@@ -71,7 +71,7 @@ internal static class PluginTests
         Console.WriteLine("PASS: Sonarr/Radarr webhook payload parsing.");
     }
 
-    /// <summary>Le serveur charge les manifestes livrés (Sonarr, Radarr) et celui d’un plugin tiers copié de l’exemple.</summary>
+    /// <summary>Le registre charge les manifestes de fixture du Store et celui d’un plugin tiers copié de l’exemple.</summary>
     private static void CatalogAcceptsManifests()
     {
         var plugins = Path.Combine(RepositoryRoot(), "backend", "tests", "Fixtures", "StoreCatalog");
@@ -84,7 +84,7 @@ internal static class PluginTests
             Check(registry.Plugins.Single(plugin => plugin.Id == "example").Components.Count == 2, "The server catalog accepts the third-party manifest.");
             Check(registry.Plugins.Where(plugin => plugin.Id != "example").SelectMany(plugin => plugin.Components)
                 .All(component => component.Category is not null && FlowComponentCategories.Ids.Contains(component.Category)),
-                "Every built-in flow component declares a recognized functional category.");
+                "Every Store component fixture declares a recognized functional category.");
             foreach (var id in new[] { "sonarr", "radarr" })
             {
                 var plugin = registry.Plugins.Single(item => item.Id == id);
@@ -95,7 +95,7 @@ internal static class PluginTests
                 Check(registry.Plugins.Single(item => item.Id == id).ConfigurationSchema!.Fields.Any(field => field.Id == "pathMappings"), id + " exposes the path mapping.");
         }
         finally { Directory.Delete(directory, true); }
-        Console.WriteLine("PASS: server catalog accepts the shipped and the example plugin manifests.");
+        Console.WriteLine("PASS: store catalog fixtures and third-party plugin manifests are accepted.");
     }
 
     private static void InvalidManifestsAreRejected()
@@ -121,7 +121,7 @@ internal static class PluginTests
             ["unsupported host contract"]=unsupported.ToJsonString(),
             ["duplicate component identity"]=duplicate.ToJsonString(),
             ["unsafe plugin id"]=badId.ToJsonString(),
-            ["id of a built-in plugin"]=shadowsBuiltIn.ToJsonString(),
+            ["id of an already installed plugin"]=shadowsBuiltIn.ToJsonString(),
             ["non semantic version"]=badVersion.ToJsonString(),
             ["unknown field type"]=badSchema.ToJsonString(),
             ["unknown component category"]=badCategory.ToJsonString(),
@@ -143,7 +143,7 @@ internal static class PluginTests
                 var registry=StoreCatalogFixture.Create(configuration);
                 Check(registry.Rejected.Count==1 && registry.Rejected[0].File=="invalid.json" && registry.Rejected[0].Reason.Length>0,"The catalog reports the invalid manifest without failing: "+name);
                 Check(registry.Plugins.All(plugin=>plugin.Id!="../evil") && registry.Plugins.Any(plugin=>plugin.Id=="second-example"),"A broken manifest does not hide a valid one: "+name);
-                Check(registry.Plugins.Count(plugin=>plugin.Id=="plex")==1,"A third-party manifest never replaces a built-in plugin: "+name);
+                Check(registry.Plugins.Count(plugin=>plugin.Id=="plex")==1,"A third-party manifest never replaces an installed plugin: "+name);
             }
             finally { Directory.Delete(directory,true); }
         }

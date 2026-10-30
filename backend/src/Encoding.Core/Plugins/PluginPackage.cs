@@ -8,7 +8,7 @@ namespace Encoding.Core.Plugins;
 /// <summary>Paquet refusé : le message est destiné à l'administrateur qui l'importe.</summary>
 public sealed class PluginPackageException(string message) : Exception(message);
 
-/// <summary>Runtime déclaré par <c>plugin.json</c> : <c>python3</c> ou <c>node</c>, avec un point d'entrée relatif au paquet.</summary>
+/// <summary>Runtime déclaré par <c>plugin.json</c> : <c>python3</c> ou <c>node</c> avec un point d'entrée, ou <c>native</c> sans processus pour une famille de composants moteur autorisée.</summary>
 public sealed record PluginRuntimeSpec(string Type, string Entrypoint);
 
 public sealed record PluginPackageInfo(PluginManifest Manifest, PluginRuntimeSpec Runtime, string Sha256, int Entries, long UncompressedBytes);
@@ -27,7 +27,7 @@ public static class PluginPackage
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly string[] Runtimes = ["python3", "node", "native"];
     public static readonly IReadOnlySet<string> NativeComponentPluginIds = new HashSet<string>(StringComparer.Ordinal)
-        { "video", "audio", "subtitles", "mkv", "images", "probe", "ai" };
+        { "base", "nodes", "conditions", "video", "audio", "subtitles", "mkv", "images", "probe", "ai" };
     public static readonly IReadOnlySet<string> HistoricalOfficialPluginIds = new HashSet<string>(StringComparer.Ordinal)
         { "plex", "sonarr", "radarr", "jellyfin" };
 
@@ -62,7 +62,7 @@ public static class PluginPackage
             manifest = JsonSerializer.Deserialize<PluginManifest>(raw, Json) ?? throw new PluginPackageException("plugin.json est vide.");
             using var document = JsonDocument.Parse(raw);
             if (!document.RootElement.TryGetProperty("runtime", out var runtimeElement) || runtimeElement.ValueKind != JsonValueKind.Object)
-                throw new PluginPackageException("plugin.json doit déclarer « runtime » ({ \"type\": \"python3\" | \"node\", \"entrypoint\": \"main.py\" }).");
+                throw new PluginPackageException("plugin.json doit déclarer « runtime » ({ \"type\": \"python3\" | \"node\", \"entrypoint\": \"main.py\" }, ou { \"type\": \"native\", \"entrypoint\": \"\" }).");
             runtime = new PluginRuntimeSpec(
                 runtimeElement.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String ? type.GetString()! : "",
                 runtimeElement.TryGetProperty("entrypoint", out var entry) && entry.ValueKind == JsonValueKind.String ? entry.GetString()! : "");

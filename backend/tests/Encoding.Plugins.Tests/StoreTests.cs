@@ -118,7 +118,7 @@ internal static class StoreTests
             }
             Check((await Refused(Package("acme.tools", "1.0.0", m => m["name"] = "Modifié"))).Contains("immuable"), "A published version cannot be replaced by different content.");
             Check((await Refused(Package("official.sneaky", "1.0.0"))).Contains("official"), "The official namespace is reserved to the official repository.");
-            Check((await Refused(Package("plex", "1.0.0"))).Length > 0 && (await Refused(Package("acme.tools", "0.9.0"))).Contains("plus récente"), "Downgrades and built-in ids are refused.");
+            Check((await Refused(Package("plex", "1.0.0"))).Length > 0 && (await Refused(Package("acme.tools", "0.9.0"))).Contains("plus récente"), "Downgrades and official historical ids are refused.");
             Check((await Refused(Package("acme.other", "1.0.0", m => m["components"]![0]!["id"] = "acme-tools-tag-file"))).Contains("existe déjà"), "A component id cannot shadow another plugin's component.");
 
             var v2 = Package("acme.tools", "1.1.0");
@@ -138,7 +138,7 @@ internal static class StoreTests
             Check(tamperedRegistry.Rejected.Any(item => item.File.StartsWith("acme.tools@")) && tamperedRegistry.Plugins.All(item => item.Id != "acme.tools"), "A package altered on disk is reported and not loaded.");
 
             Check(await store.RemoveAsync("acme.tools") && registry.Plugins.All(item => item.Id != "acme.tools") && registry.Resolve(oldReference) is null, "Removing a package unregisters it.");
-            Check(!registry.Uninstall("plex") && registry.Plugins.Any(item => item.Id == "plex"), "A built-in plugin can never be uninstalled.");
+            Check(registry.Uninstall("plex") && registry.Plugins.All(item => item.Id != "plex"), "A Store-installed plugin can be uninstalled.");
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
         Console.WriteLine("PASS: store lifecycle (hot install, idempotence, immutability, namespaces, update compatibility, reload, tamper detection, removal).");

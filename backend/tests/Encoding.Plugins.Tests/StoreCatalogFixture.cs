@@ -10,7 +10,7 @@ internal static class StoreCatalogFixture
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly HashSet<string> Native = new(StringComparer.Ordinal)
-        { "video", "audio", "subtitles", "mkv", "images", "probe", "ai" };
+        { "base", "nodes", "conditions", "video", "audio", "subtitles", "mkv", "images", "probe", "ai" };
 
     public static FlowComponentRegistry Create(IConfiguration? configuration = null)
     {
