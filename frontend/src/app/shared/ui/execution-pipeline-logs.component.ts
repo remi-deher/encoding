@@ -15,7 +15,7 @@ import { NotificationService } from '../services/notification.service';
       <header class="pipeline-logs__header">
         <div>
           <h3>Pipeline d’exécution</h3>
-          <p>{{ stepCount() }} étape(s) · {{ commandCount() }} commande(s)</p>
+          <p>{{ stepCount() }} étape(s) · {{ commandCount() }} commande(s) · {{ operationCount() }} opération(s)</p>
         </div>
         <div class="pipeline-logs__actions" aria-label="Mode d’affichage et export des logs">
           <div class="pipeline-logs__view-toggle" role="group" aria-label="Affichage du pipeline">
@@ -39,7 +39,7 @@ import { NotificationService } from '../services/notification.service';
           <button
             matButton="outlined"
             type="button"
-            [disabled]="commandCount() === 0"
+            [disabled]="logCount() === 0"
             (click)="copyLogs()"
           >
             Copier les logs
@@ -47,7 +47,7 @@ import { NotificationService } from '../services/notification.service';
           <button
             matButton="outlined"
             type="button"
-            [disabled]="commandCount() === 0"
+            [disabled]="logCount() === 0"
             (click)="exportLogs()"
           >
             Exporter
@@ -95,9 +95,14 @@ import { NotificationService } from '../services/notification.service';
                       <ol class="pipeline-commands">
                         @for (command of step.commands; track command.id) {
                           <li class="pipeline-command">
-                            <code class="pipeline-command__line">{{ command.command }}</code>
+                            <code class="pipeline-command__line">{{ command.kind === 'operation' ? 'Opération : ' + command.command : command.command }}</code>
                             <p class="pipeline-command__status">
-                              @if (command.exitCode === null) {
+                              @if (command.kind === 'operation') {
+                                {{ command.finishedAt === null ? 'Opération en cours' : command.exitCode === 0 ? 'Opération terminée' : 'Opération échouée' }}
+                                @if (command.bytesProcessed !== null && command.bytesProcessed !== undefined) {
+                                  · {{ formatBytes(command.bytesProcessed) }}
+                                }
+                              } @else if (command.exitCode === null) {
                                 {{
                                   command.finishedAt === null &&
                                   (step.status === 'running' || step.status === 'cancelling')
@@ -142,7 +147,7 @@ import { NotificationService } from '../services/notification.service';
                     </section>
                   }
                 } @else if (step.commands.length) {
-                  <p class="pipeline-step__command-count">{{ step.commands.length }} commande(s)</p>
+                  <p class="pipeline-step__command-count">{{ stepLogSummary(step) }}</p>
                 }
               </article>
               @if (nextExecutedStep(step, $index); as next) {
@@ -335,6 +340,12 @@ export class ExecutionPipelineLogsComponent {
   private readonly notifications = inject(NotificationService);
   protected readonly stepCount = computed(() => this.steps().length);
   protected readonly commandCount = computed(() =>
+    this.steps().reduce((count, step) => count + step.commands.filter((entry) => entry.kind !== 'operation').length, 0),
+  );
+  protected readonly operationCount = computed(() =>
+    this.steps().reduce((count, step) => count + step.commands.filter((entry) => entry.kind === 'operation').length, 0),
+  );
+  protected readonly logCount = computed(() =>
     this.steps().reduce((count, step) => count + step.commands.length, 0),
   );
 
@@ -372,6 +383,27 @@ export class ExecutionPipelineLogsComponent {
     return seconds >= 60
       ? `${Math.floor(seconds / 60)} min ${seconds % 60} s`
       : `${(elapsed / 1000).toFixed(elapsed < 10_000 ? 1 : 0)} s`;
+  }
+
+  protected formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} o`;
+    const units = ['Kio', 'Mio', 'Gio', 'Tio'];
+    let value = bytes;
+    let unit = -1;
+    do {
+      value /= 1024;
+      unit += 1;
+    } while (value >= 1024 && unit < units.length - 1);
+    return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+  }
+
+  protected stepLogSummary(step: ExecutionPipelineStep): string {
+    const commands = step.commands.filter((entry) => entry.kind !== 'operation').length;
+    const operations = step.commands.length - commands;
+    return [
+      commands ? `${commands} commande(s)` : '',
+      operations ? `${operations} opération(s)` : '',
+    ].filter(Boolean).join(' · ');
   }
 
   protected duration(step: ExecutionPipelineStep): string {
@@ -433,12 +465,15 @@ export class ExecutionPipelineLogsComponent {
 
   private formatCommand(command: RuntimeCommandLog): string {
     const status = command.exitCode === null ? 'code indisponible' : `code ${command.exitCode}`;
+    const operation = command.kind === 'operation';
     return [
-      `$ ${command.command}`,
+      operation ? `Opération : ${command.command}` : `$ ${command.command}`,
       `Début : ${new Date(command.startedAt).toLocaleString('fr-FR')}`,
       `Fin : ${command.finishedAt ? new Date(command.finishedAt).toLocaleString('fr-FR') : 'inconnue'}`,
       `Durée : ${this.commandDuration(command) ?? 'en cours'}`,
-      `Résultat : ${status}${command.truncated ? ' (sortie tronquée)' : ''}`,
+      operation
+        ? `État : ${command.finishedAt === null ? 'en cours' : command.exitCode === 0 ? 'terminée' : 'échouée'}${command.bytesProcessed == null ? '' : ` · Volume : ${this.formatBytes(command.bytesProcessed)}`}`
+        : `Résultat : ${status}${command.truncated ? ' (sortie tronquée)' : ''}`,
       command.standardOutput ? `\n--- Sortie standard ---\n${command.standardOutput}` : '',
       command.standardError ? `\n--- Erreur standard ---\n${command.standardError}` : '',
     ]

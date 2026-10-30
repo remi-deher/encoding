@@ -615,6 +615,15 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         var result=new RuntimeLeaseStatus(r.GetBoolean(0),r.GetInt32(1),r.GetFieldValue<DateTimeOffset>(2)); await r.DisposeAsync(); await tx.CommitAsync(ct); return result;
     }
 
+    public async Task<bool> ReportSourceOperationsAsync(Guid id,Guid source,RuntimeFence request,CancellationToken ct)
+    {
+        using var priority=Encoding.Api.Infrastructure.Data.Sqlite.SqliteWriter.Prioritize();
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        if(!await FenceAsync(id,source,request.Epoch,c,tx,ct,true)) return false;
+        if(!await RuntimeCommandJournal.StoreAsync(id,request.Commands,c,tx,ct,allowCompletedOperations:true)) return false;
+        await tx.CommitAsync(ct); return true;
+    }
+
     /// <summary>Publie les métadonnées d'origine dès le sondage ; ne remplace jamais une valeur déjà enregistrée.</summary>
     public async Task<FlowPlacementPlan?> RecordSourceMetadataAsync(Guid id,Guid worker,long epoch,JsonElement metadata,CancellationToken ct)
     {
@@ -754,14 +763,13 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             || cp.Context.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(cp.Context.Extension,"^\\.[a-zA-Z0-9]{1,10}$")
             || commands.Count>64 || commands.Any(command=>!ValidCommandLog(command))
             || commands.Select(command=>command.Id).Distinct().Count()!=commands.Count) return false;
-        var serializedCommands=JsonSerializer.Serialize(commands,Json);
-        if(System.Text.Encoding.UTF8.GetByteCount(serializedCommands)>524288) return false;
+        if(JsonSerializer.SerializeToUtf8Bytes(commands,Json).Length>524288) return false;
         var serialized=JsonSerializer.Serialize(cp,Json); if(serialized.Length>1048576) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         // A lost handoff response can be retried after its lease has already been revoked.
         // Only the exact checkpoint, actor and completed epoch can acknowledge this duplicate.
         await using(var duplicate=Sql.Command("""
-          SELECT s.checkpoint=@checkpoint AND s.command_logs=@commands FROM execution_steps s JOIN execution_work w ON w.execution_id=s.execution_id
+          SELECT s.checkpoint=@checkpoint FROM execution_steps s JOIN execution_work w ON w.execution_id=s.execution_id
           JOIN executions e ON e.id=w.execution_id
           WHERE s.execution_id=@id AND s.node_id=@node AND s.invocation_id=@invocation
             AND s.completed_at IS NOT NULL AND s.completed_epoch=@epoch AND s.completed_worker_node_id=@worker
@@ -771,7 +779,6 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             duplicate.Parameters.AddWithValue("id",id); duplicate.Parameters.AddWithValue("node",cp.NodeId);
             duplicate.Parameters.AddWithValue("invocation",cp.InvocationId); duplicate.Parameters.AddWithValue("epoch",request.Epoch);
             duplicate.Parameters.AddWithValue("worker",worker); duplicate.Parameters.AddWithValue("checkpoint",SqlKind.Json,serialized);
-            duplicate.Parameters.AddWithValue("commands",SqlKind.Json,serializedCommands);
             if(await duplicate.ScalarNullableBoolAsync(ct) is {} same) return same;
         }
         if(!await FenceAsync(id,worker,request.Epoch,c,tx,ct)) return false;
@@ -844,12 +851,16 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         if(component.Kind=="terminal" ? cp.OutputId is not null || cp.TerminalResult is not("success" or "unchanged" or "failed" or "deferred")
             : cp.TerminalResult is not null || !component.Outputs.Any(o=>o.Id==cp.OutputId)) return false;
         if(cp.NextNodeId!=flow.Connections.SingleOrDefault(e=>e.SourceNodeId==node.Id && e.SourceOutputId==cp.OutputId)?.TargetNodeId) return false;
-        await using(var existing=Sql.Command("SELECT checkpoint=@checkpoint AND command_logs=@commands FROM execution_steps WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NOT NULL",c,tx))
+        RuntimeCommandLog[] existingLogs;
+        await using(var readLogs=Sql.Command("SELECT command_logs FROM execution_steps WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NULL FOR UPDATE",c,tx))
         {
-            existing.Parameters.AddWithValue("id",id); existing.Parameters.AddWithValue("node",cp.NodeId); existing.Parameters.AddWithValue("invocation",cp.InvocationId); existing.Parameters.AddWithValue("checkpoint",SqlKind.Json,serialized);
-            existing.Parameters.AddWithValue("commands",SqlKind.Json,serializedCommands);
-            if(await existing.ScalarNullableBoolAsync(ct) is {} same) return same;
+            readLogs.Parameters.AddWithValue("id",id); readLogs.Parameters.AddWithValue("node",cp.NodeId); readLogs.Parameters.AddWithValue("invocation",cp.InvocationId);
+            await using var row=await readLogs.ExecuteReaderAsync(ct);
+            if(!await row.ReadAsync(ct) || !RuntimeCommandLogCodec.TryDeserialize(row.GetString(0),out existingLogs)) return false;
         }
+        var finalCommands=RuntimeCommandJournal.Merge(existingLogs,commands);
+        var serializedFinalCommands=JsonSerializer.Serialize(finalCommands,Json);
+        if(System.Text.Encoding.UTF8.GetByteCount(serializedFinalCommands)>524288) return false;
         await using var update=Sql.Command("""
           UPDATE execution_steps SET completed_at=clock_timestamp(),completed_revision=@completed_revision,checkpoint=@checkpoint,command_logs=@commands,
             completed_epoch=@epoch,completed_worker_node_id=@worker
@@ -857,7 +868,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
           """,c,tx);
         update.Parameters.AddWithValue("completed_revision",request.ExpectedRevision+1); update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("node",cp.NodeId); update.Parameters.AddWithValue("invocation",cp.InvocationId); update.Parameters.AddWithValue("checkpoint",SqlKind.Json,serialized);
         update.Parameters.AddWithValue("epoch",request.Epoch); update.Parameters.AddWithValue("worker",worker);
-        update.Parameters.AddWithValue("commands",SqlKind.Json,serializedCommands);
+        update.Parameters.AddWithValue("commands",SqlKind.Json,serializedFinalCommands);
         update.Parameters.AddWithValue("before",SqlKind.Json,(object?)cp.Context.BeforeMetadata?.GetRawText()??DBNull.Value);
         update.Parameters.AddWithValue("after",SqlKind.Json,(object?)cp.Context.CurrentMetadata?.GetRawText()??DBNull.Value);
         if(await update.ExecuteScalarAsync(ct) is null) return false;
@@ -895,6 +906,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         (command.ProgressPercent is null or >= 0 and <= 100) && command.Id!=Guid.Empty && command.Command is not null && command.Command.Length<=16384
         && command.StandardOutput is not null && command.StandardOutput.Length<=32768
         && command.StandardError is not null && command.StandardError.Length<=32768
+        && (command.Kind is null or "command" or "operation") && (command.BytesProcessed is null or >= 0)
         && (command.FinishedAt is null || command.FinishedAt>=command.StartedAt);
     public async Task<RuntimeSourceState> SourceAsync(Guid id,CancellationToken ct)
     {

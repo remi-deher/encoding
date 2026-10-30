@@ -35,6 +35,7 @@ builder.Services.AddSingleton<IPublicationGuardInvoker,PluginPublicationGuardInv
 builder.Services.AddSingleton<PublicationGuardRunner>();
 builder.Services.AddSingleton<MediaScanner>();
 builder.Services.AddSingleton<MediaActions>();
+builder.Services.AddSingleton<LocalPublicationArtifactStore>();
 builder.Services.AddSingleton<RuntimeFlowRunner>();
 builder.Services.AddHostedService<RuntimeTransferService>();
 builder.Services.AddHostedService<WorkspaceCleanupService>();

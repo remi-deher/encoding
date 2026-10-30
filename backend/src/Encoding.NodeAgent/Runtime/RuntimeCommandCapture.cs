@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
 using Encoding.Contracts.Executions;
 
 namespace Encoding.NodeAgent.Runtime;
@@ -9,6 +10,7 @@ public sealed class RuntimeCommandCapture : IDisposable
     private sealed record ActiveStep(RuntimeCommandCapture Capture, string NodeId, Guid InvocationId);
     private static readonly AsyncLocal<RuntimeCommandCapture?> Current = new();
     private static readonly AsyncLocal<ActiveStep?> CurrentStep = new();
+    private static readonly ConcurrentDictionary<Guid, RuntimeCommandCapture> ActiveExecutions = new();
     private static readonly Regex SecretAssignment = new(
         "(?i)(password|passwd|secret|token|api[_-]?key|authorization)(\\s*[:=]\\s*)(\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -22,16 +24,20 @@ public sealed class RuntimeCommandCapture : IDisposable
     private static readonly Regex SafeArgument = new("^[a-zA-Z0-9_./:=,+@%-]+$", RegexOptions.Compiled);
     private readonly object sync = new();
     private readonly List<RuntimeStepCommand> records = [];
+    private readonly HashSet<(string NodeId, Guid InvocationId)> completedSteps = [];
     private readonly RuntimeCommandCapture? previous;
+    private readonly Guid? executionId;
     private bool disposed;
 
-    private RuntimeCommandCapture()
+    private RuntimeCommandCapture(Guid? executionId)
     {
+        this.executionId = executionId;
         previous = Current.Value;
         Current.Value = this;
+        if (executionId is { } id) ActiveExecutions[id] = this;
     }
 
-    public static RuntimeCommandCapture Begin() => new();
+    public static RuntimeCommandCapture Begin(Guid? executionId = null) => new(executionId);
 
     public IDisposable BeginStep(string nodeId, Guid invocationId)
     {
@@ -71,7 +77,11 @@ public sealed class RuntimeCommandCapture : IDisposable
 
     public void MarkPersisted(string nodeId, Guid invocationId)
     {
-        lock (sync) records.RemoveAll(item => item.NodeId == nodeId && item.InvocationId == invocationId);
+        lock (sync)
+        {
+            completedSteps.Add((nodeId, invocationId));
+            records.RemoveAll(item => item.NodeId == nodeId && item.InvocationId == invocationId);
+        }
     }
 
     public static void Record(string executable, IReadOnlyList<string> arguments, string standardOutput,
@@ -88,6 +98,44 @@ public sealed class RuntimeCommandCapture : IDisposable
         {
             step.Capture.records.RemoveAll(item => item.Command.Id == log.Id);
             step.Capture.records.Add(new(step.NodeId, step.InvocationId, log));
+        }
+    }
+
+    public static RuntimeCommandLog CreateOperationLog(string operation, Guid id, DateTimeOffset startedAt,
+        DateTimeOffset? finishedAt, int? exitCode, long? bytesProcessed = null) =>
+        new(id, operation, string.Empty, string.Empty, exitCode, startedAt, finishedAt, false,
+            Kind: "operation", BytesProcessed: bytesProcessed);
+
+    public static void RecordOperation(string operation, Guid id, DateTimeOffset startedAt,
+        DateTimeOffset? finishedAt, int? exitCode, long? bytesProcessed = null)
+    {
+        var step = CurrentStep.Value;
+        if (step is null || Current.Value != step.Capture) return;
+        var log = CreateOperationLog(operation, id, startedAt, finishedAt, exitCode, bytesProcessed);
+        step.Capture.Store(step.NodeId, step.InvocationId, log);
+    }
+
+    public static bool RecordForExecution(Guid executionId, string nodeId, Guid invocationId,
+        string operation, Guid id, DateTimeOffset startedAt, DateTimeOffset? finishedAt,
+        int? exitCode, long? bytesProcessed = null)
+    {
+        if (!ActiveExecutions.TryGetValue(executionId, out var capture)) return false;
+        lock (capture.sync)
+        {
+            if (capture.completedSteps.Contains((nodeId, invocationId))) return false;
+            capture.records.RemoveAll(item => item.Command.Id == id);
+            capture.records.Add(new(nodeId, invocationId,
+                CreateOperationLog(operation, id, startedAt, finishedAt, exitCode, bytesProcessed)));
+        }
+        return true;
+    }
+
+    private void Store(string nodeId, Guid invocationId, RuntimeCommandLog log)
+    {
+        lock (sync)
+        {
+            records.RemoveAll(item => item.Command.Id == log.Id);
+            records.Add(new(nodeId, invocationId, log));
         }
     }
 
@@ -138,6 +186,8 @@ public sealed class RuntimeCommandCapture : IDisposable
     {
         if (disposed) return;
         disposed = true;
+        if (executionId is { } id && ActiveExecutions.TryGetValue(id, out var active) && ReferenceEquals(active, this))
+            ActiveExecutions.TryRemove(id, out _);
         if (Current.Value == this) Current.Value = previous;
     }
 

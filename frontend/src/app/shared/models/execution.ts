@@ -45,6 +45,8 @@ export interface ExecutionResponse {
 }
 
 export interface RuntimeCommandLog {
+  readonly kind?: 'command' | 'operation' | null;
+  readonly bytesProcessed?: number | null;
   readonly progressPercent?: number | null;
   readonly id: string;
   readonly command: string;

@@ -1,6 +1,6 @@
 ---
 domain: flows
-updated: 2026-10-25
+updated: 2026-10-30
 legacy_adr: [0003, 0004, 0006, 0007, 0011, 0012, 0013, 0014, 0015, 0022, 0023, 0024, 0025, 0026, 0027, 0060-api, 0079, 0080, 0081]
 code:
   - backend/src/Encoding.Contracts/Flows/
@@ -74,5 +74,5 @@ L'assistant vidéo génère désormais **Début FFmpeg → réglages → Exécut
 
 La simulation demande les métadonnées de sortie d'un Executor supposé réussi avant d'évaluer les conditions suivantes ; elle ne propage pas les métadonnées supposées en cas d'échec. **Assembler le résultat MKV** regroupe sous-titres/polices/noms après l'Executor. Sémantique média, secours et compatibilité : [runtime](runtime.md), ADR [0012](../adr/0012-builder-ffmpeg-et-assemblage.md).
 
-### Contrôle d’intégrité explicite (ADR 0022)
-Le plugin `probe` 1.1.0 conserve les références 1.0.0 et ajoute `probe-check-integrity` (rapide/approfondi, automatique/CPU/GPU obligatoire). Les nouveaux flows guidés et modèles audio/vidéo passent par un contrôle rapide explicite avant publication ; les historiques ne sont pas réécrits. Un flow explicite exige la capacité `media-integrity-policy/v1` sur tous ses segments. Le simulateur demande une hypothèse de résultat, sans lecture réelle. Garanties, preuve par empreinte, compatibilité et limites : [ADR 0022](../adr/0022-controle-media-explicite-et-rattachement.md).
+### Contrôle d’intégrité facultatif (ADR 0027)
+Le plugin `probe` 1.1.0 conserve les références 1.0.0 et ajoute `probe-check-integrity` (rapide/approfondi, automatique/CPU/GPU obligatoire). Seul ce bloc demande le décodage d’intégrité ; son absence laisse les scans structurels et vérifications d’empreinte obligatoires, sans décodage média complet, y compris pour les flows déjà publiés. Les flows guidés et modèles vidéo comportent un contrôle rapide explicite. Un flow avec ce bloc exige `media-integrity-policy/v1` sur tous ses segments. Le simulateur demande une hypothèse de résultat, sans lecture réelle. Détails et preuve par empreinte : [ADR 0027](../adr/0027-controle-integrite-optionnel.md).

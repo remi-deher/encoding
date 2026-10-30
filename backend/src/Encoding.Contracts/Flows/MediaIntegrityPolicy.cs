@@ -1,6 +1,6 @@
 namespace Encoding.Contracts.Flows;
 
-/// <summary>Opt-in v1 policy; legacy flows retain their original mandatory decoding guarantee.</summary>
+/// <summary>Opt-in integrity policy: only flows containing this block perform quick or full media decoding checks.</summary>
 public static class MediaIntegrityPolicy
 {
     public const string Component = "probe-check-integrity";

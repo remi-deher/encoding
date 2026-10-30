@@ -12,7 +12,9 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         await using var cmd=dataSource.CreateCommand("""
           SELECT w.execution_id,w.lease_epoch,a.local_path,w.media_path,w.source_sha,w.result_sha,w.result_extension,w.publication_requested,e.flow_definition::text,a.can_write,w.replacement_grace_hours,w.library_id,
             (SELECT checkpoint::text FROM execution_steps WHERE execution_id=w.execution_id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1),
-            w.media_policy<>'beside' AND EXISTS(SELECT 1 FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled)
+            w.media_policy<>'beside' AND EXISTS(SELECT 1 FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled),
+            (SELECT node_id FROM execution_steps s WHERE s.execution_id=w.execution_id ORDER BY (s.completed_at IS NULL) DESC,s.started_at DESC LIMIT 1),
+            (SELECT invocation_id FROM execution_steps s WHERE s.execution_id=w.execution_id ORDER BY (s.completed_at IS NULL) DESC,s.started_at DESC LIMIT 1)
           FROM execution_work w JOIN executions e ON e.id=w.execution_id
           JOIN library_node_accesses a ON a.library_id=w.library_id AND a.node_id=w.source_node_id
           WHERE w.source_node_id=@node AND w.lease_until>clock_timestamp() AND e.state='running'
@@ -37,7 +39,9 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
                 r.GetBoolean(9), deferPolicy || r.IsDBNull(10) ? null : r.GetInt32(10), r.GetGuid(11),
                 Observation: observation,
                 VerifyPublicationAccess: components is not null && flow.Nodes.Any(n => components.Resolve(n.Component)?.RequiresWriteAccess == true),
-                VerifyReplacementAccess: r.GetBoolean(13)));
+                VerifyReplacementAccess: r.GetBoolean(13),
+                PublicationStepNodeId: r.IsDBNull(14) ? null : r.GetString(14),
+                PublicationStepInvocationId: r.IsDBNull(15) ? null : r.GetGuid(15)));
         }
         return result;
     }
