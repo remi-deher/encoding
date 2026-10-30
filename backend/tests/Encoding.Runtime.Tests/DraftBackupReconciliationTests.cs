@@ -51,7 +51,7 @@ public sealed class DraftBackupReconciliationTests
             var outgoing = await new ClusterReconciliationRepository(target.Db).GetEventsAfterAsync(cluster, new Dictionary<Guid,long>(), ClusterReconciliationRepository.MaximumBatchSize, CancellationToken.None);
             Assert.DoesNotContain(outgoing, change => change.OriginId != events[0].OriginId && change.Payload.Contains("\"table\":\"flow_draft_backups\"", StringComparison.Ordinal));
         }
-        await using var read = target.Db.Db.CreateCommand("SELECT status,definition,(SELECT count(*) FROM cluster_sync_pending_projections) FROM flow_draft_backups WHERE flow_id=@id");
+        await using var read = target.Db.CreateCommand("SELECT status,definition,(SELECT count(*) FROM cluster_sync_pending_projections) FROM flow_draft_backups WHERE flow_id=@id");
         read.Parameters.AddWithValue("id", flow);
         await using var reader = await read.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());

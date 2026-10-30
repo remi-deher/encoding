@@ -461,7 +461,7 @@ public sealed class FlowPlacementPlannerTests
                 node51, "encoding-51", true, true,
                 [
                     Tool("ffprobe"),
-                    Tool("ffmpeg", "7.0.0", ["hevc_qsv", "libx264"], ["qsv", "cpu"], [new("hevc_qsv", "hevc", "qsv", true, true)]),
+                    Tool("ffmpeg", "7.0.0", ["hevc_qsv", "libx264"], ["qsv", "cpu"], [new("hevc_qsv", "usable")]),
                     Tool("mkvtoolnix"),
                     Tool("plugin/base", "1.9.0"),
                     Tool("plugin/nodes", "1.8.0"),
