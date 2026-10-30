@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Encoding.Core;
+using Encoding.Api.Plugins;
 
 namespace Encoding.Api.Flows;
 
 /// <summary>Transient, bounded read-only metadata inspection. No library access or runtime execution.</summary>
-public sealed class FlowMetadataImporter
+public sealed class FlowMetadataImporter(ToolStoreService? tools = null)
 {
     public const long MaxBytes = 512L * 1024 * 1024;
     private readonly SemaphoreSlim slots = new(2);
@@ -33,7 +34,9 @@ public sealed class FlowMetadataImporter
                 if (size == 0) throw new InvalidDataException("Le fichier est vide.");
             }
             File.SetAttributes(path, FileAttributes.ReadOnly);
-            var start = new ProcessStartInfo("mediainfo") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+            var executable = tools?.ResolveExecutable("mediainfo") ?? FindOnPath("mediainfo")
+                ?? throw new InvalidDataException("MediaInfo n'est pas installé sur ce serveur. Installez son paquet depuis le Store.");
+            var start = new ProcessStartInfo(executable) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
             start.ArgumentList.Add("--Output=JSON"); start.ArgumentList.Add(path);
             process = Process.Start(start) ?? throw new InvalidDataException("MediaInfo ne peut pas démarrer.");
             var stdout = ReadBoundedAsync(process.StandardOutput.BaseStream, process, timeout.Token);
@@ -79,4 +82,8 @@ public sealed class FlowMetadataImporter
         }
         return System.Text.Encoding.UTF8.GetString(output.GetBuffer(), 0, (int)output.Length);
     }
+
+    private static string? FindOnPath(string executable) =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(directory => Path.Combine(directory, executable)).FirstOrDefault(File.Exists);
 }

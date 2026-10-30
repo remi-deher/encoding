@@ -62,6 +62,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       ca_opt='-o Acquire::https::CaInfo=/tmp/ca-bundle.pem'; \
     fi; \
     apt-get $ca_opt update && apt-get $ca_opt install -y --no-install-recommends ffmpeg mkvtoolnix mediainfo imagemagick nodejs python3 hwdata; \
+    ffmpeg -hide_banner -encoders 2>/dev/null | grep -q nvenc; \
+    apt-get $ca_opt purge -y ffmpeg mkvtoolnix mediainfo imagemagick imagemagick-6.q16; \
     rm -f /tmp/ca-bundle.pem
 # Encodage matériel (docs/architecture/0051-hardware-encoding-in-image.md).
 # Intel : pilote iHD « non-free » (multiverse) pour VAAPI, repli sur la version libre ; libvpl2 + libmfx-gen1.2 (QSV Gen12+),
@@ -81,7 +83,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     (apt-get $ca_opt install -y --no-install-recommends intel-media-va-driver-non-free \
      || apt-get $ca_opt install -y --no-install-recommends intel-media-va-driver); \
     apt-get $ca_opt install -y --no-install-recommends libvpl2 libmfx1 libmfx-gen1.2 vainfo mesa-va-drivers libdrm-amdgpu1; \
-    ffmpeg -hide_banner -encoders 2>/dev/null | grep -q nvenc; \
     rm -f /tmp/ca-bundle.pem
 # Plugins et outils du Store téléchargés par les workers, hors du dossier privé de données du nœud.
 RUN mkdir -p /opt/encoding/custom-plugins /opt/encoding/managed-tools /var/lib/encoding-node /var/lib/encoding/flow-backups /var/lib/encoding/runtime-artifacts /var/lib/encoding/plugin-keys \

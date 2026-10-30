@@ -25,7 +25,52 @@ public sealed class ToolStoreService(IConfiguration configuration, ILogger<ToolS
         ?? Path.Combine(configuration["Node:DataDirectory"] is { Length: > 0 } data ? data : Path.Combine(AppContext.BaseDirectory, "Data"), "tool-store");
     private string IndexPath => Path.Combine(Directory, "installed.json");
     private string PackageDirectory(string id, string version, string platform) => Path.Combine(Directory, "packages", id, version, platform);
+    private string ManagedDirectory(string id, string version, string platform) => Path.Combine(Directory, "managed", id, version, platform);
     public string PackagePath(string id, string version, string platform) => Path.Combine(PackageDirectory(id, version, platform), "package.zip");
+
+    /// <summary>Résout un outil installé pour les opérations locales de l'API (par ex. import MediaInfo).</summary>
+    public string? ResolveExecutable(string toolId)
+    {
+        foreach (var installed in Available())
+        {
+            try
+            {
+                var archive = File.ReadAllBytes(PackagePath(installed.Id, installed.Version, installed.Platform));
+                var info = ToolPackageArchive.Inspect(archive, installed.Platform);
+                if (info.ArchiveSha256 != installed.ArchiveSha256 || info.Manifest.Id != installed.Id || info.Manifest.Version != installed.Version) continue;
+                var executable = info.Manifest.Executables.SingleOrDefault(item => item.ToolId == toolId);
+                if (executable is null) continue;
+                var directory = ManagedDirectory(installed.Id, installed.Version, installed.Platform);
+                var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                var path = Path.GetFullPath(Path.Combine(root, ToolPackageArchive.SafeRelativePath(executable.Path)));
+                if (!path.StartsWith(root, StringComparison.Ordinal)) continue;
+                var marker = Path.Combine(directory, ".verified");
+                var extractedHash = File.Exists(path)
+                    ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)))
+                    : "";
+                if (!File.Exists(marker) || File.ReadAllText(marker).Trim() != installed.ArchiveSha256
+                    || !string.Equals(extractedHash, executable.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    TryDelete(directory);
+                    var staging = directory + ".extracting-" + Guid.NewGuid().ToString("N");
+                    try
+                    {
+                        ToolPackageArchive.Extract(archive, staging, info.Manifest);
+                        File.WriteAllText(Path.Combine(staging, ".verified"), installed.ArchiveSha256);
+                        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(directory)!);
+                        System.IO.Directory.Move(staging, directory);
+                    }
+                    finally { TryDelete(staging); }
+                }
+                if (File.Exists(path)) return path;
+            }
+            catch (Exception exception) when (exception is ToolPackageException or IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                logger.LogWarning(exception, "L'outil {ToolId} du Store n'a pas pu être extrait pour un usage local.", toolId);
+            }
+        }
+        return null;
+    }
 
     public IReadOnlyList<InstalledToolPackage> Installed()
     {
@@ -107,6 +152,7 @@ public sealed class ToolStoreService(IConfiguration configuration, ILogger<ToolS
             {
                 verified.TryRemove((sameId.Id, sameId.Version, sameId.Platform), out _);
                 TryDelete(PackageDirectory(sameId.Id, sameId.Version, sameId.Platform));
+                TryDelete(ManagedDirectory(sameId.Id, sameId.Version, sameId.Platform));
             }
             logger.LogInformation("Paquet d'outil {ToolId} {Version} ({Platform}) installé depuis {Source}, SHA-256 {Sha256}.",
                 record.Id, record.Version, record.Platform, source, record.ArchiveSha256);
@@ -141,6 +187,7 @@ public sealed class ToolStoreService(IConfiguration configuration, ILogger<ToolS
             Save(current);
             verified.TryRemove((target.Id, target.Version, target.Platform), out _);
             TryDelete(PackageDirectory(target.Id, target.Version, target.Platform));
+            TryDelete(ManagedDirectory(target.Id, target.Version, target.Platform));
             logger.LogInformation("Paquet d'outil {ToolId} ({Platform}) retiré du Store.", id, platform);
             return true;
         }

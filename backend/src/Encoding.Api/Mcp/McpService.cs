@@ -1320,7 +1320,7 @@ public sealed class McpService(
                 executables = new[] { "magick", "convert" },
                 mediaTypes = new[] { "image" },
                 commonOperations = new[] { "resize", "crop", "convert_format", "optimize_poster" },
-                scriptUsage = "tools.run(\"magick\", [\"input.png\", \"-resize\", \"600x900\", \"output.jpg\"])",
+                scriptUsage = "tools.run(\"convert\", [\"input.png\", \"-resize\", \"600x900\", \"output.jpg\"])",
                 notes = "Utilisé pour la génération et retouche de visuels."
             },
             new
@@ -1429,8 +1429,8 @@ public sealed class McpService(
                 role = "Conversion et retouche graphique d'affiches/miniatures",
                 typicalCommands = new[]
                 {
-                    "magick input.jpg -resize 300x450^ -gravity center -extent 300x450 poster.jpg",
-                    "magick input.png -strip -quality 85 output.webp"
+                    "convert input.jpg -resize 300x450^ -gravity center -extent 300x450 poster.jpg",
+                    "convert input.png -strip -quality 85 output.webp"
                 }
             },
             _ => null
