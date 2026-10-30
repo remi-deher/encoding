@@ -356,7 +356,7 @@ public sealed class FlowPlacementPlanner(FlowComponentRegistry registry)
                         if (IsPureMediaCondition(tree))
                         {
                             var ctx = new ConditionEvaluationContext(
-                                new("", ".mkv", new Dictionary<string, JsonElement>(StringComparer.Ordinal), matchMeta, matchMeta),
+                                new("", ".mkv", new Dictionary<string, JsonElement>(StringComparer.Ordinal), matchMeta, matchMeta, []),
                                 Guid.Empty, Guid.Empty, null, "", "");
                             filterOutput = ConditionTree.Evaluate(tree, ctx) ? "yes" : "no";
                         }

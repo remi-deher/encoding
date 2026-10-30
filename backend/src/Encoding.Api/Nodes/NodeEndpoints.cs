@@ -177,7 +177,7 @@ public static class NodeEndpoints
                 if (LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], httpContext.Request.Headers[LocalEnrollment.HeaderName].ToString()))
                     await localNode.RegisterAsync(node.Id, cancellationToken);
                 var serverUrls = new List<string>();
-                if (ClusterReconciliationRepository.NormalizeUrl(configuration["Cluster:Reconciliation:AdvertisedApiBaseUrl"]) is { } advertised)
+                if (ClusterReconciliationRepository.TryNormalizePeerUrl(configuration["Cluster:Reconciliation:AdvertisedApiBaseUrl"]) is { } advertised)
                     serverUrls.Add(advertised);
                 foreach (var peerUrl in await reconciliationRepository.GetPeerEndpointsAsync(cancellationToken))
                 {
