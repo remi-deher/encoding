@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Encoding.Runtime.Tests;
@@ -32,18 +34,23 @@ public sealed class DockerClusterTests
     {
         private readonly string id = Guid.NewGuid().ToString("N")[..8];
         private readonly List<string> containers = [];
+        private readonly List<string> dataDirectories = [];
         public string Network => "enc-test-" + id;
         public string Media { get; } = Path.Combine(Path.GetTempPath(), "encoding-docker-" + Guid.NewGuid().ToString("N"));
+        public string Data { get; } = Path.Combine(Path.GetTempPath(), "encoding-docker-data-" + Guid.NewGuid().ToString("N"));
         public HttpClient Client { get; private set; } = null!;
         public string ServerName => "server-" + id;
 
         public async Task StartServerAsync()
         {
             Directory.CreateDirectory(Media);
+            PrepareStorePackages(Data);
+            dataDirectories.Add(Data);
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Media, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
             await DockerAsync("network", "create", Network);
             var port = FreePort();
-            await RunAsync(ServerName, "--hostname", ServerName, "-p", $"127.0.0.1:{port}:8080",
+            await RunAsync(ServerName, "--hostname", ServerName, "-v", $"{Data}:/var/lib/encoding-node", "-p", $"127.0.0.1:{port}:8080",
+                "-e", "Node__DataDirectory=/var/lib/encoding-node",
                 "-e", "Node__Roles=server", "-e", "Node__Name=" + ServerName, "-e", $"Cluster__AdvertisedApiBaseUrl=http://{ServerName}:8080/", Image);
             Client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() }) { BaseAddress = new Uri($"http://127.0.0.1:{port}/"), Timeout = TimeSpan.FromSeconds(20) };
             Client.DefaultRequestHeaders.Add("X-Encoding-Csrf", "1");
@@ -54,9 +61,50 @@ public sealed class DockerClusterTests
             Assert.True(window.IsSuccessStatusCode);
         }
 
-        public Task StartWorkerAsync(string name, string image) => RunAsync(name, "--hostname", name, "-v", $"{Media}:/media/lib",
-            "-e", "Node__Roles=worker", "-e", "Node__Name=" + name, "-e", "Node__MaxConcurrentTasks=1", "-e", $"Cluster__ApiBaseUrl=http://{ServerName}:8080/",
-            "-e", "Worker__AutoAcceptEnrollment=true", image);
+        public Task StartWorkerAsync(string name, string image)
+        {
+            var workerData = Data + "-" + name;
+            PrepareStorePackages(workerData);
+            dataDirectories.Add(workerData);
+            return RunAsync(name, "--hostname", name, "-v", $"{workerData}:/var/lib/encoding-node", "-v", $"{Media}:/media/lib",
+                "-e", "Node__DataDirectory=/var/lib/encoding-node",
+                "-e", "Node__Roles=worker", "-e", "Node__Name=" + name, "-e", "Node__MaxConcurrentTasks=1", "-e", $"Cluster__ApiBaseUrl=http://{ServerName}:8080/",
+                "-e", "Worker__AutoAcceptEnrollment=true", image);
+        }
+
+        private static void PrepareStorePackages(string dataDirectory)
+        {
+            var fixtureDirectory = Path.Combine(Harness.RepositoryRoot(), "tests", "Fixtures", "StoreCatalog");
+            var storeDirectory = Path.Combine(dataDirectory, "plugin-store");
+            var installed = new List<object>();
+            foreach (var (id, version) in new[] { ("base", "1.10.0"), ("video", "1.3.0") })
+            {
+                var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(fixtureDirectory, id + ".json")))!.AsObject();
+                manifest["runtime"] = new JsonObject { ["type"] = "native", ["entrypoint"] = "" };
+                using var buffer = new MemoryStream();
+                using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+                using (var writer = new StreamWriter(archive.CreateEntry("plugin.json").Open()))
+                    writer.Write(manifest.ToJsonString());
+                var bytes = buffer.ToArray();
+                var packageDirectory = Path.Combine(storeDirectory, "packages", id, version);
+                Directory.CreateDirectory(packageDirectory);
+                File.WriteAllBytes(Path.Combine(packageDirectory, "package.zip"), bytes);
+                installed.Add(new
+                {
+                    id,
+                    version,
+                    name = manifest["name"]!.GetValue<string>(),
+                    sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+                    source = "repo:test",
+                    installedAt = DateTimeOffset.UtcNow
+                });
+            }
+            Directory.CreateDirectory(dataDirectory);
+            File.WriteAllText(Path.Combine(storeDirectory, "installed.json"),
+                JsonSerializer.Serialize(installed, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(dataDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
+        }
 
         private async Task RunAsync(string name, params string[] arguments)
         {
@@ -81,6 +129,8 @@ public sealed class DockerClusterTests
             await DockerAsync(allowFailure: true, "network", "rm", Network);
             Client?.Dispose();
             try { Directory.Delete(Media, true); } catch { }
+            foreach (var directory in dataDirectories)
+                try { Directory.Delete(directory, true); } catch { }
         }
 
         public async Task<string> LogsAsync() => string.Join("\n", await Task.WhenAll(containers.Select(async container => $"[{container}] " + await DockerAsync(allowFailure: true, "logs", "--tail", "15", container))));
