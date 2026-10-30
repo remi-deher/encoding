@@ -1,6 +1,6 @@
 ---
 domain: ui
-updated: 2026-10-27
+updated: 2026-10-30
 legacy_adr:
   [
     0008,
@@ -94,7 +94,7 @@ La liste des bibliothèques suit le catalogue Flows : fiche de détail dans un t
 
 Les catalogues Ressources, Modèles de flow et Packs de composants gardent leur liste visible lorsqu’une fiche est ouverte et utilisent le `DetailDrawer` partagé. La sélection est portée par l’URL ; fermer le tiroir retire le paramètre correspondant. Les onglets entre types de catalogue restent une navigation entre routes.
 
-Route `/activity` : cinq états centrés sur les fichiers découverts : **Non traité**, **En cours de traitement**, **Déjà traité**, **Échec du traitement** et **Traitement désactivé**. Les éléments actifs peuvent être annulés ; la relance d’un échec est proposée dans le tiroir après confirmation. Le tiroir réutilise `DetailDrawer` et expose les détails du fichier et, lorsqu’une exécution existe, son pipeline, ses événements et ses résultats. La recherche du shell filtre la page et propose ces fichiers avant les résultats globaux ; le filtre du shell propose bibliothèque, flow et nœud. Les anciens paramètres `view=active|errors|history|queue` sont traduits vers les états correspondants.
+Route `/activity` : cinq états centrés sur les fichiers découverts : **Non traité**, **En cours de traitement**, **Déjà traité**, **Échec du traitement** et **Traitement désactivé**. Les éléments actifs peuvent être annulés ; la relance d’un échec est proposée dans le tiroir après confirmation. Le tiroir réutilise `DetailDrawer` et expose les détails du fichier et, lorsqu’une exécution existe, son pipeline, ses événements et ses résultats. Le pipeline propose une console brute stdout/stderr actualisée avec le sondage de l’exécution (3 s lorsqu’elle est ouverte), en plus des vues simplifiée et détaillée ; le défilement des étapes et l’export/copier des logs restent disponibles. La recherche du shell filtre la page et propose ces fichiers avant les résultats globaux ; le filtre du shell propose bibliothèque, flow et nœud. Les anciens paramètres `view=active|errors|history|queue` sont traduits vers les états correspondants.
 
 - L’API `GET /api/v1/activity/files` retourne l’inventaire découvert, les compteurs par état, la recherche, le filtre de bibliothèque et la pagination. L’état est basé sur l’exécution la plus récente du flow actuellement attribué, rapprochée par bibliothèque et chemin média ; une bibliothèque inactive place ses fichiers non traités dans **Traitement désactivé**. La page charge les fichiers par pages de 50 et conserve les états du traitement et du shell alignés.
 - L'indicateur « jobs en cours » de l'en-tête compte uniquement les traitements locaux confirmés par un bail worker valide sous propriété active. Le panneau CDK ancré sous le bouton montre ces mêmes jobs : média, bibliothèque, flow, nœud, étape et progression. Les annulations en attente et les tâches sans bail restent consultables dans Activité, mais ne gonflent pas ce compteur. Requêtes filtrées uniquement pendant son ouverture ; fermeture par Échap, clic extérieur ou bouton, focus restauré. Lien vers `/activity?view=active` ; une progression à 100 % conserve l'état serveur « En cours ».

@@ -1,6 +1,16 @@
 import { IconComponent } from './icon.component';
 import { MatExpansionModule } from '@angular/material/expansion';
-import { ChangeDetectionStrategy, Component, input, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { ExecutionPipelineStep, RuntimeCommandLog, executionPhaseLabel } from '../models/execution';
 import { FileDownload } from '../services/file-download';
@@ -35,6 +45,14 @@ import { NotificationService } from '../services/notification.service';
             >
               Vue détaillée
             </button>
+            <button
+              matButton="outlined"
+              type="button"
+              [attr.aria-pressed]="viewMode() === 'console'"
+              (click)="viewMode.set('console')"
+            >
+              Console brute
+            </button>
           </div>
           <button
             matButton="outlined"
@@ -62,6 +80,26 @@ import { NotificationService } from '../services/notification.service';
         <p class="pipeline-logs__feedback" role="status">{{ feedback() }}</p>
       } @else if (steps().length === 0) {
         <p class="pipeline-logs__empty">Aucune étape enregistrée pour cette exécution.</p>
+      } @else if (viewMode() === 'console') {
+        @if (rawConsole()) {
+          <section
+            #consoleViewport
+            class="pipeline-console"
+            aria-label="Console brute de l’exécution"
+            (scroll)="updateConsoleScroll($event)"
+          >
+            <p class="pipeline-console__status">
+              @if (hasRunningStep()) {
+                En direct · actualisation toutes les 3 secondes
+              } @else {
+                Sortie consolidée de l’exécution
+              }
+            </p>
+            <pre aria-live="off">{{ rawConsole() }}</pre>
+          </section>
+        } @else {
+          <p class="pipeline-logs__empty">Aucune sortie de commande enregistrée pour cette exécution.</p>
+        }
       } @else {
         <ol class="pipeline-steps">
           @for (step of steps(); track step.invocationId) {
@@ -321,6 +359,32 @@ import { NotificationService } from '../services/notification.service';
         Consolas,
         monospace;
     }
+    .pipeline-console {
+      min-width: 0;
+      overflow: auto;
+      max-height: min(65vh, 760px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--surface-muted);
+    }
+    .pipeline-console__status {
+      position: sticky;
+      inset-block-start: 0;
+      margin: 0;
+      padding: var(--space-2) var(--space-3);
+      border-block-end: 1px solid var(--border-subtle);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: var(--font-body);
+    }
+    .pipeline-console pre {
+      margin: 0;
+      padding: var(--space-3);
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      color: var(--text-primary);
+      font: 13px/1.5 ui-monospace, Consolas, monospace;
+    }
     @media (max-width: 760px) {
       .pipeline-logs__header,
       .pipeline-step__header {
@@ -335,7 +399,9 @@ export class ExecutionPipelineLogsComponent {
   readonly feedback = input('');
   readonly phase = input<string | null>(null);
   protected readonly phaseLabel = executionPhaseLabel;
-  protected readonly viewMode = signal<'simple' | 'detailed'>('simple');
+  protected readonly viewMode = signal<'simple' | 'detailed' | 'console'>('simple');
+  private readonly consoleViewport = viewChild<ElementRef<HTMLElement>>('consoleViewport');
+  private readonly followConsole = signal(true);
   private readonly downloads = inject(FileDownload);
   private readonly notifications = inject(NotificationService);
   protected readonly stepCount = computed(() => this.steps().length);
@@ -348,6 +414,37 @@ export class ExecutionPipelineLogsComponent {
   protected readonly logCount = computed(() =>
     this.steps().reduce((count, step) => count + step.commands.length, 0),
   );
+  protected readonly hasRunningStep = computed(() =>
+    this.steps().some((step) => step.status === 'running' || step.status === 'cancelling'),
+  );
+  protected readonly rawConsole = computed(() => this.steps().flatMap((step) =>
+    step.commands.flatMap((command) => {
+      const sections = [
+        command.standardOutput ? `[stdout]\n${command.standardOutput}` : '',
+        command.standardError ? `[stderr]\n${command.standardError}` : '',
+        command.truncated ? '[sortie tronquée dans le journal enregistré]' : '',
+      ].filter(Boolean);
+      if (!sections.length) return [];
+      const start = new Date(command.startedAt).toLocaleTimeString('fr-FR');
+      return [`[${start}] ${step.nodeName} · ${command.command}`, ...sections].join('\n');
+    }),
+  ).join('\n\n'));
+
+  constructor() {
+    effect(() => {
+      this.rawConsole();
+      const viewport = this.consoleViewport()?.nativeElement;
+      if (!viewport || !this.followConsole()) return;
+      requestAnimationFrame(() => {
+        if (this.followConsole()) viewport.scrollTop = viewport.scrollHeight;
+      });
+    });
+  }
+
+  protected updateConsoleScroll(event: Event): void {
+    const element = event.currentTarget as HTMLElement;
+    this.followConsole.set(element.scrollHeight - element.scrollTop - element.clientHeight < 48);
+  }
 
   protected statusLabel(status: ExecutionPipelineStep['status']): string {
     return {

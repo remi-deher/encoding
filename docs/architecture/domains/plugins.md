@@ -1,6 +1,6 @@
 ---
 domain: plugins
-updated: 2026-10-27
+updated: 2026-10-30
 legacy_adr: [0005, 0011, 0019, 0020, 0021, 0024, 0032, 0054, 0055, 0056, 0057, 0058, 0059, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070, 0075, 0076, 0079]
 code:
   - backend/src/Encoding.Api/Flows/Catalog/*.json
@@ -14,7 +14,7 @@ tags: [plugin, composant, manifeste, store, dépôt, webhook, sdk, outils média
 
 # Plugins, composants et outils média
 
-Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `backend/src/Encoding.Api/Flows/Catalog/<plugin>.json`. Versions au 2026-10-24 : base 1.9.0, nodes 1.3.0, conditions 1.2.0, video 1.2.0, audio 1.1.0, subtitles 1.2.0, mkv 1.1.0, images 1.0.0, probe 1.0.0, ai 1.0.0, plex 1.1.0, sonarr/radarr/jellyfin 1.0.0. Les anciens identifiants `base-*` (transcode, audio, sous-titres, remux, auto-crop…) sont aujourd'hui répartis dans `video`, `audio`, `subtitles` et restent acceptés par le runtime (`MediaActions`) ; `base-condition` n'est plus proposé (descripteur historique dans `Flows/Legacy/`).
+Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `backend/src/Encoding.Api/Flows/Catalog/<plugin>.json`. Versions au 2026-10-30 : base 1.10.0, nodes 1.3.0, conditions 1.2.0, video 1.2.0, audio 1.1.0, subtitles 1.2.0, mkv 1.1.0, images 1.0.0, probe 1.0.0, ai 1.0.0, plex 1.1.0, sonarr/radarr/jellyfin 1.0.0. Les anciens identifiants `base-*` (transcode, audio, sous-titres, remux, auto-crop…) sont aujourd'hui répartis dans `video`, `audio`, `subtitles` et restent acceptés par le runtime (`MediaActions`) ; `base-condition` n'est plus proposé (descripteur historique dans `Flows/Legacy/`).
 
 ## Contrat
 - **Effets média** (ADR [0011](../adr/0011-controles-media-selon-effets.md)) : `mediaEffect` optionnel dans le descripteur : `readOnly` interdit un candidat ; `producesOutput` impose un candidat distinct et préserve l'entrée ; `modifiesCurrent` soumet toujours le fichier courant à validation, même à taille/date identiques. Le moteur choisit les contrôles et conserve SHA-256 pour les transferts et publications. Sans déclaration : résultat explicite et détection taille/dernière modification pour compatibilité. La déclaration ne vaut jamais permission d'écrire dans la bibliothèque ni garantie d'idempotence. Elle participe à l'empreinte du contrat annoncée par le worker (version de plugin à incrémenter lors de son adoption).
@@ -42,7 +42,7 @@ Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `b
 - Outils d'auteur : validateur de manifeste/paquet, simulation locale, SDK JavaScript ; MCP `validate_plugin_manifest`, `validate_tool_definition`, `list_media_tools`, `get_media_tool_info` ([auth-ops.md](auth-ops.md)). Guide : `backend/plugins/README.md`.
 
 ## Plugins intégrés (rôle, pas liste exhaustive)
-- **base** : entrées (fichier générique + spécialisées), `base-script` (JS/Python, `useTools`), plan de traitement (`prepare`/`execute`), report, fin, variable, `base-wait`, `base-disk-lock/unlock`. Installé et actif par défaut.
+- **base** : entrées (fichier générique + spécialisées), `base-script` (JS/Python, `useTools`), plan de traitement (`prepare`/`execute`), report, fin, variable, `base-wait`, `base-disk-lock/unlock`. L’assemblage MKV copie par défaut les pistes audio et sous-titres d’origine ; la transformation des sous-titres et l’ajout de polices sont explicites et désactivés par défaut. Installé et actif par défaut.
 - **nodes** : contraintes d'attribution, `nodes-handoff`, `nodes-retry-on-worker-loss`, `nodes-require-direct-access` ([runtime.md](runtime.md)). Reconnu nativement par les workers.
 - **conditions** : `conditions-match` (arbre ET/OU) + blocs dédiés Oui/Non/Erreur (codec vidéo/audio, résolution avec tolérance aux ratios cinéma, canaux, langue, HDR/Dolby Vision, profondeur de couleur) évalués par `MediaConditionEvaluator` sur les métadonnées scannées.
 - **video / audio / subtitles / mkv / images / probe** : opérations média ; points d'attention durables : transcodage vidéo adaptatif (paliers de qualité par résolution, 10 bits automatique pour HEVC/AV1, préservation HDR par défaut), `audio-rules` (table fixe stéréo AAC / 3 canaux et plus en AC-3 ≤ 6 canaux avec LFE préservé, déduction de disposition refusée en cas de références contradictoires), noms de pistes MKV via `mkvpropedit` sur la copie de travail (sélection par UID), `mkv-edit-in-place` (langue, nom, drapeaux d'une piste modifiés dans la source, ADR 0002), sous-titres (SRT→ASS au profil proportionnel intégré « Crunchyroll », ASS personnalisé laissé intact, déduplication intelligente des polices jointes par analyse SFNT/nom normalisé sans doublon, polices depuis `ENCODING_FONT_DIR` ou, depuis `subtitles` 1.3.0, depuis une ressource du catalogue du cluster (champ `resource`, « identifiant:version » ; le worker télécharge les fichiers du serveur avec son jeton de nœud, contrôle taille et SHA-256, ajoute toutes les polices manquantes ; aucun jeu local n'est alors exigé à l'éligibilité ; ADR 0006) ; non versionnées dans le dépôt), `probe-validate-output`, garde de taille, auto-crop, désentrelacement.

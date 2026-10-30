@@ -30,7 +30,7 @@ public sealed partial class MediaActions
             if(outcome.Value is { ValueKind:JsonValueKind.Array } values)
                 notes.AddRange(values.EnumerateArray().Where(value=>value.ValueKind==JsonValueKind.String).Select(value=>value.GetString()!));
         }
-        if(Flag(configuration,"manageSubtitles",true))
+        if(Flag(configuration,"manageSubtitles",false))
             Adopt(await SubtitleManageAsync(configuration,metadata,candidate,directory,node+"-subtitles",ct));
         if(Flag(configuration,"addFonts"))
             Adopt(await AddFontsAsync(configuration,candidate,directory,node+"-fonts",ct,resourceFolder,candidate!=current));

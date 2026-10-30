@@ -49,21 +49,83 @@ public static class StandardFlowTemplateSeeder
     {
         var sourceFlowId = SourceFlowId(templateId);
         var json = JsonSerializer.Serialize(template.Definition, FlowRepository.JsonOptions);
+        var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
-        await using (var existing = Sql.Command("SELECT EXISTS(SELECT 1 FROM flow_templates WHERE id=@id OR lower(name)=lower(@name))", connection, transaction))
+        await using (var existing = Sql.Command("SELECT id,source_flow_id,source_version,definition FROM flow_templates WHERE id=@id OR lower(name)=lower(@name)", connection, transaction))
         {
             existing.Parameters.AddWithValue("id", templateId);
             existing.Parameters.AddWithValue("name", template.Name);
-            if (await existing.ScalarBoolAsync(ct))
+            await using var reader = await existing.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct))
             {
+                var existingTemplateId = reader.GetString(0);
+                var existingFlowId = reader.GetString(1);
+                var existingVersion = reader.GetInt32(2);
+                var existingDefinition = reader.GetString(3);
+                await reader.DisposeAsync();
+                if (!string.Equals(existingTemplateId, templateId.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    await transaction.CommitAsync(ct);
+                    return;
+                }
+                var currentDefinition = template.Definition with
+                {
+                    Id = Guid.Parse(existingFlowId),
+                    Version = existingVersion,
+                };
+                var currentJson = JsonSerializer.Serialize(currentDefinition, FlowRepository.JsonOptions);
+                if (!string.Equals(existingDefinition, currentJson, StringComparison.Ordinal))
+                {
+                    var nextVersion = existingVersion + 1;
+                    var nextDefinition = currentDefinition with { Version = nextVersion };
+                    var nextJson = JsonSerializer.Serialize(nextDefinition, FlowRepository.JsonOptions);
+                    await using (var version = Sql.Command("INSERT INTO flow_versions(flow_id,version,definition,created_at) VALUES(@id,@version,@definition,@timestamp) ON CONFLICT(flow_id,version) DO NOTHING", connection, transaction))
+                    {
+                        version.Parameters.AddWithValue("id", existingFlowId);
+                        version.Parameters.AddWithValue("version", nextVersion);
+                        version.Parameters.AddWithValue("definition", SqlKind.Json, nextJson);
+                        version.Parameters.AddWithValue("timestamp", timestamp);
+                        await version.ExecuteNonQueryAsync(ct);
+                    }
+                    await using (var flow = Sql.Command("UPDATE flows SET current_version=@version,updated_at=@timestamp WHERE id=@id", connection, transaction))
+                    {
+                        flow.Parameters.AddWithValue("id", existingFlowId);
+                        flow.Parameters.AddWithValue("version", nextVersion);
+                        flow.Parameters.AddWithValue("timestamp", timestamp);
+                        await flow.ExecuteNonQueryAsync(ct);
+                    }
+                    await using (var templateUpdate = Sql.Command("UPDATE flow_templates SET source_version=@version,definition=@definition,description=@description WHERE id=@id", connection, transaction))
+                    {
+                        templateUpdate.Parameters.AddWithValue("id", templateId);
+                        templateUpdate.Parameters.AddWithValue("version", nextVersion);
+                        templateUpdate.Parameters.AddWithValue("definition", SqlKind.Json, nextJson);
+                        templateUpdate.Parameters.AddWithValue("description", template.Description);
+                        await templateUpdate.ExecuteNonQueryAsync(ct);
+                    }
+                    await using (var backup = Sql.Command("INSERT INTO flow_backup_jobs(flow_id,version,status,next_attempt_at) VALUES(@id,@version,'pending',@timestamp) ON CONFLICT(flow_id,version) DO NOTHING", connection, transaction))
+                    {
+                        backup.Parameters.AddWithValue("id", existingFlowId);
+                        backup.Parameters.AddWithValue("version", nextVersion);
+                        backup.Parameters.AddWithValue("timestamp", timestamp);
+                        await backup.ExecuteNonQueryAsync(ct);
+                    }
+                }
+                else
+                {
+                    await using var templateUpdate = Sql.Command("UPDATE flow_templates SET description=@description WHERE id=@id", connection, transaction);
+                    templateUpdate.Parameters.AddWithValue("id", templateId);
+                    templateUpdate.Parameters.AddWithValue("description", template.Description);
+                    await templateUpdate.ExecuteNonQueryAsync(ct);
+                }
                 await transaction.CommitAsync(ct);
                 return;
             }
+            await reader.DisposeAsync();
         }
 
-        var timestamp = SeedTimestamp.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+        timestamp = SeedTimestamp.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
         await using (var flow = Sql.Command("INSERT INTO flows(id,current_version,updated_at,deleted_at) VALUES(@id,1,@timestamp,@timestamp) ON CONFLICT(id) DO NOTHING", connection, transaction))
         {
             flow.Parameters.AddWithValue("id", sourceFlowId);
@@ -129,7 +191,7 @@ public static class StandardFlowTemplateSeeder
                 new("inspect", "probe", "probe-audio", new { trackId = 0, resultVariable = "mediaDetails", refreshMetadata = false }),
                 new("done", "base", "base-complete-flow", new { result = "success", message = "Analyse audio terminée." })));
 
-        Add("Convertir un fichier audio en AAC", "Convertit la piste principale en AAC stéréo à 192 kbit/s, avec validation et publication du résultat.",
+        Add("Convertir un fichier audio en AAC", "Convertit la piste principale en AAC stéréo à 192 kbit/s, avec contrôle structurel et publication du résultat.",
             ProcessingFlow(registry, "Convertir un fichier audio en AAC", "music", "audio-transcode",
                 new { processingMode = "plan", trackId = 0, audioCodec = "aac", bitrateKbps = 192, channels = "2" }));
 
@@ -187,8 +249,6 @@ public static class StandardFlowTemplateSeeder
             CreateNode(registry, new("start", "base", FfmpegBuilderPolicy.Start, new { preserveUnchangedTracks = true })),
             CreateNode(registry, new("action", componentId.StartsWith("audio-", StringComparison.Ordinal) ? "audio" : "video", componentId, configuration)),
             CreateNode(registry, new("execute", "base", FfmpegBuilderPolicy.Execute, new { })),
-            CreateNode(registry, new("integrity", "probe", MediaIntegrityPolicy.Component, new { mode = "quick", acceleration = "auto" })),
-            CreateNode(registry, new("integrity-failed", "base", "base-complete-flow", new { result = "failed", message = "Le contrôle média a détecté des erreurs." })),
             CreateNode(registry, new("publish", "base", "base-publish-result", new { })),
             CreateNode(registry, new("published", "base", "base-complete-flow", new { result = "success", message = "Traitement terminé et publié." })),
             CreateNode(registry, new("unchanged", "base", "base-complete-flow", new { result = "unchanged", message = "Aucune modification nécessaire." })),
@@ -198,9 +258,7 @@ public static class StandardFlowTemplateSeeder
             new FlowConnectionDefinition("link-1", "input", "success", "start"),
             new FlowConnectionDefinition("link-2", "start", "success", "action"),
             new FlowConnectionDefinition("link-3", "action", "success", "execute"),
-            new FlowConnectionDefinition("link-4", "execute", "success", "integrity"),
-            new FlowConnectionDefinition("integrity-ok", "integrity", "valid", "publish"),
-            new FlowConnectionDefinition("integrity-invalid", "integrity", "invalid", "integrity-failed"),
+            new FlowConnectionDefinition("link-4", "execute", "success", "publish"),
             new FlowConnectionDefinition("link-5", "execute", "skipped", "unchanged"),
             new FlowConnectionDefinition("link-6", "publish", "published", "published"),
             new FlowConnectionDefinition("link-7", "publish", "unchanged", "unchanged"),
