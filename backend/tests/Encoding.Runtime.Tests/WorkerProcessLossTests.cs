@@ -199,7 +199,7 @@ public sealed class WorkerProcessLossTests
 
     private static void PrepareStorePackages(string dataDirectory)
     {
-        var fixtureDirectory = Path.Combine(RepositoryRoot(), "backend", "tests", "Fixtures", "StoreCatalog");
+        var fixtureDirectory = Path.Combine(Harness.RepositoryRoot(), "tests", "Fixtures", "StoreCatalog");
         var installed = new List<object>();
         foreach (var (id, version) in new[] { ("base", "1.10.0"), ("video", "1.3.0") })
         {
