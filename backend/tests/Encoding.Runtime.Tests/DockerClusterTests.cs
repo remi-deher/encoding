@@ -230,6 +230,9 @@ public sealed class DockerClusterTests
             var all = await cluster.Client.GetFromJsonAsync<JsonElement>("api/v1/nodes");
             var online = all.EnumerateArray().Where(node => node.GetProperty("name").GetString()!.StartsWith("worker", StringComparison.Ordinal) && node.GetProperty("status").GetString() == "online").ToArray();
             if (online.Length != workers) return false;
+            var requiredCapabilities = new HashSet<string>(["plugin/base", "plugin/video", "ffmpeg"], StringComparer.Ordinal);
+            if (online.Any(node => !requiredCapabilities.IsSubsetOf(node.GetProperty("capabilities").EnumerateArray()
+                    .Select(capability => capability.GetProperty("toolId").GetString()!).ToHashSet(StringComparer.Ordinal)))) return false;
             workersNow = JsonSerializer.SerializeToElement(online);
             return true;
         }, 150, $"{workers} worker(s) en ligne", cluster);
