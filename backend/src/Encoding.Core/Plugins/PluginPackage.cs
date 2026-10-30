@@ -69,6 +69,18 @@ public static class PluginPackage
         if (entrypoint.Length == 0 || zip.GetEntry(entrypoint) is null) throw new PluginPackageException($"Le point d'entrée « {runtime.Entrypoint} » est absent de l'archive.");
         if (manifest.Id is null || !PluginIdentity.IsQualifiedPluginId(manifest.Id))
             throw new PluginPackageException($"Identifiant « {manifest.Id} » invalide : « espace.nom » en minuscules, chiffres et tirets.");
+        var toolDependencies = manifest.RequiredToolPackages ?? [];
+        if (toolDependencies.Any(item => item is null || string.IsNullOrWhiteSpace(item.ToolPackageId)
+            || !System.Text.RegularExpressions.Regex.IsMatch(item.ToolPackageId, "^[a-z0-9][a-z0-9._-]{0,127}$")
+            || string.IsNullOrWhiteSpace(item.MinimumVersion)
+            || !System.Text.RegularExpressions.Regex.IsMatch(item.MinimumVersion, @"^\d+\.\d+\.\d+$")))
+            throw new PluginPackageException("Chaque dépendance d'outil doit déclarer un identifiant de paquet et une version minimale valide.");
+        if (toolDependencies.Select(item => item.ToolPackageId).Distinct(StringComparer.Ordinal).Count() != toolDependencies.Count)
+            throw new PluginPackageException("Une dépendance vers un même paquet d'outil ne peut apparaître qu'une fois.");
+        foreach (var dependency in toolDependencies)
+            if (dependency.MaximumVersionExclusive is { } maximum
+                && !System.Text.RegularExpressions.Regex.IsMatch(maximum, @"^\d+\.\d+\.\d+$"))
+                throw new PluginPackageException($"Version maximale invalide pour l'outil « {dependency.ToolPackageId} ».");
         return new PluginPackageInfo(manifest, runtime with { Entrypoint = entrypoint }, Hash(archive), entries.Count, total);
     }
 

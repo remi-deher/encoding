@@ -14,6 +14,7 @@ public sealed class ProcessToolRunner
 
     public static string? Find(string executable)
     {
+        if (ManagedToolCatalog.Find(executable) is { } managed) return managed;
         var name = OperatingSystem.IsWindows() ? executable + ".exe" : executable;
         return (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(directory => Path.Combine(directory, name)).FirstOrDefault(File.Exists);
@@ -30,7 +31,8 @@ public sealed class ProcessToolRunner
             var host = Environment.ProcessPath ?? throw new IOException("Hôte de processus absent.");
             var prefix = new List<string>();
             if (Path.GetFileNameWithoutExtension(host) == "dotnet") prefix.Add(typeof(ProcessToolRunner).Assembly.Location);
-            prefix.AddRange(["--isolated-process", workingDirectory, executable, System.Text.Json.JsonSerializer.Serialize(readOnlyPaths ?? [])]);
+            var allowedPaths = (readOnlyPaths ?? []).Concat(ManagedToolCatalog.PackageDirectories()).Distinct(StringComparer.Ordinal).ToArray();
+            prefix.AddRange(["--isolated-process", workingDirectory, executable, System.Text.Json.JsonSerializer.Serialize(allowedPaths)]);
             argumentList = prefix.Concat(argumentList).ToList();
             executable = host;
         }
@@ -45,6 +47,9 @@ public sealed class ProcessToolRunner
             RedirectStandardInput = input is not null,
         };
         foreach (var arg in argumentList) info.ArgumentList.Add(arg);
+        var managedPath = ManagedToolCatalog.ExecutableDirectories();
+        if (managedPath.Count > 0)
+            info.Environment["PATH"] = string.Join(Path.PathSeparator, managedPath.Append(Environment.GetEnvironmentVariable("PATH") ?? ""));
         if (sandbox) info.Environment[ProcessSandbox.MinimalEnvironmentVariable] = "minimal";
         // MKVToolNix lit les arguments et écrit son JSON selon la locale : en locale « C » (image sans LANG) les noms accentués sont tronqués.
         if (Path.GetFileName(executable).StartsWith("mkv", StringComparison.Ordinal)) info.Environment["LC_ALL"] = "C.UTF-8";

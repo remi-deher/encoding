@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Encoding.Api.Flows;
 using Encoding.Contracts.Plugins;
+using Encoding.Contracts.Tools;
 using Encoding.Core.Plugins;
 
 namespace Encoding.Api.Plugins;
@@ -13,7 +14,7 @@ public sealed record InstalledPlugin(string Id, string Version, string Name, str
 /// (<c>PluginStore:Directory</c>) : il n'est pas répliqué entre serveurs d'un même cluster, chaque serveur reçoit les paquets
 /// qui lui sont importés ou installés (résidu connu, voir 0063).
 /// </summary>
-public sealed class PluginStoreService(IConfiguration configuration, FlowComponentRegistry registry, ILogger<PluginStoreService> logger)
+public sealed class PluginStoreService(IConfiguration configuration, FlowComponentRegistry registry, ToolStoreService tools, ILogger<PluginStoreService> logger)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -34,6 +35,20 @@ public sealed class PluginStoreService(IConfiguration configuration, FlowCompone
         }
     }
 
+    public bool RequiresToolPackage(string id)
+    {
+        foreach (var plugin in Installed())
+        {
+            try
+            {
+                var info = PluginPackage.Inspect(File.ReadAllBytes(PackagePath(plugin.Id, plugin.Version)));
+                if ((info.Manifest.RequiredToolPackages ?? []).Any(dependency => dependency.ToolPackageId == id)) return true;
+            }
+            catch (Exception exception) when (exception is PluginPackageException or IOException) { }
+        }
+        return false;
+    }
+
     /// <summary>Recharge dans le catalogue les paquets installés (au démarrage). Un paquet corrompu est signalé, jamais fatal.</summary>
     public void LoadInstalled()
     {
@@ -43,6 +58,8 @@ public sealed class PluginStoreService(IConfiguration configuration, FlowCompone
             {
                 var info = PluginPackage.Inspect(File.ReadAllBytes(PackagePath(installed.Id, installed.Version)));
                 if (info.Sha256 != installed.Sha256) throw new PluginPackageException("L'empreinte de l'archive ne correspond plus à celle enregistrée.");
+                if ((info.Manifest.RequiredToolPackages ?? []).Any(dependency => !tools.Satisfies(dependency, ToolPackagePlatform.Current)))
+                    throw new PluginPackageException("Une dépendance d'outil de ce plugin n'est plus installée à une version compatible.");
                 if (!registry.TryInstall(info.Manifest, out var reason)) throw new PluginPackageException(reason);
             }
             catch (Exception exception) when (exception is PluginPackageException or IOException)
@@ -63,6 +80,8 @@ public sealed class PluginStoreService(IConfiguration configuration, FlowCompone
         if (expectedId is not null && expectedId != id) throw new PluginPackageException($"L'archive contient « {id} », pas « {expectedId} ».");
         if (expectedVersion is not null && expectedVersion != info.Manifest.Version) throw new PluginPackageException($"L'archive contient la version {info.Manifest.Version}, pas {expectedVersion}.");
         if (PluginIdentity.IsOfficialNamespace(id) && !allowOfficial) throw new PluginPackageException("L'espace de noms « official » est réservé au dépôt officiel.");
+        if ((info.Manifest.RequiredToolPackages ?? []).FirstOrDefault(dependency => !tools.Satisfies(dependency, ToolPackagePlatform.Current)) is { } missing)
+            throw new PluginPackageException($"Dépendance requise absente : {missing.ToolPackageId} {missing.MinimumVersion} ou plus compatible pour {ToolPackagePlatform.Current}.");
         await gate.WaitAsync();
         try
         {

@@ -22,6 +22,13 @@ public sealed class ToolCapabilityProbe(
     private DateTimeOffset refreshed;
     private string? lastHardwareSummary;
 
+    public async Task InvalidateCacheAsync(CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try { cached = null; refreshed = default; }
+        finally { gate.Release(); }
+    }
+
     public async Task<IReadOnlyList<NodeToolCapability>> DiscoverAsync(CancellationToken ct)
     {
         await gate.WaitAsync(ct);
@@ -97,7 +104,7 @@ public sealed class ToolCapabilityProbe(
 
                     if (id == "ffmpeg") LogHardwareEncoding(encoders, checks);
                     list.Add(new(id, version, ["video", "audio", "image", "subtitles", "general"],
-                        acceleration, encoders, id == "ffmpeg" ? checks : null));
+                        acceleration, encoders, id == "ffmpeg" ? checks : null, ToolPackageSha256: ManagedToolCatalog.PackageSha256ForCapability(id)));
                 }
                 catch (Exception) when (!ct.IsCancellationRequested) { }
             }
@@ -107,6 +114,7 @@ public sealed class ToolCapabilityProbe(
                 try
                 {
                     var manifest = await plugins.DescribeAsync(plugin, ct);
+                    if ((manifest.RequiredToolPackages ?? []).Any(dependency => !ManagedToolCatalog.Satisfies(dependency))) continue;
                     list.Add(new("plugin/" + manifest.Id, manifest.Version, ["general"], ["process"], ManifestFingerprint: PluginManifestFingerprint.Compute(manifest)));
                 }
                 catch (Exception) when (!ct.IsCancellationRequested) { }

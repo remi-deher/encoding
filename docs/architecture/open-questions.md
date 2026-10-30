@@ -1,6 +1,6 @@
 # Écarts constatés et décisions en attente
 
-Dressé le 2026-10-21 en relisant les anciens ADR contre le code de `dev`. Chaque point dit ce qui est constaté, pourquoi cela compte, et ce qui est proposé. **Rien n'est tranché ici** : ce sont les décisions de Rémi. Une fois décidé, déplacer le point dans la fiche du domaine (et dans un ADR si la décision est structurante).
+Dressé le 2026-10-21 en relisant les anciens ADR contre le code de `dev`. Cette liste conserve les constats et décisions en attente ; un point marqué « décision prise » est désormais suivi dans sa fiche de domaine et son ADR.
 
 ## À traiter en priorité (production)
 
@@ -22,11 +22,11 @@ La reprise manuelle à deux serveurs est livrée par l’ADR [0016](adr/0016-tra
 ### 5. Relations entre clusters (ancien ADR 0038 §9, numéro 0042 réservé)
 Transfert de nœuds entre clusters, partage de bibliothèques, propriété avec époque, garde-fous anti-doublon sans quorum : conçu, **jamais implémenté**. Garder comme feuille de route ou abandonner ?
 
-### 6. Outils médias personnalisés / gérés (ancien ADR 0064)
-Fournisseurs `custom`/`managed`, manifeste `tool.json`, `/opt/encoding/tools/`, test de conformité : **non implémenté** (seules la validation MCP et la liste des outils existent). `docs/operations/todo-hardware-accelerated-tools-policy.md` en dépend. Garder ou abandonner ?
+### 6. Outils médias personnalisés / gérés — décision prise (2026-10-30)
+Rémi retient un dépôt public unique pour plugins et outils, paquets d'outils partagés par rôle, versions contraintes par les plugins et hashes SHA-256 d'archive et d'exécutable. Le socle `tool.json`, Store serveur, import depuis un dépôt, distribution worker, résolution par rôle et affichage du Store sont implémentés dans cette évolution (ADR [0029](adr/0029-store-plugins-outils-hashes.md)). Il reste à publier le dépôt vide initial, migrer les plugins et outils actuellement intégrés dans l'image, ajouter la signature des catalogues/paquets, et valider cluster multi-plateforme et matériel réel. L'état du Store reste local à chaque serveur.
 
 ### 7. Store de plugins : compléments
-Déjà livré (PR #205). Reste : réplication de l'état entre serveurs (aujourd'hui local), signature des paquets, contrôle de `minEngineVersion`/`requiredTools`, désactivation sans retrait, refus de retrait d'un plugin utilisé, synchronisation périodique, adresse du dépôt officiel (non définie).
+Déjà livré (PR #205), complété par l'ADR [0029](adr/0029-store-plugins-outils-hashes.md). Reste : réplication de l'état entre serveurs (aujourd'hui local), signatures, `minEngineVersion`, désactivation sans retrait, refus de retrait d'un plugin utilisé, synchronisation périodique et choix de l'adresse du dépôt officiel.
 
 ### 8. ~~Aucun déclencheur « après publication »~~ — traitée
 Résolue par l'ADR [0003](adr/0003-publication-etape-de-flow.md) : le bloc `base-publish-result` publie au milieu du flow et les blocs Plex, Radarr, Sonarr, Jellyfin le suivent. `media.published` reste un événement d'audit. Reste : un runner réel n'a pas encore exécuté le bloc de bout en bout, et le modèle de flow livré (FileFlows V3) n'utilise pas encore ce bloc.

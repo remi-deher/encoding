@@ -2,17 +2,21 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Encoding.Contracts.Plugins;
+using Encoding.Contracts.Tools;
 using Encoding.Core.Plugins;
+using Encoding.Core.Tools;
 
 namespace Encoding.Api.Plugins;
 
 public sealed record RepositoryVersion(string Version, string DownloadUrl, string Sha256, string? Changelog, DateTimeOffset? ReleaseDate);
+public sealed record RepositoryToolVersion(string Version, string Platform, string DownloadUrl, string Sha256, string? Changelog, DateTimeOffset? ReleaseDate);
+public sealed record RepositoryTool(string Id, string Name, string Summary, string LatestVersion, IReadOnlyList<RepositoryToolVersion> Versions);
 
 public sealed record RepositoryPlugin(string Id, string Name, string Summary, string Category, string CategoryLabel, string? Author,
     string LatestVersion, IReadOnlyList<string> RequiredTools, IReadOnlyList<RepositoryVersion> Versions);
 
 public sealed record PluginRepository(string Id, string Name, string Url, string Description, bool IsOfficial, bool Enabled,
-    DateTimeOffset? LastSyncAt, string? LastError, IReadOnlyList<RepositoryPlugin> Packages);
+    DateTimeOffset? LastSyncAt, string? LastError, IReadOnlyList<RepositoryPlugin> Packages, IReadOnlyList<RepositoryTool>? Tools = null);
 
 public sealed class PluginRepositoryException(string message) : Exception(message);
 
@@ -21,7 +25,8 @@ public sealed class PluginRepositoryException(string message) : Exception(messag
 /// <c>PluginStore:OfficialRepositoryUrl</c> est configuré ; lui seul peut distribuer l'espace de noms « official ».
 /// Chaque archive est contrôlée par le SHA-256 annoncé dans l'index avant toute installation.
 /// </summary>
-public sealed partial class PluginRepositoryService(IConfiguration configuration, IHttpClientFactory clients, PluginStoreService store, ILogger<PluginRepositoryService> logger)
+public sealed partial class PluginRepositoryService(IConfiguration configuration, IHttpClientFactory clients, PluginStoreService store,
+    ToolStoreService toolStore, ILogger<PluginRepositoryService> logger)
 {
     public const string HttpClientName = "PluginStore";
     private const int MaxIndexBytes = 4 * 1024 * 1024;
@@ -39,7 +44,7 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
     {
         var saved = Read();
         if (OfficialUrl is { } official && saved.All(item => !item.IsOfficial))
-            saved.Insert(0, new PluginRepository("official", "Dépôt officiel", official, "", true, true, null, null, []));
+            saved.Insert(0, new PluginRepository("official", "Dépôt officiel", official, "", true, true, null, null, [], []));
         return saved;
     }
 
@@ -78,7 +83,7 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
             var all = List().ToList();
             if (all.Any(item => item.Id == id || string.Equals(item.Url.TrimEnd('/'), uri.ToString().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
                 throw new PluginRepositoryException("Ce dépôt est déjà configuré.");
-            var fetched = await FetchAsync(new PluginRepository(id, uri.Host, uri.ToString(), "", false, true, null, null, []), ct);
+            var fetched = await FetchAsync(new PluginRepository(id, uri.Host, uri.ToString(), "", false, true, null, null, [], []), ct);
             all.Add(fetched);
             Write(all.Where(item => !item.IsOfficial || item.LastSyncAt is not null).ToList());
             return fetched;
@@ -168,6 +173,7 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
                 foreach (var category in categoryList.EnumerateArray())
                     if (Text(category, "id") is { } categoryId) categories[categoryId] = Text(category, "name") ?? categoryId;
             var packages = new List<RepositoryPlugin>();
+            var tools = new List<RepositoryTool>();
             var skipped = 0;
             if (root.TryGetProperty("plugins", out var list) && list.ValueKind == JsonValueKind.Array)
             {
@@ -179,15 +185,51 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
                     else skipped++;
                 }
             }
+            if (root.TryGetProperty("tools", out var toolList) && toolList.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in toolList.EnumerateArray())
+                {
+                    var tool = ParseTool(item);
+                    if (tool is null || tools.Any(existing => existing.Id == tool.Id)) skipped++;
+                    else tools.Add(tool);
+                }
+            }
             return repository with
             {
                 Name = Text(root, "name") ?? repository.Name,
                 Description = Text(root, "description") ?? "",
                 LastSyncAt = DateTimeOffset.UtcNow,
                 LastError = skipped > 0 ? $"{skipped} entrée(s) invalide(s) ignorée(s)." : null,
-                Packages = packages
+                Packages = packages,
+                Tools = tools
             };
         }
+    }
+
+    private static RepositoryTool? ParseTool(JsonElement item)
+    {
+        if (item.ValueKind != JsonValueKind.Object) return null;
+        var id = Text(item, "id");
+        if (id is null || !Regex.IsMatch(id, "^[a-z0-9][a-z0-9._-]{0,127}$")) return null;
+        var versions = new List<RepositoryToolVersion>();
+        if (item.TryGetProperty("versions", out var versionList) && versionList.ValueKind == JsonValueKind.Array)
+            foreach (var entry in versionList.EnumerateArray())
+            {
+                var version = Text(entry, "version");
+                var platform = Text(entry, "platform");
+                var url = Text(entry, "downloadUrl");
+                var sha = Text(entry, "sha256");
+                if (version is null || !VersionPattern().IsMatch(version) || platform is null
+                    || !Regex.IsMatch(platform, "^[a-z0-9][a-z0-9._-]{0,127}$")
+                    || sha is null || !Sha256Pattern().IsMatch(sha)
+                    || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo)
+                    || versions.Any(existing => existing.Version == version && existing.Platform == platform)) continue;
+                DateTimeOffset? released = entry.TryGetProperty("releaseDate", out var date) && date.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(date.GetString(), out var parsed) ? parsed : null;
+                versions.Add(new RepositoryToolVersion(version, platform, uri.ToString(), sha.ToLowerInvariant(), Text(entry, "changelog"), released));
+            }
+        var latest = Text(item, "latestVersion");
+        if (versions.Count == 0 || latest is null || versions.All(version => version.Version != latest)) return null;
+        return new RepositoryTool(id, Text(item, "name") ?? id, Text(item, "summary") ?? "", latest, versions);
     }
 
     private static RepositoryPlugin? ParsePlugin(JsonElement item, Dictionary<string, string> categories, bool official)
@@ -254,7 +296,57 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
         {
             throw new PluginRepositoryException("L'archive est injoignable ou ne se télécharge pas dans le délai imparti.");
         }
-        try { return await store.ImportAsync(archive, "repo:" + repository.Id, plugin.Id, wanted.Version, wanted.Sha256, allowOfficial: repository.IsOfficial); }
+        try
+        {
+            if (!string.Equals(PluginPackage.Hash(archive), wanted.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new PluginRepositoryException("L'empreinte SHA-256 de l'archive ne correspond pas à celle annoncée par le dépôt.");
+            var packageInfo = PluginPackage.Inspect(archive);
+            foreach (var dependency in packageInfo.Manifest.RequiredToolPackages ?? [])
+            {
+                var tool = repository.Tools?.SingleOrDefault(item => item.Id == dependency.ToolPackageId)
+                    ?? throw new PluginRepositoryException($"Le plugin requiert l'outil {dependency.ToolPackageId}, absent de ce dépôt.");
+                var compatibleByPlatform = tool.Versions
+                    .Where(item => ToolStoreService.VersionSatisfies(item.Version, dependency.MinimumVersion, dependency.MaximumVersionExclusive))
+                    .GroupBy(item => item.Platform)
+                    .Select(group => group.OrderByDescending(item => Version.Parse(item.Version)).First())
+                    .ToArray();
+                if (compatibleByPlatform.All(item => item.Platform != ToolPackagePlatform.Current))
+                    throw new PluginRepositoryException($"Aucune version compatible de {dependency.ToolPackageId} n'est publiée pour {ToolPackagePlatform.Current}.");
+                if (toolStore.Satisfies(dependency, ToolPackagePlatform.Current)) continue;
+                foreach (var platformCandidate in compatibleByPlatform)
+                    if (!toolStore.Satisfies(dependency, platformCandidate.Platform))
+                        await InstallToolAsync(repository.Id, tool.Id, platformCandidate.Version, platformCandidate.Platform, ct);
+            }
+            return await store.ImportAsync(archive, "repo:" + repository.Id, plugin.Id, wanted.Version, wanted.Sha256, allowOfficial: repository.IsOfficial);
+        }
         catch (PluginPackageException exception) { throw new PluginRepositoryException(exception.Message); }
+    }
+
+    /// <summary>Télécharge un paquet d'outil par plateforme, puis vérifie l'archive et le hash de chaque exécutable.</summary>
+    public async Task<InstalledToolPackage> InstallToolAsync(string repositoryId, string toolId, string? version, string? platform, CancellationToken ct)
+    {
+        var repository = List().SingleOrDefault(item => item.Id == repositoryId) ?? throw new PluginRepositoryException("Dépôt inconnu.");
+        if (!repository.Enabled) throw new PluginRepositoryException("Ce dépôt est désactivé.");
+        var tool = repository.Tools?.SingleOrDefault(item => item.Id == toolId) ?? throw new PluginRepositoryException("Ce paquet d'outil n'existe pas dans le dépôt.");
+        var wantedVersion = version ?? tool.LatestVersion;
+        var wantedPlatform = platform ?? ToolPackagePlatform.Current;
+        var wanted = tool.Versions.SingleOrDefault(item => item.Version == wantedVersion && item.Platform == wantedPlatform)
+            ?? throw new PluginRepositoryException($"Aucun paquet {toolId} {wantedVersion} n'est publié pour {wantedPlatform}.");
+        byte[] archive;
+        try
+        {
+            using var response = await clients.CreateClient(HttpClientName).GetAsync(wanted.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode) throw new PluginRepositoryException($"Le téléchargement a échoué (HTTP {(int)response.StatusCode}).");
+            archive = await ReadLimitedAsync(response, ToolPackageArchive.MaxArchiveBytes, "L'archive de l'outil dépasse 512 Mio.", ct);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            throw new PluginRepositoryException("L'archive de l'outil est injoignable ou ne se télécharge pas dans le délai imparti.");
+        }
+        try
+        {
+            return await toolStore.ImportAsync(archive, "repo:" + repository.Id, wanted.Sha256, tool.Id, wanted.Version, wanted.Platform, ct);
+        }
+        catch (ToolPackageException exception) { throw new PluginRepositoryException(exception.Message); }
     }
 }

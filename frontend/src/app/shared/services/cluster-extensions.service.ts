@@ -90,6 +90,12 @@ export class ClusterExtensionsService {
     );
   }
 
+  installToolPackage(repositoryId: string, id: string, version?: string): Promise<unknown> {
+    return firstValueFrom(
+      this.http.post('/api/v1/store/tools/install', { repositoryId, id, version }),
+    );
+  }
+
   importArchive(archive: File): Promise<unknown> {
     return firstValueFrom(
       this.http.post('/api/v1/store/packages/import', archive, {
@@ -101,6 +107,12 @@ export class ClusterExtensionsService {
   removePackage(id: string): Promise<void> {
     return firstValueFrom(
       this.http.delete<void>(`/api/v1/store/packages/${encodeURIComponent(id)}`),
+    );
+  }
+
+  removeToolPackage(id: string, platform: string): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(`/api/v1/store/tools/${encodeURIComponent(id)}/${encodeURIComponent(platform)}`),
     );
   }
 }

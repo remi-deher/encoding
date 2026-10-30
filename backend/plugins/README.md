@@ -97,6 +97,42 @@ Exactement un de `outputId` ou `terminalResult` (`unchanged`, `success`, `failed
 
 **Par le Store (recommandé)** : empaquetez le plugin en `.zip` avec un `plugin.json` à la racine (le manifeste habituel plus `"runtime": { "type": "python3", "entrypoint": "main.py" }`, identifiant `espace.nom`), copiez-y le SDK à côté du point d'entrée, puis *Plugins & Outils → Store & Dépôts → Importer une archive*. Le serveur contrôle le paquet, l'enregistre à chaud, et chaque worker le télécharge et le vérifie dans la minute. Voir 0063 (état d'implémentation, limites en cluster multi-serveurs).
 
+### Paquets d'outils du Store
+
+Les binaires sont publiés comme paquets indépendants, jamais copiés dans chaque archive plugin. Un plugin déclare ses dépendances au niveau du manifeste :
+
+```json
+"requiredToolPackages": [
+  {
+    "toolPackageId": "ffmpeg",
+    "minimumVersion": "7.1.0",
+    "maximumVersionExclusive": "8.0.0",
+    "requiredCapabilities": ["libx264"]
+  }
+]
+```
+
+Le dépôt doit inclure une version compatible pour la plateforme du serveur. Le Store installe aussi les variantes compatibles publiées pour les autres plateformes ; chaque nœud ne télécharge que son architecture. L'administrateur peut installer un autre paquet fournisseur global pour le rôle après avoir retiré celui en conflit. Il n'y a qu'un fournisseur d'un rôle par plateforme, donc deux plugins qui demandent `ffmpeg` utilisent le même binaire installé.
+
+Chaque archive outil contient `tool.json` à sa racine. Exemple de manifeste :
+
+```json
+{
+  "contractVersion": 1,
+  "id": "ffmpeg",
+  "version": "7.1.0",
+  "name": "FFmpeg",
+  "platform": "linux-x64",
+  "executables": [
+    { "toolId": "ffmpeg", "path": "bin/ffmpeg", "sha256": "<sha256 du fichier ffmpeg>" },
+    { "toolId": "ffprobe", "path": "bin/ffprobe", "sha256": "<sha256 du fichier ffprobe>" }
+  ],
+  "capabilities": ["libx264", "libx265"]
+}
+```
+
+Dans `repository.json`, chaque paquet `tools[]` donne `id`, `name`, `summary`, `latestVersion` et `versions[]`; chaque version donne la plateforme, l'URL d'archive et son SHA-256. Le serveur vérifie le hash de l'archive puis ceux des exécutables dans `tool.json`. Le worker répète ces contrôles avant extraction. Les hashes garantissent que l'archive et ses binaires n'ont pas changé depuis publication du manifeste ; ils ne remplacent pas une signature du dépôt.
+
 **À la main** (plugin fourni avec l'image, ou besoin d'un lancement particulier) :
 
 - **Serveur** : copier le manifeste dans le dossier `FlowPlugins:ManifestDirectory` (variable `FlowPlugins__ManifestDirectory`) et redémarrer. Le catalogue valide le manifeste ; les composants apparaissent dans l’éditeur.

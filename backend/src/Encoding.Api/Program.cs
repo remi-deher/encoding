@@ -95,6 +95,8 @@ builder.Services.AddSingleton<Encoding.Api.Resources.ResourceBlobFetcher>();
 builder.Services.AddHostedService<Encoding.Api.Resources.ResourcePrefetchService>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
 builder.Services.AddSingleton<WebhookAuthThrottle>();
+builder.Services.AddSingleton<ToolStoreService>();
+builder.Services.AddHostedService<ToolStoreStartup>();
 builder.Services.AddSingleton<PluginStoreService>();
 builder.Services.AddSingleton<PluginRepositoryService>();
 builder.Services.AddHostedService<PluginStoreStartup>();

@@ -44,3 +44,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0026](0026-reprise-auto-reparatrice-deux-noeuds.md) | Reprise auto-réparatrice à deux nœuds | implemented | runtime |
 | [0027](0027-controle-integrite-optionnel.md) | Contrôle d'intégrité facultatif par bloc de flow | implemented | runtime, flows |
 | [0028](0028-publication-locale-et-journaux-operations.md) | Publication locale et journaux d'opérations | implemented | runtime |
+| [0029](0029-store-plugins-outils-hashes.md) | Store commun pour plugins et outils, identifiés par hash | accepted | plugins |

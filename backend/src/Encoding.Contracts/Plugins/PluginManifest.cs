@@ -12,7 +12,8 @@ public sealed record PluginManifest(
     IReadOnlyList<int> SupportedHostContractVersions,
     IReadOnlyList<FlowComponentDescriptor> Components,
     FlowConfigurationSchema? ConfigurationSchema = null,
-    PluginPublicationGuard? PublicationGuard = null);
+    PluginPublicationGuard? PublicationGuard = null,
+    IReadOnlyList<Encoding.Contracts.Tools.PluginToolDependency>? RequiredToolPackages = null);
 
 /// <summary>
 /// Point d'extension (architecture 0059) : le plugin fournit une garde consultée par le nœud d'accès avant de remplacer un
@@ -123,6 +124,13 @@ public static class PluginManifestFingerprint
     {
         var builder = new System.Text.StringBuilder();
         builder.Append(manifest.Id).Append('@').Append(manifest.Version).Append('\n');
+        foreach (var dependency in (manifest.RequiredToolPackages ?? []).OrderBy(item => item.ToolPackageId, StringComparer.Ordinal))
+        {
+            builder.Append("tool:").Append(dependency.ToolPackageId).Append('@').Append(dependency.MinimumVersion)
+                .Append("..<").Append(dependency.MaximumVersionExclusive ?? "*").Append('\n');
+            foreach (var capability in (dependency.RequiredCapabilities ?? []).Order(StringComparer.Ordinal))
+                builder.Append("  capability:").Append(capability).Append('\n');
+        }
         foreach (var field in (manifest.ConfigurationSchema?.Fields ?? []).OrderBy(field => field.Id, StringComparer.Ordinal))
             builder.Append("cfg:").Append(field.Id).Append(':').Append(field.Type).Append('\n');
         foreach (var component in manifest.Components.OrderBy(component => component.Id, StringComparer.Ordinal))
