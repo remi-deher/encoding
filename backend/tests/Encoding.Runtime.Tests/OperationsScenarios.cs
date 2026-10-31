@@ -62,7 +62,7 @@ internal static class OperationsScenarios
         context.Request.Headers.Authorization = "Bearer secreT";
         Check(!OperationsEndpoints.Authorized(context, "secret"), "Un mauvais jeton est refusé.");
 
-        Check(Throws(() => new ArtifactRetentionOptions { Enabled = true, Days = 0 }.Validate(), "Days"), "La rétention exige une durée positive.");
+        Check(Throws(() => new ArtifactRetentionOptions { Enabled = true, Days = -1 }.Validate(), "Days"), "La rétention exige une durée positive.");
         new ArtifactRetentionOptions().Validate();
         Console.WriteLine("PASS: migration catalog, Prometheus format, correlation ids and operations options.");
     }
@@ -110,7 +110,7 @@ internal static class OperationsScenarios
         var root = Path.Combine(directory, "artifacts");
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Runtime:ArtifactDirectory"] = root }).Build();
         var store = new RuntimeArtifactStore(db, config);
-        var options = new OperationsOptions { ArtifactRetention = new() { Enabled = true, Days = 30, FailedDays = 0, TempFileHours = 24 } };
+        var options = new OperationsOptions { ArtifactRetention = new() { Enabled = true, Days = 30, FailedDays = 90, TempFileHours = 24 } };
         var retention = new ArtifactRetention(db, store, options, NullLogger<ArtifactRetention>.Instance);
 
         var library = Guid.NewGuid();
@@ -126,7 +126,7 @@ internal static class OperationsScenarios
         var freshTemporary = Path.Combine(store.DirectoryFor(recent), "y.tmp");
         File.WriteAllText(freshTemporary, "partial");
 
-        var dry = await new ArtifactRetention(db, store, new() { ArtifactRetention = new() { Enabled = true, Days = 30, FailedDays = 0, DryRun = true } }, NullLogger<ArtifactRetention>.Instance).RunOnceAsync(CancellationToken.None);
+        var dry = await new ArtifactRetention(db, store, new() { ArtifactRetention = new() { Enabled = true, Days = 30, FailedDays = 90, DryRun = true } }, NullLogger<ArtifactRetention>.Instance).RunOnceAsync(CancellationToken.None);
         Check(dry.DryRun && dry.Purged == 1 && dry.BytesFreed == 4 && Directory.Exists(store.DirectoryFor(old)) && File.Exists(staleTemporary), "La simulation compte sans supprimer.");
 
         var result = await retention.RunOnceAsync(CancellationToken.None);
@@ -140,7 +140,7 @@ internal static class OperationsScenarios
         Check(again.Purged == 0, "La rétention est idempotente.");
 
         var withFailed = new ArtifactRetention(db, store, new() { ArtifactRetention = new() { Enabled = true, Days = 30, FailedDays = 30 } }, NullLogger<ArtifactRetention>.Instance);
-        Check((await withFailed.RunOnceAsync(CancellationToken.None)).Purged == 1 && !Directory.Exists(store.DirectoryFor(failed)), "FailedDays étend la rétention aux échecs.");
+        Check((await withFailed.RunOnceAsync(CancellationToken.None)).Purged == 1 && !Directory.Exists(store.DirectoryFor(failed)), "FailedDays purge aussi les échecs au-delà de la durée.");
     }
 
     private static async Task EndpointsAsync(System.Data.Common.DbDataSource db, string directory, string contentRoot)

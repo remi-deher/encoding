@@ -3,7 +3,7 @@ using Encoding.NodeAgent.Services;
 
 namespace Encoding.NodeAgent.Runtime;
 
-/// <summary>Durées de conservation des dossiers de travail locaux (<c>executions/</c> et <c>transfers/</c>) d'un nœud.</summary>
+/// <summary>Durées de conservation des dossiers de travail locaux (<c>executions/</c>, <c>transfers/</c> et, sur un nœud sans fonction serveur, <c>runtime-artifacts/</c>) d'un nœud.</summary>
 public sealed record WorkspaceRetentionOptions(bool Enabled, TimeSpan Completed, TimeSpan Failed, TimeSpan Unknown, TimeSpan Interval)
 {
     public static WorkspaceRetentionOptions FromConfiguration(IConfiguration configuration)
@@ -11,8 +11,8 @@ public sealed record WorkspaceRetentionOptions(bool Enabled, TimeSpan Completed,
         var section = configuration.GetSection("Node:Workspace");
         var options = new WorkspaceRetentionOptions(
             section.GetValue("CleanupEnabled", true),
-            TimeSpan.FromHours(section.GetValue("CompletedRetentionHours", 1.0)),
-            TimeSpan.FromHours(section.GetValue("FailedRetentionHours", 24.0)),
+            TimeSpan.FromHours(section.GetValue("CompletedRetentionHours", 0.0)),
+            TimeSpan.FromHours(section.GetValue("FailedRetentionHours", 0.0)),
             TimeSpan.FromHours(section.GetValue("UnknownRetentionHours", 72.0)),
             TimeSpan.FromMinutes(section.GetValue("CleanupIntervalMinutes", 10.0)));
         if (options.Completed < TimeSpan.Zero || options.Failed < TimeSpan.Zero || options.Unknown < TimeSpan.Zero)
@@ -41,6 +41,7 @@ public sealed record WorkspaceRetentionOptions(bool Enabled, TimeSpan Completed,
 public sealed class WorkspaceCleanupService(NodeAgentOptions options, WorkerIdentityStore identities, IConfiguration configuration, ILogger<WorkspaceCleanupService> logger) : BackgroundService
 {
     private static readonly string[] Roots = ["executions", "transfers"];
+    private const string ArtifactsRoot = "runtime-artifacts";
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -60,7 +61,9 @@ public sealed class WorkspaceCleanupService(NodeAgentOptions options, WorkerIden
         var identity = await identities.GetAsync(ct);
         if (!identity.IsEnrolled) return 0;
         var candidates = new Dictionary<Guid, List<string>>();
-        foreach (var root in Roots)
+        // Avec la fonction serveur, ArtifactRetention (qui connaît publications, quarantaines et réservations) reste seul responsable de runtime-artifacts.
+        var roots = options.Roles.Contains(Encoding.Contracts.Nodes.NodeRole.Server) ? Roots : [.. Roots, ArtifactsRoot];
+        foreach (var root in roots)
         {
             var path = Path.Combine(options.DataDirectory, root);
             if (!Directory.Exists(path)) continue;

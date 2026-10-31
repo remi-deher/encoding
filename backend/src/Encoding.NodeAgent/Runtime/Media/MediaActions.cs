@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace Encoding.NodeAgent.Runtime.Media;
 
 public sealed record MediaActionOutcome(string? Primary,IReadOnlyList<string> Additional,JsonElement? Value=null,
-    IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings=null);
+    IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings=null,bool NeedsChanges=false);
 
 public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IToolCapabilityProbe capabilities,ILogger<MediaActions>? logger=null)
 {
@@ -101,13 +101,14 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
     }
 
     /// <summary>Nomenclature des pistes (0056). Mode « snapshot » : retourne les titres d'origine sans toucher au fichier. Mode « apply » : mkvpropedit sur une copie de travail ; aucun fichier n'est produit quand rien ne change ou que le conteneur n'est pas Matroska.</summary>
-    public async Task<MediaActionOutcome> TrackNamesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,JsonElement? origin,string current,string directory,string node,CancellationToken ct,bool editWorkingCopy=false)
+    public async Task<MediaActionOutcome> TrackNamesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,JsonElement? origin,string current,string directory,string node,CancellationToken ct,bool editWorkingCopy=false,bool planOnly=false)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
         using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
         if(Text(c,"mode","apply")=="snapshot") return new(null,[],TrackNaming.Snapshot(identification.RootElement).Clone());
         var edits=TrackNaming.Plan(identification.RootElement,probe,origin,TrackNameOptions.From(c));
         if(edits.Count==0) return new(null,[]);
+        if(planOnly) return new(null,[],null,null,true);
         var canEditDirectly = editWorkingCopy || (Path.GetDirectoryName(current) == Path.GetFullPath(directory) && Path.GetFileName(current).StartsWith("out-", StringComparison.Ordinal) && new FileInfo(current).LinkTarget is null);
         var file = canEditDirectly ? (editWorkingCopy ? MutableAssemblyFile(current, directory) : current) : Output(directory, node, ".mkv");
         if (!canEditDirectly) File.Copy(current, file, true);
@@ -121,7 +122,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
     }
 
     /// <summary>Gestion des sous-titres (0057) : extrait les pistes texte, planifie (conversion SRT vers ASS, mise à niveau, doublons, forcés, titres, défaut) puis écrit un seul MKV avec mkvmerge. Les pistes non modifiées sont recopiées de la source ; rien n'est produit quand tout est déjà conforme.</summary>
-    public async Task<MediaActionOutcome> SubtitleManageAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,string current,string directory,string node,CancellationToken ct)
+    public async Task<MediaActionOutcome> SubtitleManageAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,string current,string directory,string node,CancellationToken ct,bool planOnly=false)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
         var options=SubtitleOptions.From(c);
@@ -181,6 +182,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             var plan=SubtitlePlanner.Plan(tracks,SubtitlePlanner.ReferenceAudioIsFrench(probe),canvas,options);
             var lines=plan.Notes.Concat(plan.Decisions.Select(d=>$"Sous-titre {d.Ordinal} : {(d.Drop?"retiré":d.ReplacementAss is not null?d.Note:"conservé")}, « {d.Title} »{(d.Default?", par défaut":"")}{(d.Forced?", forcé":"")}")).ToArray();
             if(!plan.Changed) return new(null,[],JsonSerializer.SerializeToElement(plan.Notes.ToArray()));
+            if(planOnly) return new(null,[],null,null,true);
             var file2=Output(directory,node,".mkv"); var args=new List<string> { "-o",file2 };
             var kept=plan.Decisions.Where(d=>!d.Drop&&d.ReplacementAss is null).ToArray();
             if(kept.Length==0) args.Add("--no-subtitles"); else args.AddRange(["--subtitle-tracks",string.Join(',',kept.Select(d=>subtitleIds[d.Ordinal]))]);
