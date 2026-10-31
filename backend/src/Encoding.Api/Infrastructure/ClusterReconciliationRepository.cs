@@ -301,6 +301,13 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task RemovePeerEndpointsBySourceAsync(string source, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand("DELETE FROM cluster_sync_peer_endpoints WHERE source = @source");
+        command.Parameters.AddWithValue("source", source);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<IReadOnlyList<string>> GetPeerEndpointsAsync(CancellationToken ct)
     {
         var result = new List<string>();

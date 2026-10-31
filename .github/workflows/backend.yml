@@ -113,8 +113,12 @@ jobs:
           tags: encoding:ci
           cache-from: type=gha,scope=docker-cluster-tests
           cache-to: type=gha,mode=max,scope=docker-cluster-tests
+      - name: Add ffmpeg to the isolated cluster-test image
+        run: docker build --file .github/docker/Dockerfile.cluster-test --tag encoding:cluster-test .
       - name: Pull the last published image (compatibility between versions)
         run: docker pull mrcryllix/encoding:latest
+      - name: Add test media tools to the previous image
+        run: docker build --build-arg BASE_IMAGE=mrcryllix/encoding:latest --file .github/docker/Dockerfile.cluster-test --tag encoding:previous-cluster-test .
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
       - uses: ./.github/actions/apt-install
@@ -127,8 +131,8 @@ jobs:
           --logger "trx;LogFileName=docker-cluster.trx" --results-directory test-results
         env:
           ENCODING_TEST_DOCKER: '1'
-          ENCODING_TEST_IMAGE: encoding:ci
-          ENCODING_TEST_PREVIOUS_IMAGE: mrcryllix/encoding:latest
+          ENCODING_TEST_IMAGE: encoding:cluster-test
+          ENCODING_TEST_PREVIOUS_IMAGE: encoding:previous-cluster-test
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -201,7 +205,7 @@ jobs:
 
   cluster-two-server-measurements:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

@@ -13,6 +13,33 @@ namespace Encoding.Runtime.Tests;
 public sealed class ClusterReconciliationServiceTests
 {
     [Theory]
+    [InlineData("server", true)]
+    [InlineData("server,worker", true)]
+    [InlineData("worker", false)]
+    [InlineData("worker, worker", false)]
+    [InlineData(null, false)]
+    public void DiscoveryAcceptsOnlyExplicitServerAdvertisements(string? roles, bool expected)
+    {
+        var properties = roles is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string> { ["roles"] = roles };
+
+        Assert.Equal(expected, ClusterReconciliationService.IsAdvertisedServer(properties));
+    }
+
+    [Fact]
+    public async Task StartupCleanupRemovesPersistedMdnsEndpointsAndPreservesOtherSources()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.Journal.AddPeerEndpointAsync("http://old-worker.local:8080/", "mdns", CancellationToken.None);
+        await fixture.Journal.AddPeerEndpointAsync("http://server.local:8080/", "configured", CancellationToken.None);
+
+        await fixture.Journal.RemovePeerEndpointsBySourceAsync("mdns", CancellationToken.None);
+
+        Assert.Equal(["http://server.local:8080/"], await fixture.Journal.GetPeerEndpointsAsync(CancellationToken.None));
+    }
+
+    [Theory]
     [InlineData(70, 3)]
     [InlineData(300, ClusterReconciliationService.MaximumExchangesPerPeer)]
     public async Task OutgoingBacklogDrainsImmediatelyWithinTheExchangeBudget(int count, int expectedExchanges)
