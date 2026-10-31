@@ -70,7 +70,7 @@ public sealed class ClusterTaskPeerHandler(
         var allowed = await IsKnownArtifactAsync(message.ExecutionId, message.Digest, ct)
             || await IsDeclaredByLatestCheckpointAsync(message.ExecutionId, message.Digest, ct);
         var path = artifacts.PathFor(message.ExecutionId, message.Digest);
-        return allowed && File.Exists(path) ? Results.File(path, "application/octet-stream", enableRangeProcessing: true) : Results.NotFound();
+        return allowed ? FileResults.ServeOrNotFound(path, "application/octet-stream") : Results.NotFound();
     }
 
     private async Task<bool> IsKnownArtifactAsync(Guid executionId, string digest, CancellationToken ct)

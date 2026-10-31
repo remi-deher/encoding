@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Auth;
 using Encoding.Api.Tools;
 using Encoding.Contracts.Tools;
@@ -28,7 +29,7 @@ public static class RuntimeEndpoints
             var artifact=(await artifacts.ProducedAsync(id,ct)).FirstOrDefault(item=>item.Sha256==digest);
             if(artifact is null) return Results.NotFound();
             var path=artifacts.PathFor(id,digest);
-            return File.Exists(path)?Results.File(path,"application/octet-stream",artifact.Name,enableRangeProcessing:true):Results.NotFound();
+            return FileResults.ServeOrNotFound(path,"application/octet-stream",artifact.Name);
         });
         app.MapPost("/api/v1/media-executions",()=>Results.Json(new{title="Lancez les traitements depuis les fichiers détectés de la bibliothèque."},statusCode:410));
         // Les workers s’authentifient par leur jeton de nœud (filtre ci-dessous), pas par une session utilisateur.
@@ -239,7 +240,7 @@ public static class RuntimeEndpoints
         {
             if(!RuntimeArtifactStore.ValidDigest(digest) || !await artifacts.AuthorizeAsync(id,nodeId,epoch,ct)) return (IResult)Results.Conflict();
             var path=artifacts.PathFor(id,digest);
-            return File.Exists(path) ? Results.File(path,"application/octet-stream",enableRangeProcessing:true,entityTag:new Microsoft.Net.Http.Headers.EntityTagHeaderValue('"'+digest+'"')) : Results.NotFound();
+            return FileResults.ServeOrNotFound(path,"application/octet-stream",etag:'"'+digest+'"');
         });
         group.MapMethods("/executions/{id:guid}/dav/{digest}",["PROPFIND"],async(Guid nodeId,Guid id,string digest,long epoch,RuntimeArtifactStore artifacts,CancellationToken ct)=>
         {

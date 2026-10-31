@@ -86,6 +86,15 @@ public sealed class ArchitectureTests
     }
 
     [Fact]
+    public void EndpointsDoNotTouchTheFileSystemDirectly()
+    {
+        var offenders = SourceFiles("Encoding.Api").Where(file => file.EndsWith("Endpoints.cs") || file.EndsWith("PeerHandler.cs"))
+            .Where(file => Regex.IsMatch(File.ReadAllText(file), @"\b(File|Directory)\.\w+\(|\bFileStream\b|\bProcess\b"))
+            .Select(Relative).ToArray();
+        Assert.True(offenders.Length == 0, "Accès fichier ou processus direct dans les endpoints (utiliser FileResults ou un service) : " + string.Join(", ", offenders));
+    }
+
+    [Fact]
     public void ContractsAndCoreAreFreeOfStorageTypes()
     {
         var offenders = SourceFiles("Encoding.Contracts").Concat(SourceFiles("Encoding.Core"))

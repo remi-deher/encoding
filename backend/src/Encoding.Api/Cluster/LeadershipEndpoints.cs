@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Auth;
 using Encoding.Api.Nodes;
 using Encoding.Contracts.Cluster;
@@ -48,7 +49,7 @@ public static class LeadershipEndpoints
             if (!await nodeRepo.AuthenticateTokenAsync(transfer.TargetNodeId, token, ct))
                 return Results.Forbid();
 
-            if (!File.Exists(transfer.SnapshotPath))
+            if (!FileResults.Exists(transfer.SnapshotPath))
                 return Results.NotFound(new { title = "Le fichier d'instantané n'existe plus sur le serveur." });
 
             return Results.File(transfer.SnapshotPath, "application/x-sqlite3", enableRangeProcessing: true);
@@ -88,7 +89,7 @@ public static class LeadershipEndpoints
                 return Results.Unauthorized();
 
             var backup = await repository.GetLatestBackupAsync(ct);
-            if (backup is null || !File.Exists(backup.FilePath))
+            if (backup is null || !FileResults.Exists(backup.FilePath))
                 return Results.NotFound(new { title = "Aucune sauvegarde miroir disponible." });
 
             return Results.File(backup.FilePath, "application/x-sqlite3", enableRangeProcessing: true);
