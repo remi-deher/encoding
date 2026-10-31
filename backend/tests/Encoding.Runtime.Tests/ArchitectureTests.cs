@@ -32,7 +32,7 @@ public sealed class ArchitectureTests
         ["Encoding.Api/Nodes/NodeRepository.cs"] = 624,
         ["Encoding.Api/Tools/AiAssistantService.cs"] = 1552,
         ["Encoding.NodeAgent/Runtime/Media/MediaActions.cs"] = 896,
-        ["Encoding.NodeAgent/Runtime/RuntimeFlowRunner.cs"] = 1009,
+        ["Encoding.NodeAgent/Runtime/RuntimeFlowExecution.Steps.cs"] = 740,
     };
 
     private static readonly string[] ProcessLaunchAllowList =
