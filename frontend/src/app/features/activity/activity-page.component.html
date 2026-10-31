@@ -85,9 +85,11 @@
       </div>
     }
 
-    @if (pageState().status === 'loading' && !pageState().data) {
-      <div class="empty-state" role="status"><p>Chargement des fichiers…</p></div>
-    } @else if (!files().length) {
+    @if (isRefreshing()) {
+      <mat-progress-bar mode="indeterminate" class="activity-refresh-bar" />
+    }
+
+    @if (!files().length) {
       <div class="empty-state">
         <h2>{{ pageState().status === 'error' ? 'Données indisponibles' : 'Aucun fichier' }}</h2>
         <p>

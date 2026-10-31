@@ -28,9 +28,11 @@ import {
   catchError,
   debounceTime,
   exhaustMap,
+  filter,
   finalize,
   firstValueFrom,
   map,
+  merge,
   of,
   startWith,
   switchMap,
@@ -46,6 +48,7 @@ import {
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { LibraryActivity } from '../../shared/services/library-activity';
 import {
+  LibraryActivityCounts,
   LibraryActivityFile,
   LibraryActivityResponse,
   LibraryActivityStatus,
@@ -77,13 +80,13 @@ import { MatDialog } from '@angular/material/dialog';
 
 const ACTIVITY_STATUSES: readonly { value: LibraryActivityStatus; label: string }[] = [
   { value: 'untreated', label: 'À traiter' },
-  { value: 'active', label: 'En cours de traitement' },
+  { value: 'active', label: 'En cours' },
   { value: 'done', label: 'Déjà traité' },
-  { value: 'failed', label: 'Erreurs et annulations' },
-  { value: 'disabled', label: 'Traitement désactivé' },
+  { value: 'failed', label: 'Erreurs' },
+  { value: 'disabled', label: 'Désactivés' },
 ];
 const PAGE_SIZE = 50;
-const PAGE_REFRESH_MS = 10000;
+const PAGE_REFRESH_MS = 5000;
 interface ActivityPageState {
   readonly status: 'loading' | 'ready' | 'error';
   readonly data: LibraryActivityResponse | null;
@@ -224,12 +227,17 @@ export class ActivityPageComponent {
     ].sort((a, b) => a.localeCompare(b, 'fr-FR')),
   );
 
+  private readonly debouncedSearch = toSignal(
+    toObservable(this.search).pipe(debounceTime(150)),
+    { initialValue: this.search() },
+  );
+
   private readonly request = computed(() => ({
     status: this.status(),
     libraryId: this.libraryFilter() ?? undefined,
     flow: this.flowFilter() ?? undefined,
     nodeId: this.nodeFilter() ?? undefined,
-    search: this.search(),
+    search: this.debouncedSearch(),
     limit: PAGE_SIZE,
     offset: 0,
   }));
@@ -239,32 +247,65 @@ export class ActivityPageComponent {
       libraryId: this.libraryFilter(),
       flow: this.flowFilter(),
       node: this.nodeFilter(),
-      search: this.search().trim(),
+      search: this.debouncedSearch().trim(),
     }),
   );
+
+  private readonly statusCache = new Map<string, LibraryActivityResponse>();
+  private readonly cachedCounts = signal<LibraryActivityCounts | null>(null);
+  protected readonly isRefreshing = signal(false);
+
   private readonly pageState = toSignal(
     toObservable(
       computed(() => ({ query: this.request(), revision: this.refreshRevision() })),
     ).pipe(
-      debounceTime(180),
       switchMap(({ query, revision }) => {
         const key = this.requestKey();
-        return timer(0, PAGE_REFRESH_MS).pipe(
-          exhaustMap(() =>
-            this.activityApi.list(query).pipe(
-              timeout(20000),
-              tap((data) => this.lastSuccessfulPage.set({ key, data })),
+        const cached =
+          this.statusCache.get(key) ??
+          (this.lastSuccessfulPage()?.key === key ? this.lastSuccessfulPage()!.data : null);
+
+        const realTimeEvents$ = this.tracking.state$.pipe(
+          filter((s) => s.status === 'ready'),
+          map(() => void 0),
+        );
+
+        const poll$ = merge(timer(0, PAGE_REFRESH_MS), realTimeEvents$).pipe(
+          exhaustMap(() => {
+            this.isRefreshing.set(true);
+            return this.activityApi.list(query).pipe(
+              timeout(15000),
+              tap((data) => {
+                this.statusCache.set(key, data);
+                this.cachedCounts.set(data.counts);
+                this.lastSuccessfulPage.set({ key, data });
+                this.isRefreshing.set(false);
+              }),
               map((data): ActivityPageState => ({ status: 'ready', data, revision })),
               catchError(() => {
-                const cached = this.lastSuccessfulPage();
+                this.isRefreshing.set(false);
+                const fallback =
+                  this.statusCache.get(key) ??
+                  (this.lastSuccessfulPage()?.key === key ? this.lastSuccessfulPage()!.data : null);
                 return of({
-                  status: 'error',
-                  data: cached?.key === key ? cached.data : null,
+                  status: fallback ? 'ready' : 'error',
+                  data: fallback,
                   revision,
-                });
+                } as ActivityPageState);
               }),
-            ),
-          ),
+            );
+          }),
+        );
+
+        if (cached) {
+          // Affichage immédiat (0 ms) depuis le cache pour supprimer tout écran de chargement
+          return poll$.pipe(
+            startWith({ status: 'ready', data: cached, revision } as ActivityPageState),
+          );
+        }
+
+        this.isRefreshing.set(true);
+        return poll$.pipe(
           startWith({ status: 'loading', data: null, revision } as ActivityPageState),
         );
       }),
@@ -276,7 +317,9 @@ export class ActivityPageComponent {
     ...(this.pageState().data?.files ?? []),
     ...this.additionalFiles(),
   ]);
-  protected readonly counts = computed(() => this.pageState().data?.counts ?? null);
+  protected readonly counts = computed(
+    () => this.pageState().data?.counts ?? this.cachedCounts(),
+  );
   protected readonly statusOptions = computed<readonly SubnavOption[]>(() =>
     ACTIVITY_STATUSES.map((item) => ({
       value: item.value,
@@ -286,7 +329,7 @@ export class ActivityPageComponent {
   );
   protected readonly countText = computed(() => {
     const count = this.counts();
-    if (!count) return 'Chargement des fichiers…';
+    if (!count) return 'Suivi des fichiers';
     const total = count.untreated + count.active + count.done + count.failed + count.disabled;
     return `${total} fichier${total === 1 ? '' : 's'} suivi${total === 1 ? '' : 's'}`;
   });
