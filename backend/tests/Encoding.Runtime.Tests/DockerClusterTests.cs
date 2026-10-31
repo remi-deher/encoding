@@ -70,7 +70,7 @@ public sealed class DockerClusterTests
             if (preseedRuntimePackages) PrepareCustomPluginCatalog(workerData);
             var arguments = new List<string> { "--hostname", name, "-v", $"{workerData}:/var/lib/encoding-node", "-v", $"{Media}:/media/lib",
                 "-e", "Node__DataDirectory=/var/lib/encoding-node" };
-            if (preseedRuntimePackages) arguments.AddRange(["-e", "Runtime__CustomPluginDirectory=/var/lib/encoding-node/custom-plugins"]);
+            if (preseedRuntimePackages) arguments.AddRange(["-v", $"{Path.Combine(workerData, "custom-plugins")}:/opt/encoding/custom-plugins"]);
             arguments.AddRange(["-e", "Node__Roles=worker", "-e", "Node__Name=" + name, "-e", "Node__MaxConcurrentTasks=1", "-e", $"Cluster__ApiBaseUrl=http://{ServerName}:8080/",
                 "-e", "Worker__AutoAcceptEnrollment=true", image]);
             return RunAsync(name, [.. arguments]);
@@ -283,7 +283,7 @@ public sealed class DockerClusterTests
             }
             :
             [
-                new { id = "entry", component = "base-input-video", configuration = new { } },
+                new { id = "entry", component = "base-input-file", configuration = new { } },
                 new { id = "end", component = "base-complete-flow", configuration = new { } }
             ];
         var flowConnections = encodeVideo

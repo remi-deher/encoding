@@ -113,6 +113,8 @@ jobs:
           tags: encoding:ci
           cache-from: type=gha,scope=docker-cluster-tests
           cache-to: type=gha,mode=max,scope=docker-cluster-tests
+      - name: Add ffmpeg to the isolated cluster-test image
+        run: docker build --file .github/docker/Dockerfile.cluster-test --tag encoding:cluster-test .
       - name: Pull the last published image (compatibility between versions)
         run: docker pull mrcryllix/encoding:latest
       - run: dotnet restore backend/Encoding.sln
@@ -127,7 +129,7 @@ jobs:
           --logger "trx;LogFileName=docker-cluster.trx" --results-directory test-results
         env:
           ENCODING_TEST_DOCKER: '1'
-          ENCODING_TEST_IMAGE: encoding:ci
+          ENCODING_TEST_IMAGE: encoding:cluster-test
           ENCODING_TEST_PREVIOUS_IMAGE: mrcryllix/encoding:latest
       - uses: actions/upload-artifact@v4
         if: always()
