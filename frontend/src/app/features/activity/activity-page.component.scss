@@ -18,7 +18,6 @@
   flex-shrink: 0;
 }
 
-
 .activity-panel {
   padding: var(--space-4);
   border-radius: var(--radius-2xl);
@@ -189,9 +188,30 @@ mat-progress-bar {
   white-space: nowrap;
 }
 
-.more-button {
+.activity-pagination {
   display: flex;
-  margin: var(--space-3) auto 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-container);
+  width: fit-content;
+  margin-inline: auto;
+}
+
+.pagination-info {
+  color: var(--text-secondary);
+  font-size: var(--font-body-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--space-2);
+}
+
+.pagination-btn {
+  min-height: 36px;
+  border-radius: var(--radius-pill);
 }
 
 .empty-state {

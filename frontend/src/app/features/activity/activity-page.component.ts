@@ -10,7 +10,6 @@ import {
   DestroyRef,
   TemplateRef,
   computed,
-  effect,
   inject,
   signal,
   viewChild,
@@ -29,7 +28,6 @@ import {
   debounceTime,
   exhaustMap,
   filter,
-  finalize,
   firstValueFrom,
   map,
   merge,
@@ -194,8 +192,7 @@ export class ActivityPageComponent {
   );
   protected readonly filtersOpen = signal(false);
   protected readonly refreshRevision = signal(0);
-  protected readonly additionalFiles = signal<readonly LibraryActivityFile[]>([]);
-  protected readonly loadingMore = signal(false);
+  protected readonly pageIndex = signal(0);
   protected readonly actionBusy = signal(false);
   protected readonly feedback = signal('');
   protected readonly selectedActionIds = signal<ReadonlySet<string>>(new Set());
@@ -227,10 +224,11 @@ export class ActivityPageComponent {
     ].sort((a, b) => a.localeCompare(b, 'fr-FR')),
   );
 
-  private readonly debouncedSearch = toSignal(
-    toObservable(this.search).pipe(debounceTime(150)),
-    { initialValue: this.search() },
-  );
+  private readonly debouncedSearch = toSignal(toObservable(this.search).pipe(debounceTime(150)), {
+    initialValue: this.search(),
+  });
+
+  protected readonly offset = computed(() => this.pageIndex() * PAGE_SIZE);
 
   private readonly request = computed(() => ({
     status: this.status(),
@@ -239,7 +237,7 @@ export class ActivityPageComponent {
     nodeId: this.nodeFilter() ?? undefined,
     search: this.debouncedSearch(),
     limit: PAGE_SIZE,
-    offset: 0,
+    offset: this.offset(),
   }));
   private readonly requestKey = computed(() =>
     JSON.stringify({
@@ -248,6 +246,7 @@ export class ActivityPageComponent {
       flow: this.flowFilter(),
       node: this.nodeFilter(),
       search: this.debouncedSearch().trim(),
+      page: this.pageIndex(),
     }),
   );
 
@@ -264,6 +263,17 @@ export class ActivityPageComponent {
         const cached =
           this.statusCache.get(key) ??
           (this.lastSuccessfulPage()?.key === key ? this.lastSuccessfulPage()!.data : null);
+
+        const stream$ = this.activityApi.stream(query).pipe(
+          tap((data) => {
+            this.statusCache.set(key, data);
+            this.cachedCounts.set(data.counts);
+            this.lastSuccessfulPage.set({ key, data });
+            this.isRefreshing.set(false);
+          }),
+          map((data): ActivityPageState => ({ status: 'ready', data, revision })),
+          catchError(() => of(null)),
+        );
 
         const realTimeEvents$ = this.tracking.state$.pipe(
           filter((s) => s.status === 'ready'),
@@ -297,15 +307,20 @@ export class ActivityPageComponent {
           }),
         );
 
+        const active$ = merge(
+          poll$,
+          stream$.pipe(filter((s): s is ActivityPageState => s !== null)),
+        );
+
         if (cached) {
           // Affichage immédiat (0 ms) depuis le cache pour supprimer tout écran de chargement
-          return poll$.pipe(
+          return active$.pipe(
             startWith({ status: 'ready', data: cached, revision } as ActivityPageState),
           );
         }
 
         this.isRefreshing.set(true);
-        return poll$.pipe(
+        return active$.pipe(
           startWith({ status: 'loading', data: null, revision } as ActivityPageState),
         );
       }),
@@ -313,13 +328,32 @@ export class ActivityPageComponent {
     { initialValue: { status: 'loading', data: null, revision: 0 } as ActivityPageState },
   );
 
-  protected readonly files = computed(() => [
-    ...(this.pageState().data?.files ?? []),
-    ...this.additionalFiles(),
-  ]);
-  protected readonly counts = computed(
-    () => this.pageState().data?.counts ?? this.cachedCounts(),
+  protected readonly files = computed(() => this.pageState().data?.files ?? []);
+  protected readonly counts = computed(() => this.pageState().data?.counts ?? this.cachedCounts());
+  protected readonly totalCount = computed(() => this.pageState().data?.totalCount ?? 0);
+  protected readonly totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.totalCount() / PAGE_SIZE)),
   );
+  protected readonly pageRangeText = computed(() => {
+    const total = this.totalCount();
+    if (total === 0) return '0 fichier';
+    const start = this.pageIndex() * PAGE_SIZE + 1;
+    const end = Math.min((this.pageIndex() + 1) * PAGE_SIZE, total);
+    return `Page ${this.pageIndex() + 1} sur ${this.totalPages()} (${start}–${end} sur ${total})`;
+  });
+
+  protected nextPage(): void {
+    if (this.pageIndex() + 1 < this.totalPages()) {
+      this.pageIndex.update((p) => p + 1);
+    }
+  }
+
+  protected prevPage(): void {
+    if (this.pageIndex() > 0) {
+      this.pageIndex.update((p) => p - 1);
+    }
+  }
+
   protected readonly statusOptions = computed<readonly SubnavOption[]>(() =>
     ACTIVITY_STATUSES.map((item) => ({
       value: item.value,
@@ -335,9 +369,6 @@ export class ActivityPageComponent {
   });
   protected readonly currentStatusLabel = computed(
     () => ACTIVITY_STATUSES.find((item) => item.value === this.status())?.label ?? 'Activité',
-  );
-  protected readonly hasMore = computed(
-    () => (this.pageState().data?.totalCount ?? 0) > this.files().length,
   );
   protected readonly selectedCancelableFiles = computed(() =>
     this.files().filter(
@@ -442,10 +473,6 @@ export class ActivityPageComponent {
   );
 
   constructor() {
-    effect(() => {
-      this.requestKey();
-      this.additionalFiles.set([]);
-    });
     this.destroyRef.onDestroy(
       this.pageShellContext.register({
         searchPlaceholder: 'Rechercher dans Activité…',
@@ -478,6 +505,7 @@ export class ActivityPageComponent {
   protected setStatus(value: string): void {
     if (!validStatus(value) || value === this.status()) return;
     this.status.set(value);
+    this.pageIndex.set(0);
     this.selectedActionIds.set(new Set());
     this.close();
     this.syncQueryParams();
@@ -487,6 +515,7 @@ export class ActivityPageComponent {
     const libraryId = value || null;
     if (libraryId === this.libraryFilter()) return;
     this.libraryFilter.set(libraryId);
+    this.pageIndex.set(0);
     this.selectedActionIds.set(new Set());
     this.close();
     this.syncQueryParams();
@@ -496,6 +525,7 @@ export class ActivityPageComponent {
     const flow = value || null;
     if (flow === this.flowFilter()) return;
     this.flowFilter.set(flow);
+    this.pageIndex.set(0);
     this.selectedActionIds.set(new Set());
     this.close();
     this.syncQueryParams();
@@ -505,6 +535,7 @@ export class ActivityPageComponent {
     const node = value || null;
     if (node === this.nodeFilter()) return;
     this.nodeFilter.set(node);
+    this.pageIndex.set(0);
     this.selectedActionIds.set(new Set());
     this.close();
     this.syncQueryParams();
@@ -514,6 +545,7 @@ export class ActivityPageComponent {
     this.libraryFilter.set(null);
     this.flowFilter.set(null);
     this.nodeFilter.set(null);
+    this.pageIndex.set(0);
     this.selectedActionIds.set(new Set());
     this.close();
     this.syncQueryParams();
@@ -586,27 +618,6 @@ export class ActivityPageComponent {
       default:
         return 'neutral';
     }
-  }
-
-  protected async loadMore(): Promise<void> {
-    const query = this.request();
-    const expectedKey = this.requestKey();
-    const offset = this.files().length;
-    if (this.loadingMore() || !this.hasMore()) return;
-    this.loadingMore.set(true);
-    this.activityApi
-      .list({ ...query, offset })
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        finalize(() => this.loadingMore.set(false)),
-      )
-      .subscribe({
-        next: (response) => {
-          if (this.requestKey() === expectedKey)
-            this.additionalFiles.update((files) => [...files, ...response.files]);
-        },
-        error: () => this.feedback.set('Impossible de charger la suite des fichiers.'),
-      });
   }
 
   protected async runBulkCancel(): Promise<void> {

@@ -7,13 +7,18 @@ import {
 } from './leadership-transition-dialog.component';
 import { ClusterApi } from '../../../shared/services/cluster-api';
 
-function create(data: LeadershipTransitionDialogData, transferResult?: { success: boolean; message: string; newMasterUrl: string | null } | Error) {
+function create(
+  data: LeadershipTransitionDialogData,
+  transferResult?: { success: boolean; message: string; newMasterUrl: string | null } | Error,
+) {
   const close = vi.fn();
   const transferLeadership = vi.fn().mockImplementation(() => {
     if (transferResult instanceof Error) {
       return throwError(() => transferResult);
     }
-    return of(transferResult ?? { success: true, message: 'OK', newMasterUrl: 'http://192.168.1.51:8090/' });
+    return of(
+      transferResult ?? { success: true, message: 'OK', newMasterUrl: 'http://192.168.1.51:8090/' },
+    );
   });
 
   TestBed.configureTestingModule({
@@ -52,7 +57,7 @@ describe('LeadershipTransitionDialogComponent', () => {
   it('closes with false when clicking Annuler', () => {
     const { element, close } = create(sampleData);
     const cancelBtn = Array.from(element.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Annuler')
+      b.textContent?.includes('Annuler'),
     );
     expect(cancelBtn).toBeDefined();
     cancelBtn?.click();
@@ -62,7 +67,7 @@ describe('LeadershipTransitionDialogComponent', () => {
   it('displays timeline steps when transfer is initiated', async () => {
     const { fixture, element, transferLeadership } = create(sampleData);
     const startBtn = Array.from(element.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Transférer la gouvernance')
+      b.textContent?.includes('Transférer la gouvernance'),
     ) as HTMLButtonElement;
 
     expect(startBtn).toBeDefined();
@@ -71,7 +76,7 @@ describe('LeadershipTransitionDialogComponent', () => {
 
     expect(transferLeadership).toHaveBeenCalledWith(
       '22222222-2222-2222-2222-222222222222',
-      'http://192.168.1.51:8090/'
+      'http://192.168.1.51:8090/',
     );
 
     expect(element.textContent).toContain('Préparation & Drainage');
@@ -80,12 +85,9 @@ describe('LeadershipTransitionDialogComponent', () => {
   });
 
   it('shows error state when transfer request fails', async () => {
-    const { fixture, element } = create(
-      sampleData,
-      new Error('Nœud cible injoignable.')
-    );
+    const { fixture, element } = create(sampleData, new Error('Nœud cible injoignable.'));
     const startBtn = Array.from(element.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Transférer la gouvernance')
+      b.textContent?.includes('Transférer la gouvernance'),
     ) as HTMLButtonElement;
 
     startBtn.click();

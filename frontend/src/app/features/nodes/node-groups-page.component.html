@@ -20,9 +20,7 @@
   <ng-template #pageActions>
     <a matButton="outlined" routerLink="/nodes">Retour aux nœuds</a>
     @if (isAdmin()) {
-      <button matButton="filled" type="button" (click)="create()">
-        Créer un groupe
-      </button>
+      <button matButton="filled" type="button" (click)="create()">Créer un groupe</button>
     }
   </ng-template>
 
@@ -39,7 +37,8 @@
         } @else {
           <h3 class="empty-title">Aucun groupe de nœuds</h3>
           <p class="empty-desc">
-            Les groupes permettent d’organiser vos serveurs et workers, d’attribuer des étiquettes partagées et de contraindre l’exécution des flows.
+            Les groupes permettent d’organiser vos serveurs et workers, d’attribuer des étiquettes
+            partagées et de contraindre l’exécution des flows.
           </p>
           @if (isAdmin()) {
             <button matButton="filled" type="button" (click)="create()">

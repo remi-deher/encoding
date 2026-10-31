@@ -66,12 +66,7 @@ const INITIAL_STEPS: readonly Omit<TransitionStep, 'status'>[] = [
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-leadership-transition-dialog',
-  imports: [
-    MatButtonModule,
-    MatDialogActions,
-    MatDialogContent,
-    DialogFrameComponent,
-  ],
+  imports: [MatButtonModule, MatDialogActions, MatDialogContent, DialogFrameComponent],
   template: `
     <app-dialog-frame
       eyebrow="Gouvernance du cluster"
@@ -83,7 +78,8 @@ const INITIAL_STEPS: readonly Omit<TransitionStep, 'status'>[] = [
         @if (mode() === 'confirm') {
           <p class="transition-lead">
             Vous allez transférer la gouvernance active du cluster vers le nœud
-            <strong>{{ data.targetNodeName }}</strong>.
+            <strong>{{ data.targetNodeName }}</strong
+            >.
           </p>
 
           <div class="transition-nodes-card">
@@ -108,7 +104,9 @@ const INITIAL_STEPS: readonly Omit<TransitionStep, 'status'>[] = [
               (input)="onUrlInput($event)"
               placeholder="http://192.168.1.51:8090/"
             />
-            <p class="url-hint">L'URL sur laquelle le navigateur sera redirigé après la passation.</p>
+            <p class="url-hint">
+              L'URL sur laquelle le navigateur sera redirigé après la passation.
+            </p>
           </div>
 
           <p class="transition-notice transition-notice_warning" role="note">
@@ -156,8 +154,8 @@ const INITIAL_STEPS: readonly Omit<TransitionStep, 'status'>[] = [
 
           @if (mode() === 'success') {
             <p class="transition-notice transition-notice_success" role="status">
-              La passation est réussie ! Le nœud « {{ data.targetNodeName }} » est désormais le Maître
-              actif du cluster.
+              La passation est réussie ! Le nœud « {{ data.targetNodeName }} » est désormais le
+              Maître actif du cluster.
             </p>
             <div class="countdown-bar">
               <span>Redirection automatique dans {{ countdown() }} s...</span>
@@ -178,17 +176,13 @@ const INITIAL_STEPS: readonly Omit<TransitionStep, 'status'>[] = [
       <mat-dialog-actions class="app-dialog-footer" align="end">
         @switch (mode()) {
           @case ('confirm') {
-            <button matButton type="button" (click)="dialogRef.close(false)">
-              Annuler
-            </button>
+            <button matButton type="button" (click)="dialogRef.close(false)">Annuler</button>
             <button matButton="filled" type="button" (click)="startTransfer()">
               Transférer la gouvernance
             </button>
           }
           @case ('in_progress') {
-            <button matButton type="button" disabled>
-              Passation en cours...
-            </button>
+            <button matButton type="button" disabled>Passation en cours...</button>
           }
           @case ('success') {
             <button matButton="filled" type="button" (click)="redirectToNewMaster()">
@@ -196,12 +190,8 @@ const INITIAL_STEPS: readonly Omit<TransitionStep, 'status'>[] = [
             </button>
           }
           @case ('failed') {
-            <button matButton type="button" (click)="dialogRef.close(false)">
-              Fermer
-            </button>
-            <button matButton="filled" type="button" (click)="retry()">
-              Réessayer
-            </button>
+            <button matButton type="button" (click)="dialogRef.close(false)">Fermer</button>
+            <button matButton="filled" type="button" (click)="retry()">Réessayer</button>
           }
         }
       </mat-dialog-actions>
@@ -217,13 +207,13 @@ export class LeadershipTransitionDialogComponent implements OnDestroy {
   protected readonly mode = signal<'confirm' | 'in_progress' | 'success' | 'failed'>('confirm');
   protected readonly targetUrl = signal<string>(
     this.data.defaultTargetUrl ||
-      (this.data.targetNodeHost ? `http://${this.data.targetNodeHost}:8090/` : '')
+      (this.data.targetNodeHost ? `http://${this.data.targetNodeHost}:8090/` : ''),
   );
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly countdown = signal<number>(5);
 
   protected readonly steps = signal<TransitionStep[]>(
-    INITIAL_STEPS.map((step) => ({ ...step, status: 'pending' }))
+    INITIAL_STEPS.map((step) => ({ ...step, status: 'pending' })),
   );
 
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -293,7 +283,7 @@ export class LeadershipTransitionDialogComponent implements OnDestroy {
       // 1. Drain & Initier le transfert
       const transferPromise = this.clusterApi.transferLeadership(
         this.data.targetNodeId,
-        destinationUrl || undefined
+        destinationUrl || undefined,
       );
 
       if (delay > 0) {
@@ -341,7 +331,7 @@ export class LeadershipTransitionDialogComponent implements OnDestroy {
       } else {
         this.updateStepStatus('health', 'failed', 'Délai d’attente dépassé');
         this.errorMessage.set(
-          `Le transfert a été engagé, mais le nouveau Maître (${this.resolvedMasterUrl}) ne répond pas encore sur /health/ready. Vérifiez le conteneur.`
+          `Le transfert a été engagé, mais le nouveau Maître (${this.resolvedMasterUrl}) ne répond pas encore sur /health/ready. Vérifiez le conteneur.`,
         );
         this.mode.set('failed');
       }
@@ -427,7 +417,7 @@ export class LeadershipTransitionDialogComponent implements OnDestroy {
 
   private updateStepStatus(stepId: string, status: StepStatus, detail?: string): void {
     this.steps.update((steps) =>
-      steps.map((s) => (s.id === stepId ? { ...s, status, detail: detail ?? s.detail } : s))
+      steps.map((s) => (s.id === stepId ? { ...s, status, detail: detail ?? s.detail } : s)),
     );
   }
 }

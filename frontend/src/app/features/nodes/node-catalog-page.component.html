@@ -45,10 +45,7 @@
   (detailClosed)="pageTab() === 'groups' ? closeGroupDetail() : onDetailClosed()"
   (actionClosed)="pageTab() === 'groups' ? closeGroupForm() : closeCreateNode()"
   [showToolbar]="
-    pageTab() === 'cluster' &&
-    !local.standalone() &&
-    clusterIdentity() !== null &&
-    filtersOpen()
+    pageTab() === 'cluster' && !local.standalone() && clusterIdentity() !== null && filtersOpen()
   "
   filterLabel="Membres du cluster actuel"
   searchLayout="end"
@@ -291,7 +288,11 @@
         layout="local"
         [isMaster]="localNode()?.id === masterNodeId()"
         [title]="localSheet().title"
-        [subtitle]="localNode()?.id === masterNodeId() ? 'Coordinateur actif de ' + clusterName() : localSheet().subtitle"
+        [subtitle]="
+          localNode()?.id === masterNodeId()
+            ? 'Coordinateur actif de ' + clusterName()
+            : localSheet().subtitle
+        "
         [hardware]="localOverviewHardware()"
         [statusLabel]="localOverviewStatus().label"
         [statusTone]="localOverviewStatus().tone"
@@ -415,7 +416,8 @@
             [disabled]="admissionDisabledFor(node)"
             [aria-label]="
               (admissionEnabledFor(node) ? 'Suspendre' : 'Réactiver') +
-              ' les nouvelles tâches sur ' + node.name
+              ' les nouvelles tâches sur ' +
+              node.name
             "
             (change)="setSelectedNodeAdmission($event.checked)"
           >
@@ -428,7 +430,10 @@
             [disabled]="control.disabled ?? false"
             [aria-label]="
               (control.checked ? 'Désactiver' : 'Activer') +
-              ' la fonction ' + control.label + ' de ' + node.name
+              ' la fonction ' +
+              control.label +
+              ' de ' +
+              node.name
             "
             (change)="setMemberRole(node.id, control.role, $event.checked)"
           >

@@ -13,7 +13,7 @@
 .subnav-template {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-3);
   width: 100%;
   min-width: 0;
@@ -37,11 +37,10 @@
 }
 
 .subnav-template-navigation {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   max-width: 100%;
-  margin-inline: auto;
 }
 
 .subnav-template-actions {
@@ -51,6 +50,7 @@
   justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
+  margin-inline-start: auto;
 }
 
 .subnav-template-info:empty,
@@ -58,7 +58,7 @@
   display: none;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1024px) {
   .subnav-template {
     flex-wrap: wrap;
     row-gap: var(--space-2);

@@ -1,11 +1,15 @@
 using System.Data.Common;
+using Encoding.Api.Executions;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Contracts.Libraries;
 
 namespace Encoding.Api.Libraries;
 
-public sealed class LibraryActivityRepository(DbDataSource dataSource)
+public sealed class LibraryActivityRepository(DbDataSource dataSource, ExecutionStreamBroadcaster? broadcaster = null)
 {
+    private long _cachedCountsVersion = -1;
+    private LibraryActivityCounts? _cachedGlobalCounts;
+
     private const string ClassifiedSql = """
         WITH inventory AS (
             SELECT m.id,m.library_id,l.name AS library,m.relative_path,m.byte_length,m.modified_at,
@@ -89,24 +93,41 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource)
         if (!string.IsNullOrEmpty(normalizedStatus)) resultFilters.Add("status=@status");
         var resultFilterSql = resultFilters.Count > 0 ? " WHERE " + string.Join(" AND ", resultFilters) : string.Empty;
 
+        LibraryActivityCounts counts;
+        var currentBroadcasterVersion = broadcaster?.CurrentVersion ?? -1;
+        var canUseGlobalCache = filters.Count == 0 && broadcaster is not null && _cachedGlobalCounts is not null && _cachedCountsVersion == currentBroadcasterVersion;
+
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(System.Data.IsolationLevel.Snapshot, ct);
-        await using var countsCommand = Sql.Command($"""
-            {ClassifiedSql}
-            SELECT
-                COALESCE(SUM(CASE WHEN status='untreated' THEN 1 ELSE 0 END),0),
-                COALESCE(SUM(CASE WHEN status='active' THEN 1 ELSE 0 END),0),
-                COALESCE(SUM(CASE WHEN status='done' THEN 1 ELSE 0 END),0),
-                COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0),
-                COALESCE(SUM(CASE WHEN status='disabled' THEN 1 ELSE 0 END),0)
-            FROM classified{filterSql}
-            """, connection, transaction);
-        BindFilters(countsCommand);
-        LibraryActivityCounts counts;
-        await using (var reader = await countsCommand.ExecuteReaderAsync(ct))
+
+        if (canUseGlobalCache)
         {
-            await reader.ReadAsync(ct);
-            counts = new(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+            counts = _cachedGlobalCounts!;
+        }
+        else
+        {
+            await using var countsCommand = Sql.Command($"""
+                {ClassifiedSql}
+                SELECT
+                    COALESCE(SUM(CASE WHEN status='untreated' THEN 1 ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN status='active' THEN 1 ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN status='done' THEN 1 ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN status='disabled' THEN 1 ELSE 0 END),0)
+                FROM classified{filterSql}
+                """, connection, transaction);
+            BindFilters(countsCommand);
+            await using (var reader = await countsCommand.ExecuteReaderAsync(ct))
+            {
+                await reader.ReadAsync(ct);
+                counts = new(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+            }
+
+            if (filters.Count == 0 && broadcaster is not null)
+            {
+                _cachedGlobalCounts = counts;
+                _cachedCountsVersion = currentBroadcasterVersion;
+            }
         }
 
         var total = normalizedStatus switch

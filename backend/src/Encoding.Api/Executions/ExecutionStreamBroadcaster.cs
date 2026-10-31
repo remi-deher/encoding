@@ -8,6 +8,7 @@ namespace Encoding.Api.Executions;
 /// </summary>
 public sealed class ExecutionStreamBroadcaster
 {
+    public static readonly JsonSerializerOptions SseJsonOptions = new(JsonSerializerDefaults.Web);
     private long _version;
     private int _subscriberSequence;
     private readonly ConcurrentDictionary<int, TaskCompletionSource<long>> _waiters = new();
