@@ -85,9 +85,6 @@
       </div>
     }
 
-    @if (isRefreshing()) {
-      <mat-progress-bar mode="indeterminate" class="activity-refresh-bar" />
-    }
 
     @if (!files().length) {
       <div class="empty-state">
