@@ -35,6 +35,7 @@ import { NodeSchedule } from '../../shared/models/node-schedule';
 import { WeeklyScheduleFormComponent } from '../../shared/ui/weekly-schedule-form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
+import { LeadershipTransitionDialogComponent } from './components/leadership-transition-dialog.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
@@ -1616,38 +1617,18 @@ export class NodeCatalogPageComponent {
   }
 
   protected promoteNodeToMaster(row: NodeRecord): void {
-    const targetName = row.name;
-    this.dialog
-      .open(ConfirmationDialogComponent, {
-        data: {
-          title: 'Promouvoir en Maître',
-          message: `Voulez-vous transférer la gouvernance du cluster et la base de données vers « ${targetName} » ? Ce nœud deviendra le nouveau Maître actif et le serveur actuel basculera en simple Worker.`,
-          confirmLabel: 'Promouvoir en Maître',
-          confirmTone: 'accent' as const,
-        },
-      })
-      .afterClosed()
-      .subscribe((confirmed) => {
-        if (!confirmed) return;
-        this.notifications.show(`Passation de pouvoir vers « ${targetName} » en cours...`);
-        this.clusterApi.transferLeadership(row.id).subscribe({
-          next: (result) => {
-            if (result.success) {
-              this.notifications.show('Passation initiée avec succès. Redirection vers le nouveau Maître...');
-              if (result.newMasterUrl) {
-                setTimeout(() => {
-                  window.location.href = result.newMasterUrl!;
-                }, 2000);
-              }
-            } else {
-              this.notifications.show(result.message || 'Échec de la passation de pouvoir.');
-            }
-          },
-          error: (err) => {
-            this.notifications.show(err?.error?.message ?? err?.error?.title ?? 'Erreur lors de la passation de pouvoir.');
-          },
-        });
-      });
+    const fullNode = this.nodes().find((n) => n.id === row.id);
+    const localNode = this.localNode();
+    this.dialog.open(LeadershipTransitionDialogComponent, {
+      data: {
+        targetNodeId: row.id,
+        targetNodeName: row.name,
+        currentNodeName: localNode?.name || 'Ce nœud',
+        targetNodeHost: fullNode?.name || row.name,
+      },
+      disableClose: true,
+      width: '540px',
+    });
   }
   protected runMemberBulk(actionId: 'drain' | 'resume' | 'delete'): void {
     const rows = this.filteredNodes().filter((row) => this.selectedMemberIds().has(row.id));

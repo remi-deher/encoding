@@ -40,11 +40,19 @@ public static class OperationsEndpoints
     {
         var options = app.Services.GetRequiredService<OperationsOptions>();
         // Vivacité : le processus répond. Aucun contrôle de base ou de pair, pour qu’un orchestrateur ne redémarre pas un nœud isolé.
-        app.MapGet("/health/live", () => Results.Ok(new { status = "ok" })).AllowAnonymous().WithTags("Health");
+        app.MapGet("/health/live", (HttpContext context) =>
+        {
+            context.Response.Headers.AccessControlAllowOrigin = "*";
+            return Results.Ok(new { status = "ok" });
+        }).AllowAnonymous().WithTags("Health");
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains(ReadyTag),
-            ResponseWriter = (context, report) => WriteReportAsync(context, report, detailed: false),
+            ResponseWriter = (context, report) =>
+            {
+                context.Response.Headers.AccessControlAllowOrigin = "*";
+                return WriteReportAsync(context, report, detailed: false);
+            },
         }).AllowAnonymous().WithTags("Health");
         app.MapHealthChecks("/health/details", new HealthCheckOptions
         {

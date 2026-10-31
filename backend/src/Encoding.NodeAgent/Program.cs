@@ -75,7 +75,11 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
+app.MapGet("/health/ready", (HttpContext context) =>
+{
+    context.Response.Headers.AccessControlAllowOrigin = "*";
+    return Results.Ok(new { status = "ready" });
+});
 app.MapNodeMode("/api/v1/worker/mode");
 app.MapGet("/api/v1/worker/clusters", (WorkerClusterDiscovery discovery) => Results.Ok(discovery.List()));
 app.MapPost("/api/v1/worker/clusters", async (WorkerClusterAddress request, WorkerClusterDiscovery discovery, CancellationToken cancellationToken) =>
