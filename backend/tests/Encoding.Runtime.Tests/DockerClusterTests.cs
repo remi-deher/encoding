@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Encoding.NodeAgent.Runtime;
 using Xunit;
 
 namespace Encoding.Runtime.Tests;
