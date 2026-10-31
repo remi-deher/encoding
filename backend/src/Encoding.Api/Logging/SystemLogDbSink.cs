@@ -46,7 +46,6 @@ public sealed class SystemLogDbSink : ISystemLogSink, IHostedService, IAsyncDisp
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _channel.Writer.TryComplete();
-        _cts.Cancel();
         if (_processingTask is not null)
         {
             try
@@ -58,6 +57,14 @@ public sealed class SystemLogDbSink : ISystemLogSink, IHostedService, IAsyncDisp
             {
                 Console.Error.WriteLine($"[SystemLogDbSink] Erreur lors de l'arrêt du service de persistance des logs: {ex.Message}");
             }
+            finally
+            {
+                _cts.Cancel();
+            }
+        }
+        else
+        {
+            _cts.Cancel();
         }
     }
 
@@ -65,31 +72,37 @@ public sealed class SystemLogDbSink : ISystemLogSink, IHostedService, IAsyncDisp
     {
         var reader = _channel.Reader;
         var token = _cts.Token;
+        var batch = new List<SystemLogEntry>(50);
 
         while (await reader.WaitToReadAsync(token).ConfigureAwait(false))
         {
-            while (reader.TryRead(out var entry))
+            batch.Clear();
+            while (batch.Count < 50 && reader.TryRead(out var entry))
             {
-                try
-                {
-                    await _repository.InsertAsync(entry, token).ConfigureAwait(false);
-                    _writesSinceLastPrune++;
+                batch.Add(entry);
+            }
 
-                    if (_writesSinceLastPrune >= 100)
-                    {
-                        _writesSinceLastPrune = 0;
-                        await _repository.PruneAsync(5000, TimeSpan.FromDays(7), token).ConfigureAwait(false);
-                    }
-                }
-                catch (OperationCanceledException) when (token.IsCancellationRequested)
+            if (batch.Count == 0) continue;
+
+            try
+            {
+                await _repository.InsertBatchAsync(batch, token).ConfigureAwait(false);
+                _writesSinceLastPrune += batch.Count;
+
+                if (_writesSinceLastPrune >= 5000)
                 {
-                    return;
+                    _writesSinceLastPrune = 0;
+                    await _repository.PruneAsync(5000, TimeSpan.FromDays(7), token).ConfigureAwait(false);
                 }
-                catch (Exception ex)
-                {
-                    // Ne doit pas interrompre la boucle ni recurser dans ILogger
-                    Console.Error.WriteLine($"[SystemLogDbSink] Erreur lors de la persistance SQLite du log système {entry.Id}: {ex.Message}");
-                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Ne doit pas interrompre la boucle ni recurser dans ILogger
+                Console.Error.WriteLine($"[SystemLogDbSink] Erreur lors de la persistance SQLite du lot de logs système ({batch.Count} entrées): {ex.Message}");
             }
         }
     }
