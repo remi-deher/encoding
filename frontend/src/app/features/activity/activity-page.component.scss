@@ -52,16 +52,68 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-xl);
   background: var(--surface-container-high);
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+
+  .selection-count {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .selection-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+}
+
+.bulk-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 13px;
+
+  &.bulk-action-btn_danger {
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.4);
+
+    &:hover {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: var(--danger);
+    }
+  }
+}
+
+.activity-list-header {
+  display: flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-2);
+
+  .item-select-all {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .select-all-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    user-select: none;
+  }
 }
 
 .item-select {
   flex: 0 0 auto;
+  align-self: center;
   margin-inline-start: var(--space-2);
 }
 
@@ -86,6 +138,11 @@
 
   &:hover {
     background: var(--surface-container-high);
+  }
+
+  &.is-checked {
+    background: var(--surface-container-high);
+    border-inline-start: 3px solid var(--accent-strong);
   }
 
   &.is-selected {

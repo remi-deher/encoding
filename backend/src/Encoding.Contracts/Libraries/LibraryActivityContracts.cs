@@ -27,7 +27,8 @@ public sealed record LibraryActivityCounts(
     int Active,
     int Done,
     int Failed,
-    int Disabled);
+    int Disabled,
+    int Cancelled = 0);
 
 public sealed record LibraryActivityResponse(
     IReadOnlyList<LibraryActivityFile> Files,

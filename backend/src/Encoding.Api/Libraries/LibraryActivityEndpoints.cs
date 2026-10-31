@@ -20,7 +20,7 @@ public static class LibraryActivityEndpoints
             CancellationToken ct) =>
         {
             if (!string.IsNullOrWhiteSpace(status) &&
-                status.Trim().ToLowerInvariant() is not ("untreated" or "active" or "done" or "failed" or "disabled"))
+                status.Trim().ToLowerInvariant() is not ("untreated" or "active" or "done" or "failed" or "cancelled" or "disabled"))
                 return ApiProblem.BadRequest("État d’activité invalide.");
             return Results.Ok(await repository.GetAsync(status, libraryId, flow, nodeId, search, limit, offset, ct));
         })
@@ -41,7 +41,7 @@ public static class LibraryActivityEndpoints
             CancellationToken ct) =>
         {
             if (!string.IsNullOrWhiteSpace(status) &&
-                status.Trim().ToLowerInvariant() is not ("untreated" or "active" or "done" or "failed" or "disabled"))
+                status.Trim().ToLowerInvariant() is not ("untreated" or "active" or "done" or "failed" or "cancelled" or "disabled"))
                 return ApiProblem.BadRequest("État d’activité invalide.");
 
             ExecutionStreamBroadcaster.PrepareResponse(http.Response);

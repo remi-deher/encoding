@@ -1,12 +1,19 @@
 import { ExecutionState, EXECUTION_STATE_LABELS } from './execution';
 
-export type LibraryActivityStatus = 'untreated' | 'active' | 'done' | 'failed' | 'disabled';
+export type LibraryActivityStatus =
+  | 'untreated'
+  | 'active'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'disabled';
 
 export const ACTIVITY_STATUS_LABELS: Record<LibraryActivityStatus, string> = {
   untreated: 'À traiter',
   active: 'En cours',
   done: 'Traité',
-  failed: 'Erreur ou annulation',
+  failed: 'Erreurs',
+  cancelled: 'Annulées',
   disabled: 'Désactivé',
 };
 
@@ -50,6 +57,8 @@ export function activityExecutionTone(
       return 'accent';
     case 'failed':
       return 'danger';
+    case 'cancelled':
+      return 'warning';
     case 'succeeded':
       return 'success';
     case 'deferred':
@@ -64,6 +73,7 @@ export interface LibraryActivityCounts {
   readonly active: number;
   readonly done: number;
   readonly failed: number;
+  readonly cancelled?: number;
   readonly disabled: number;
 }
 

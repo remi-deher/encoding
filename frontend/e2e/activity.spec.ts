@@ -31,32 +31,92 @@ const counts = {
   activity: [],
   observedAt: now,
 };
-const activityCounts = { untreated: 6000, active: 2, done: 60, failed: 1, disabled: 0 };
+const activityCounts = { untreated: 6000, active: 2, done: 60, failed: 1, cancelled: 0, disabled: 0 };
 
 function activityResponse(status: string, offset: number, limit: number) {
   const totalCount = activityCounts[status as keyof typeof activityCounts] ?? 0;
-  const files =
-    status === 'done'
-      ? Array.from({ length: Math.min(limit, Math.max(0, totalCount - offset)) }, (_, index) => ({
-          id: `file-${offset + index}`,
-          libraryId: 'library-1',
-          library: 'Films',
-          relativePath: `Film terminé ${offset + index}.mkv`,
-          bytes: 1024,
-          modifiedAt: now,
-          libraryActive: true,
-          flow: 'HEVC',
-          flowVersion: 3,
-          status: 'done',
-          executionId: `done-${offset + index}`,
-          executionState: 'succeeded',
-          detail: 'Traitement terminé',
-          nodeId: 'node-1',
-          node: 'Studio',
-          progress: 100,
-          updatedAt: now,
-        }))
-      : [];
+  let files: readonly unknown[] = [];
+  if (status === 'done') {
+    files = Array.from({ length: Math.min(limit, Math.max(0, totalCount - offset)) }, (_, index) => ({
+      id: `file-${offset + index}`,
+      libraryId: 'library-1',
+      library: 'Films',
+      relativePath: `Film terminé ${offset + index}.mkv`,
+      bytes: 1024,
+      modifiedAt: now,
+      libraryActive: true,
+      flow: 'HEVC',
+      flowVersion: 3,
+      status: 'done',
+      executionId: `done-${offset + index}`,
+      executionState: 'succeeded',
+      detail: 'Traitement terminé',
+      nodeId: 'node-1',
+      node: 'Studio',
+      progress: 100,
+      updatedAt: now,
+    }));
+  } else if (status === 'failed') {
+    files = Array.from({ length: Math.min(limit, Math.max(0, totalCount - offset)) }, (_, index) => ({
+      id: `file-failed-${offset + index}`,
+      libraryId: 'library-1',
+      library: 'Films',
+      relativePath: `Film en erreur ${offset + index}.mkv`,
+      bytes: 1024,
+      modifiedAt: now,
+      libraryActive: true,
+      flow: 'HEVC',
+      flowVersion: 3,
+      status: 'failed',
+      executionId: `failed-${offset + index}`,
+      executionState: 'failed',
+      detail: 'Erreur encodage',
+      nodeId: 'node-1',
+      node: 'Studio',
+      progress: null,
+      updatedAt: now,
+    }));
+  } else if (status === 'cancelled') {
+    files = Array.from({ length: Math.min(limit, Math.max(0, totalCount - offset)) }, (_, index) => ({
+      id: `file-cancelled-${offset + index}`,
+      libraryId: 'library-1',
+      library: 'Films',
+      relativePath: `Film annulé ${offset + index}.mkv`,
+      bytes: 1024,
+      modifiedAt: now,
+      libraryActive: true,
+      flow: 'HEVC',
+      flowVersion: 3,
+      status: 'cancelled',
+      executionId: `cancelled-${offset + index}`,
+      executionState: 'cancelled',
+      detail: 'Annulé par utilisateur',
+      nodeId: 'node-1',
+      node: 'Studio',
+      progress: null,
+      updatedAt: now,
+    }));
+  } else if (status === 'active') {
+    files = Array.from({ length: Math.min(limit, Math.max(0, totalCount - offset)) }, (_, index) => ({
+      id: `file-active-${offset + index}`,
+      libraryId: 'library-1',
+      library: 'Films',
+      relativePath: `Film en cours ${offset + index}.mkv`,
+      bytes: 1024,
+      modifiedAt: now,
+      libraryActive: true,
+      flow: 'HEVC',
+      flowVersion: 3,
+      status: 'active',
+      executionId: `active-${offset + index}`,
+      executionState: 'running',
+      detail: 'Encodage en cours',
+      nodeId: 'node-1',
+      node: 'Studio',
+      progress: 50,
+      updatedAt: now,
+    }));
+  }
   return {
     files,
     counts: activityCounts,
@@ -89,9 +149,35 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.route('**/api/v1/tools/ai/assistant/activity', (route) => route.fulfill({ json: [] }));
-  await page.route('**/api/v1/executions*', (route) => {
+  await page.route(/\/api\/v1\/executions(\/|\?|$)/, (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/stream')) return route.abort();
+    if (
+      url.pathname.endsWith('/pipeline') ||
+      url.pathname.endsWith('/events') ||
+      url.pathname.endsWith('/artifacts')
+    ) {
+      return route.fulfill({ json: [] });
+    }
+    if (url.pathname.endsWith('/flow')) {
+      return route.fulfill({ json: { nodes: [], connections: [] } });
+    }
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length === 4) {
+      const id = parts[3];
+      return route.fulfill({
+        json: {
+          ...running,
+          id,
+          state: id.startsWith('failed')
+            ? 'failed'
+            : id.startsWith('cancelled')
+              ? 'cancelled'
+              : 'running',
+          steps: [],
+        },
+      });
+    }
     const state = url.searchParams.get('state');
     const offset = Number(url.searchParams.get('offset') ?? 0);
     const limit = Number(url.searchParams.get('limit') ?? 25);
@@ -258,4 +344,48 @@ test('background failures preserve history and recover automatically, with respo
     );
     await page.screenshot({ path: info.outputPath(`activity-${theme}.png`), fullPage: true });
   }
+});
+
+test('batch selection provides select all and contextual actions', async ({ page }) => {
+  await page.goto('/activity?state=active');
+  const activity = page.locator('app-activity-page');
+  await expect(activity.getByText('Film en cours 0.mkv')).toBeVisible();
+
+  const selectAll = activity.getByRole('checkbox', {
+    name: /Sélectionner ou désélectionner tous les fichiers/,
+  });
+  await expect(selectAll).toBeVisible();
+  await selectAll.click();
+
+  const toolbar = activity.getByRole('toolbar', { name: 'Actions groupées' });
+  await expect(toolbar).toBeVisible();
+  await expect(toolbar).toContainText('2 fichiers sélectionnés');
+  await expect(toolbar.getByRole('button', { name: /Annuler la tâche/ })).toBeVisible();
+
+  await toolbar.getByRole('button', { name: 'Tout désélectionner' }).click();
+  await expect(toolbar).not.toBeVisible();
+});
+
+test('cancelled tab is present and displays cancelled jobs', async ({ page }) => {
+  await page.goto('/activity');
+  const activity = page.locator('app-activity-page');
+  const cancelledTab = activity.getByRole('tab', { name: /Annulées/ });
+  await expect(cancelledTab).toBeVisible();
+  await cancelledTab.click();
+  await expect(page).toHaveURL(/state=cancelled/);
+});
+
+test('drawer header does not contain re-traiter button on failed jobs', async ({ page }) => {
+  await page.goto('/activity?state=failed');
+  const activity = page.locator('app-activity-page');
+  await expect(activity.getByText('Film en erreur 0.mkv')).toBeVisible();
+  await activity.getByText('Film en erreur 0.mkv').click();
+
+  const drawer = activity.locator('app-detail-drawer mat-drawer');
+  await expect(drawer).toBeVisible();
+  const header = drawer.locator('.drawer-header');
+  await expect(header.getByRole('button', { name: 'Re-traiter' })).toHaveCount(0);
+
+  const footer = drawer.locator('.drawer-footer');
+  await expect(footer.getByRole('button', { name: 'Créer une nouvelle tentative' })).toBeVisible();
 });

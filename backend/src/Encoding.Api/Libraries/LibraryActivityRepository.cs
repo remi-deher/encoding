@@ -57,7 +57,8 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource, Execution
         ), classified AS (
             SELECT *,CASE
                 WHEN execution_state IN ('succeeded','deferred') THEN 'done'
-                WHEN ownership_state='quarantined' OR execution_state IN ('failed','cancelled') THEN 'failed'
+                WHEN ownership_state='quarantined' OR execution_state = 'failed' THEN 'failed'
+                WHEN execution_state = 'cancelled' THEN 'cancelled'
                 WHEN execution_state IN ('running','cancelling') THEN 'active'
                 WHEN NOT library_active THEN 'disabled'
                 ELSE 'untreated'
@@ -113,14 +114,15 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource, Execution
                     COALESCE(SUM(CASE WHEN status='active' THEN 1 ELSE 0 END),0),
                     COALESCE(SUM(CASE WHEN status='done' THEN 1 ELSE 0 END),0),
                     COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0),
-                    COALESCE(SUM(CASE WHEN status='disabled' THEN 1 ELSE 0 END),0)
+                    COALESCE(SUM(CASE WHEN status='disabled' THEN 1 ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END),0)
                 FROM classified{filterSql}
                 """, connection, transaction);
             BindFilters(countsCommand);
             await using (var reader = await countsCommand.ExecuteReaderAsync(ct))
             {
                 await reader.ReadAsync(ct);
-                counts = new(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+                counts = new(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5));
             }
 
             if (filters.Count == 0 && broadcaster is not null)
@@ -136,8 +138,9 @@ public sealed class LibraryActivityRepository(DbDataSource dataSource, Execution
             "active" => counts.Active,
             "done" => counts.Done,
             "failed" => counts.Failed,
+            "cancelled" => counts.Cancelled,
             "disabled" => counts.Disabled,
-            _ => counts.Untreated + counts.Active + counts.Done + counts.Failed + counts.Disabled,
+            _ => counts.Untreated + counts.Active + counts.Done + counts.Failed + counts.Disabled + counts.Cancelled,
         };
 
         await using var filesCommand = Sql.Command($"""
