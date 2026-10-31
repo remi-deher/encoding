@@ -180,7 +180,7 @@ public sealed class DockerClusterTests
                 entries.Add(JsonSerializer.Serialize(new
                 {
                     node = container,
-                    id = identity.TryGetProperty("id", out var id) ? id.GetString() : null,
+                    id = identity.TryGetProperty("id", out var nodeId) ? nodeId.GetString() : null,
                     clusterId = identity.TryGetProperty("clusterId", out var clusterId) ? clusterId.GetString() : null,
                     apiBaseUrl = identity.TryGetProperty("apiBaseUrl", out var apiBaseUrl) ? apiBaseUrl.GetString() : null,
                     knownServerUrls = identity.TryGetProperty("knownServerUrls", out var knownServerUrls) ? knownServerUrls.ToString() : null
