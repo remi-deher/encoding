@@ -110,9 +110,16 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         var now = DateTimeOffset.UtcNow;
         if (lastUsedAt is null || lastUsedAt < now - TimeSpan.FromMinutes(1))
         {
-            await using var touch = Sql.Command("UPDATE api_tokens SET last_used_at = clock_timestamp() WHERE id = @id", connection);
-            touch.Parameters.AddWithValue("id", id);
-            await touch.ExecuteNonQueryAsync(ct);
+            try
+            {
+                await using var touch = Sql.Command("UPDATE api_tokens SET last_used_at = clock_timestamp() WHERE id = @id", connection);
+                touch.Parameters.AddWithValue("id", id);
+                await touch.ExecuteNonQueryAsync(ct);
+            }
+            catch
+            {
+                // Un échec de mise à jour de télémétrie ne doit jamais invalider l'authentification d'un jeton valide.
+            }
         }
 
         return new ApiTokenRecord(id, name, role, scopes);
