@@ -35,7 +35,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         {
             try { while(!job.IsCancellationRequested) { await Task.Delay(TimeSpan.FromSeconds(15),job.Token); await RenewAsync(job.Token); } }
             catch(OperationCanceledException) when(job.IsCancellationRequested) { }
-            catch(Exception) { lost=true; job.Cancel(); }
+            catch(Exception exception)
+            {
+                logger.LogWarning("Renouvellement du bail de l’exécution {ExecutionId} refusé ou inaccessible ({Type}, HTTP {StatusCode}).",
+                    lease.ExecutionId,exception.GetType().Name,(exception as HttpRequestException)?.StatusCode);
+                lost=true;
+                job.Cancel();
+            }
         },CancellationToken.None);
         try
         {

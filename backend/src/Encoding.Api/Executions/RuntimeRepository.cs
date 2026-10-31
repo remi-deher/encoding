@@ -11,7 +11,7 @@ using Encoding.Contracts.Nodes;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null,FlowPlacementPlanner? placementPlanner=null)
+public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null,FlowPlacementPlanner? placementPlanner=null,ILogger<RuntimeRepository>? logger=null)
 {
     private readonly FlowPlacementPlanner planner = placementPlanner ?? new FlowPlacementPlanner(components);
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
@@ -347,6 +347,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                     if(!placementCandidatesByLibrary.TryGetValue(item.Library,out var nodeCandidates))
                         placementCandidatesByLibrary[item.Library]=nodeCandidates=await LoadPlacementCandidatesAsync(item.Library,c,tx,ct);
                     plan=planner.Plan(item.Flow,item.BeforeMetadata,nodeCandidates,DateTimeOffset.UtcNow);
+                    if(plan.Strategy==FlowPlacementPlan.StrategyImpossible)
+                        logger?.LogWarning("Placement impossible pour l’exécution {ExecutionId} : {Reason}",item.Id,plan.Reason);
                     placementPlans[key]=plan;
                 }
             }

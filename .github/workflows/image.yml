@@ -1,7 +1,7 @@
 name: Image
 on:
   pull_request:
-    branches: [main]
+    branches: [dev, main]
     paths:
       - 'backend/**'
       - 'frontend/**'

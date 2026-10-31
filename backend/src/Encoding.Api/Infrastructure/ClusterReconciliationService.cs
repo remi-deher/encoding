@@ -38,6 +38,7 @@ public sealed class ClusterReconciliationService(
         {
             var identity = await identityRepository.GetAsync(stoppingToken);
             clusterId = identity.Id;
+            await repository.RemovePeerEndpointsBySourceAsync("mdns", stoppingToken);
             advertisedApiBaseUrl = Normalize(configuration["Cluster:Reconciliation:AdvertisedApiBaseUrl"]);
             ownInstanceName = configuration["Cluster:DiscoveryInstanceName"]?.Trim();
             if (string.IsNullOrWhiteSpace(ownInstanceName)) ownInstanceName = Environment.MachineName;
@@ -291,7 +292,8 @@ public sealed class ClusterReconciliationService(
 
     private void OnServiceFound(ServiceProfile service)
     {
-        if (!service.Properties.TryGetValue("clusterId", out var id) || !Guid.TryParse(id, out var foundCluster)) return;
+        if (!IsAdvertisedServer(service.Properties)
+            || !service.Properties.TryGetValue("clusterId", out var id) || !Guid.TryParse(id, out var foundCluster)) return;
         if (string.Equals(service.InstanceName, ownInstanceName, StringComparison.OrdinalIgnoreCase)) return;
         var url = service.Properties.TryGetValue("reconciliationApiUrl", out var configuredUrl)
             ? configuredUrl
@@ -299,10 +301,14 @@ public sealed class ClusterReconciliationService(
         if (Normalize(url) is { } normalized && !string.Equals(normalized, advertisedApiBaseUrl, StringComparison.OrdinalIgnoreCase))
         {
             discoveredPeers[normalized] = foundCluster;
-            _ = repository.AddPeerEndpointAsync(normalized, "mdns", CancellationToken.None);
             logger.LogDebug("Pair Encoding découvert : {PeerUrl}, cluster {ClusterId}.", normalized, foundCluster);
         }
     }
+
+    internal static bool IsAdvertisedServer(IReadOnlyDictionary<string, string> properties) =>
+        properties.TryGetValue("roles", out var roles)
+        && roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Contains("server", StringComparer.OrdinalIgnoreCase);
 
     private void OnServiceLost(ServiceProfile service)
     {
