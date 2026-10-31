@@ -31,8 +31,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
           error instanceof HttpErrorResponse &&
           error.status === 503 &&
           (error.error?.code === 'sqlite_write_unavailable' ||
-            (typeof error.error?.detail === 'string' &&
-              error.error.detail.includes('court délai')))
+            (typeof error.error?.detail === 'string' && error.error.detail.includes('court délai')))
         ) {
           const retryAfter = error.headers?.get('Retry-After');
           const delayMs = retryAfter ? Math.max(1, parseInt(retryAfter, 10)) * 1000 : 1000;
