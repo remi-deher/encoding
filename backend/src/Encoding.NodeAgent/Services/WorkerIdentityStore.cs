@@ -326,6 +326,24 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
         }
     }
 
+    public async Task UpdateMasterUrlAsync(string newMasterUrl, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(newMasterUrl) || !Uri.TryCreate(newMasterUrl, UriKind.Absolute, out var uri)) return;
+        var normalized = uri.GetLeftPart(UriPartial.Path).TrimEnd('/') + "/";
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await LoadAsync(cancellationToken);
+            if (string.Equals(current.ApiBaseUrl?.TrimEnd('/') + "/", normalized, StringComparison.OrdinalIgnoreCase)) return;
+            state = current with { ApiBaseUrl = normalized };
+            await SaveAsync(state, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     private async Task SaveAsync(WorkerIdentityState value, CancellationToken cancellationToken)
     {
         var temporaryPath = filePath + ".tmp";

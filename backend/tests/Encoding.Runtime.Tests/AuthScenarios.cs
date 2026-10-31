@@ -624,6 +624,10 @@ internal static class AuthScenarios
             "POST /api/v1/nodes/{nodeId:guid}/leave",
             "GET /api/v1/nodes/{nodeId:guid}/cluster-bootstrap",
             "PUT /api/v1/nodes/{nodeId:guid}/heartbeat",
+            "GET /api/v1/cluster/leadership/status",
+            "GET /api/v1/cluster/leadership/snapshot/{transferId:guid}",
+            "POST /api/v1/cluster/leadership/transfer/{transferId:guid}/ack",
+            "GET /api/v1/cluster/leadership/backup/latest",
         };
         var runtime = anonymous.Where(item => item.Contains("/api/v1/runtime/nodes/{nodeId:guid}")).ToArray();
         var rest = anonymous.Except(runtime).ToArray();

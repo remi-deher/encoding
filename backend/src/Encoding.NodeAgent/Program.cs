@@ -50,6 +50,7 @@ builder.Services.AddSingleton<ToolCapabilityProbe>();
 builder.Services.AddSingleton<IToolCapabilityProbe>(provider => provider.GetRequiredService<ToolCapabilityProbe>());
 builder.Services.AddSingleton<WorkerClusterDiscovery>();
 builder.Services.AddSingleton<WorkerEnrollmentService>();
+builder.Services.AddSingleton<LeadershipReceiverService>();
 builder.Services.AddHostedService<WorkerClusterDiscovery>(provider => provider.GetRequiredService<WorkerClusterDiscovery>());
 builder.Services.AddHostedService<WorkerAutoEnrollmentService>();
 builder.Services.AddHostedService<NodeHeartbeatService>();
@@ -195,6 +196,21 @@ app.MapPost("/api/v1/worker/leave", async (WorkerEnrollmentService enrollment, C
         return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: exception.Message);
     }
 }).WithName("LeaveWorkerCluster");
+
+app.MapGet("/api/v1/worker/backup-status", async (LeadershipReceiverService leadershipReceiver, CancellationToken cancellationToken) =>
+{
+    var info = await leadershipReceiver.GetLocalBackupInfoAsync(cancellationToken);
+    return info is null ? Results.NotFound(new { title = "Aucune sauvegarde miroir locale disponible." }) : Results.Ok(info);
+}).WithName("GetWorkerBackupStatus");
+
+app.MapPost("/api/v1/worker/emergency-promote", async (
+    [FromBody] Encoding.Contracts.Cluster.EmergencyPromotionRequest? request,
+    LeadershipReceiverService leadershipReceiver,
+    CancellationToken cancellationToken) =>
+{
+    var response = await leadershipReceiver.EmergencyPromoteAsync(request?.Force ?? false, cancellationToken);
+    return response.Success ? Results.Ok(response) : Results.Conflict(response);
+}).WithName("EmergencyPromoteWorker");
 
 await app.RunAsync();
 

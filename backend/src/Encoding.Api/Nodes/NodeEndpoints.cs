@@ -157,6 +157,7 @@ public static class NodeEndpoints
             ClusterReconciliationRepository reconciliationRepository,
             IConfiguration configuration,
             HttpContext httpContext,
+            Encoding.Api.Cluster.LeadershipRepository leadershipRepo,
             CancellationToken cancellationToken) =>
         {
             var providedToken = httpContext.Request.Headers["X-Node-Token"].ToString();
@@ -184,7 +185,39 @@ public static class NodeEndpoints
                     if (!serverUrls.Contains(peerUrl, StringComparer.OrdinalIgnoreCase))
                         serverUrls.Add(peerUrl);
                 }
-                return Results.Ok(node with { ClusterServerUrls = serverUrls });
+
+                var activeTransfer = await leadershipRepo.GetActiveTransferForNodeAsync(nodeId, cancellationToken);
+                Encoding.Contracts.Cluster.LeadershipHandoffInstruction? handoff = null;
+                var desiredRoles = node.DesiredRoles;
+                if (activeTransfer is not null)
+                {
+                    handoff = new Encoding.Contracts.Cluster.LeadershipHandoffInstruction(
+                        activeTransfer.Id,
+                        $"/api/v1/cluster/leadership/snapshot/{activeTransfer.Id:D}",
+                        activeTransfer.SnapshotSha256 ?? string.Empty,
+                        activeTransfer.CreatedAt);
+                    desiredRoles = [NodeRole.Server, NodeRole.Worker];
+                }
+
+                var latestBackup = await leadershipRepo.GetLatestBackupAsync(cancellationToken);
+                Encoding.Contracts.Cluster.ClusterDatabaseBackupNotification? backupNotification = latestBackup is null ? null : new(
+                    latestBackup.Digest,
+                    latestBackup.SizeBytes,
+                    latestBackup.CreatedAt,
+                    "/api/v1/cluster/leadership/backup/latest");
+
+                var masterUrl = await leadershipRepo.GetMasterUrlAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(masterUrl))
+                    masterUrl = configuration["Cluster:AdvertisedApiBaseUrl"];
+
+                return Results.Ok(node with
+                {
+                    ClusterServerUrls = serverUrls,
+                    DesiredRoles = desiredRoles,
+                    LatestBackup = backupNotification,
+                    LeadershipHandoff = handoff,
+                    MasterUrl = masterUrl
+                });
             }
             // 410 : l'identité a été retirée du cluster ; le jeton est effacé à ce retrait, donc seul l'identifiant permet de le reconnaître.
             // Le nœud abandonne alors cette identité au lieu de rester « enrôlé » sans jamais être vu.

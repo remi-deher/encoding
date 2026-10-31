@@ -209,15 +209,27 @@ public sealed class UserRepository(DbDataSource dataSource)
         var now = DateTimeOffset.UtcNow;
         if (lastSeenAt < now - TimeSpan.FromMinutes(1))
         {
-            var absolute = createdAt + options.SessionAbsoluteLifetime;
-            var idle = now + options.SessionIdleTimeout;
-            await using var touch = Sql.Command("UPDATE user_sessions SET last_seen_at = @now, expires_at = @expires WHERE token_hash = @hash", connection, transaction);
-            touch.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
-            touch.Parameters.AddWithValue("now", now);
-            touch.Parameters.AddWithValue("expires", absolute < idle ? absolute : idle);
-            await touch.ExecuteNonQueryAsync(ct);
+            try
+            {
+                var absolute = createdAt + options.SessionAbsoluteLifetime;
+                var idle = now + options.SessionIdleTimeout;
+                await using var touch = Sql.Command("UPDATE user_sessions SET last_seen_at = @now, expires_at = @expires WHERE token_hash = @hash", connection, transaction);
+                touch.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
+                touch.Parameters.AddWithValue("now", now);
+                touch.Parameters.AddWithValue("expires", absolute < idle ? absolute : idle);
+                await touch.ExecuteNonQueryAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch
+            {
+                // Un échec de rafraîchissement d'expiration ne doit pas interrompre une session valide.
+            }
         }
-        await transaction.CommitAsync(ct);
+        else
+        {
+            try { await transaction.CommitAsync(ct); }
+            catch { /* Ignorer si en lecture seule */ }
+        }
         return user;
     }
 
