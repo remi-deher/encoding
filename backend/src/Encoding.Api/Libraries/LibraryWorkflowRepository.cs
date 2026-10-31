@@ -135,14 +135,14 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("offline",presence.OfflineAfter);
         await using var r=await cmd.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) return null;
         var lease=new LibraryScanLease(r.GetGuid(0),r.GetGuid(1),checked(r.GetInt64(2)+1),r.GetString(3),r.GetString(4)); await r.DisposeAsync();
-        await using var update=Sql.Command("UPDATE library_scans SET node_id=@node,source_root=@root,epoch=@epoch,state='running',lease_until=clock_timestamp()+interval '60 seconds',detail='Découverte des fichiers en cours.' WHERE id=@id",c,tx);
+        await using var update=Sql.Command("UPDATE library_scans SET node_id=@node,source_root=@root,epoch=@epoch,state='running',lease_until=clock_timestamp()+interval '180 seconds',detail='Découverte des fichiers en cours.' WHERE id=@id",c,tx);
         update.Parameters.AddWithValue("root",lease.Root); update.Parameters.AddWithValue("id",lease.Id); update.Parameters.AddWithValue("node",node); update.Parameters.AddWithValue("epoch",lease.Epoch);
         await update.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return lease;
     }
     public async Task<bool> RenewScanAsync(Guid id,Guid node,long epoch,CancellationToken ct)
     {
         await using var cmd=dataSource.CreateCommand("""
-          UPDATE library_scans s SET lease_until=clock_timestamp()+interval '60 seconds'
+          UPDATE library_scans s SET lease_until=clock_timestamp()+interval '180 seconds'
           WHERE s.id=@id AND s.node_id=@node AND s.epoch=@epoch AND s.state='running' AND s.lease_until>clock_timestamp()
           AND EXISTS(SELECT 1 FROM library_node_accesses a JOIN libraries l ON l.id=a.library_id WHERE a.library_id=s.library_id AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path=s.source_root AND l.is_active)
           """);

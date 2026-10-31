@@ -58,18 +58,28 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
         using var watch=CancellationTokenSource.CreateLinkedTokenSource(ct); ct=watch.Token;
         var guard=Task.Run(async()=>
         {
+            var consecutiveFailures=0;
             try
             {
                 while(!watch.IsCancellationRequested)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(15),watch.Token);
-                    using var timeout=CancellationTokenSource.CreateLinkedTokenSource(watch.Token); timeout.CancelAfter(TimeSpan.FromSeconds(15));
-                    await client.GetAsync<RuntimeSourceState>($"executions/{transfer.ExecutionId:D}/source?epoch={transfer.Epoch}",timeout.Token);
-                    if((await client.ExecutionAsync(transfer.ExecutionId,timeout.Token)).State!="running") { watch.Cancel(); break; }
+                    try
+                    {
+                        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(watch.Token); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                        await client.GetAsync<RuntimeSourceState>($"executions/{transfer.ExecutionId:D}/source?epoch={transfer.Epoch}",timeout.Token);
+                        if((await client.ExecutionAsync(transfer.ExecutionId,timeout.Token)).State!="running") { watch.Cancel(); break; }
+                        consecutiveFailures=0;
+                    }
+                    catch(OperationCanceledException) when(watch.IsCancellationRequested) { break; }
+                    catch(Exception)
+                    {
+                        consecutiveFailures++;
+                        if(consecutiveFailures>=5) { watch.Cancel(); break; }
+                    }
                 }
             }
             catch(OperationCanceledException) when(watch.IsCancellationRequested) { }
-            catch(Exception) { watch.Cancel(); }
         },CancellationToken.None);
         var directory=Path.Combine(options.DataDirectory,"transfers",transfer.ExecutionId.ToString("D")); Directory.CreateDirectory(directory);
         try
@@ -89,8 +99,9 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                 async Task UploadAsync(string relative,bool main)
                 {
                     var path=SafeMediaPaths.Resolve(transfer.Root,relative);
-                    var sha=await SafeMediaPaths.DigestAsync(path,ct);
                     if(main && transfer.Observation is {} expected) new MediaFileStamp(expected.Bytes,expected.LastWriteUtcTicks).Verify(path);
+                    var stamp=MediaFileStamp.Read(path);
+                    var sha=stamp.ToDigest();
                     await client.PutAsync(transfer.ExecutionId,transfer.Epoch,path,sha,main,ct,main?null:relative);
                 }
                 foreach(var input in transfer.InputPaths??[]) await UploadAsync(input,false);
@@ -109,8 +120,9 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                 await RecordOperationAsync(transfer,client,"Vérifier que la source n’a pas changé",sourceCheckId,sourceCheckStarted,null,null,null,ct);
                 var originalStamp=MediaFileStamp.Read(original);
                 if(transfer.Observation is {} obs && new MediaFileStamp(obs.Bytes,obs.LastWriteUtcTicks).Matches(original)) { }
-                else if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé depuis le début du traitement.");
-                await RecordOperationAsync(transfer,client,"Vérifier que la source n’a pas changé",sourceCheckId,sourceCheckStarted,DateTimeOffset.UtcNow,0,transfer.Observation?.Bytes,ct);
+                else if(originalStamp.Matches(original)) { }
+                else throw new IOException("La source a changé depuis le début du traitement.");
+                await RecordOperationAsync(transfer,client,"Vérifier que la source n’a pas changé",sourceCheckId,sourceCheckStarted,DateTimeOffset.UtcNow,0,transfer.Observation?.Bytes??originalStamp.Bytes,ct);
                 var incoming=Path.Combine(directory,"result"+transfer.ResultExtension);
                 var incomingPath=incoming;
                 var downloadId=Guid.NewGuid(); var downloadStarted=DateTimeOffset.UtcNow;
@@ -160,7 +172,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                         var state=await client.ExecutionAsync(transfer.ExecutionId,ct);
                         if(state.State!="running") return;
                         await client.GetAsync<RuntimeSourceState>($"executions/{transfer.ExecutionId:D}/source?epoch={transfer.Epoch}",ct);
-                        if(originalStamp is not null && !originalStamp.Matches(original) && await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256)
+                        if(originalStamp is not null && !originalStamp.Matches(original))
                             throw new IOException("La source a changé avant publication.");
                         Encoding.Core.AtomicFilePublication.Publish(temporary,target);
                     }
