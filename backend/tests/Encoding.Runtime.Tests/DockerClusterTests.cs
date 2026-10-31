@@ -182,6 +182,7 @@ public sealed class DockerClusterTests
                     node = container,
                     id = identity.TryGetProperty("id", out var nodeId) ? nodeId.GetString() : null,
                     clusterId = identity.TryGetProperty("clusterId", out var clusterId) ? clusterId.GetString() : null,
+                    enrolled = identity.TryGetProperty("enrolled", out var enrolled) && enrolled.GetBoolean(),
                     apiBaseUrl = identity.TryGetProperty("apiBaseUrl", out var apiBaseUrl) ? apiBaseUrl.GetString() : null,
                     knownServerUrls = identity.TryGetProperty("knownServerUrls", out var knownServerUrls) ? knownServerUrls.ToString() : null
                 }));
@@ -191,6 +192,14 @@ public sealed class DockerClusterTests
 
         public async Task<string> LogsAsync() => string.Join("\n", await Task.WhenAll(containers.Select(async container => $"[{container}] " + await DockerAsync(allowFailure: true, "logs", "--tail", "15", container))));
         public async Task<string> NodeDiagnosticsAsync() => (await Client.GetFromJsonAsync<JsonElement>("api/v1/nodes")).ToString();
+        public async Task<string> LibraryAccessDiagnosticsAsync()
+        {
+            var libraries = await Client.GetFromJsonAsync<JsonElement>("api/v1/libraries");
+            var library = libraries.EnumerateArray().FirstOrDefault(item => item.GetProperty("name").GetString() == "Docker");
+            if (library.ValueKind == JsonValueKind.Undefined) return "Bibliothèque Docker absente.";
+            var id = library.GetProperty("id").GetGuid();
+            return (await Client.GetFromJsonAsync<JsonElement>($"api/v1/libraries/{id:D}/node-access")).ToString();
+        }
     }
 
     private static Task<string> DockerAsync(params string[] arguments) => DockerAsync(false, arguments);
@@ -246,7 +255,7 @@ public sealed class DockerClusterTests
         }, 420, "reprise et fin de l'exécution", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.LibraryAccessDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
         Assert.NotEqual(victim, final.GetProperty("node").GetString());
         Assert.Contains("reprise", history, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
@@ -274,7 +283,7 @@ public sealed class DockerClusterTests
         }, 300, "exécution par le worker de l'ancienne version", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.LibraryAccessDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
         Assert.Equal("worker-old", final.GetProperty("node").GetString());
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
     }
