@@ -66,7 +66,9 @@ export interface ForceSourceRetryAttestation {
             [ngModel]="reason()"
             (ngModelChange)="reason.set($event)"
           ></textarea>
-          <mat-hint>8 caractères minimum. Ce motif sera conservé dans le journal du cluster.</mat-hint>
+          <mat-hint
+            >8 caractères minimum. Ce motif sera conservé dans le journal du cluster.</mat-hint
+          >
         </mat-form-field>
       </mat-dialog-content>
 

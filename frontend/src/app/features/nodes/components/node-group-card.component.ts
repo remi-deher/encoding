@@ -3,7 +3,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component';
 import { NodeGroupResponse, NodeResponse, formatNodeLabel } from '../../../shared/models/cluster';
-import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared/models/node-group-rules';
+import {
+  formatGroupCriteriaBadges,
+  matchesGroupCriteria,
+} from '../../../shared/models/node-group-rules';
 
 @Component({
   selector: 'app-node-group-card',
@@ -18,7 +21,11 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
               {{ group().name }}
             </button>
             <app-status-badge
-              [label]="group().mode === 'manual' ? 'Manuel (' + memberNodes().length + ' nœuds)' : 'Automatique (' + memberNodes().length + ' matchés)'"
+              [label]="
+                group().mode === 'manual'
+                  ? 'Manuel (' + memberNodes().length + ' nœuds)'
+                  : 'Automatique (' + memberNodes().length + ' matchés)'
+              "
               [tone]="group().mode === 'manual' ? 'neutral' : 'accent'"
             />
           </div>
@@ -39,12 +46,8 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
               <span aria-hidden="true">⋮</span>
             </button>
             <mat-menu #cardMenu="matMenu">
-              <button mat-menu-item (click)="edit.emit()">
-                Modifier
-              </button>
-              <button mat-menu-item class="danger-action" (click)="delete.emit()">
-                Supprimer
-              </button>
+              <button mat-menu-item (click)="edit.emit()">Modifier</button>
+              <button mat-menu-item class="danger-action" (click)="delete.emit()">Supprimer</button>
             </mat-menu>
           </div>
         }
@@ -69,7 +72,11 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
                 </span>
               }
               @if (remainingMembersCount() > 0) {
-                <span class="node-pill">+{{ remainingMembersCount() }} autre{{ remainingMembersCount() > 1 ? 's' : '' }}</span>
+                <span class="node-pill"
+                  >+{{ remainingMembersCount() }} autre{{
+                    remainingMembersCount() > 1 ? 's' : ''
+                  }}</span
+                >
               }
             }
           </div>
@@ -145,9 +152,7 @@ export class NodeGroupCardComponent {
   });
 
   protected readonly labelsList = computed(() => {
-    return Object.entries(this.group().labels).map(([k, v]) =>
-      v == null ? k : `${k}=${v}`,
-    );
+    return Object.entries(this.group().labels).map(([k, v]) => (v == null ? k : `${k}=${v}`));
   });
 
   protected formatNode(node: NodeResponse): string {

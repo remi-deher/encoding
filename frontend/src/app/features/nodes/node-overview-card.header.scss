@@ -11,16 +11,14 @@
 
 .node-overview-head_with-summary {
   display: grid;
-  grid-template-columns:
-    minmax(280px, 1.15fr) minmax(360px, 1.5fr) minmax(240px, 1fr) auto;
+  grid-template-columns: minmax(280px, 1.15fr) minmax(360px, 1.5fr) minmax(240px, 1fr) auto;
   grid-template-areas: 'identity hardware controls menu';
   align-items: stretch;
   gap: var(--space-3);
 }
 
 .node-overview-head_with-summary.has-select {
-  grid-template-columns:
-    auto minmax(280px, 1.15fr) minmax(360px, 1.5fr) minmax(240px, 1fr) auto;
+  grid-template-columns: auto minmax(280px, 1.15fr) minmax(360px, 1.5fr) minmax(240px, 1fr) auto;
   grid-template-areas: 'select identity hardware controls menu';
 }
 
@@ -123,23 +121,47 @@
 .node-overview-master-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
+  gap: 5px;
+  padding: 2px 9px;
   border-radius: var(--radius-pill);
-  background: rgba(234, 179, 8, 0.15);
+  background: rgba(234, 179, 8, 0.2);
   color: #facc15;
-  border: 1px solid rgba(234, 179, 8, 0.35);
+  border: 1px solid rgba(234, 179, 8, 0.45);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(234, 179, 8, 0.15);
+}
+
+.node-overview-master-icon {
+  width: 13px;
+  height: 13px;
+  color: #facc15;
+  flex-shrink: 0;
+}
+
+.node-overview-worker-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-container-highest);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   flex-shrink: 0;
 }
 
-.node-overview-master-icon {
+.node-overview-worker-icon {
   width: 12px;
   height: 12px;
-  color: #facc15;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -237,7 +259,8 @@
 }
 
 @keyframes rolePulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.6;
   }
   50% {
@@ -261,22 +284,14 @@
 .node-overview-hw-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.node-overview-hw-sub {
-  display: grid;
-  grid-template-columns: minmax(90px, auto) minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: center;
+  gap: 5px;
   min-width: 0;
 }
 
 .node-overview-hw-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 

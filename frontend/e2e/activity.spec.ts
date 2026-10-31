@@ -77,6 +77,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/cluster', (route) =>
     route.fulfill({ json: { id: 'cluster', name: 'Maison', standalone: true } }),
   );
+  await page.route('**/api/v1/activity/stream**', (route) => route.abort());
   await page.route('**/api/v1/activity/files**', (route) => {
     const url = new URL(route.request().url());
     return route.fulfill({
@@ -142,8 +143,9 @@ test('completed jobs stay visible behind a large queue and history is paginated'
     'true',
   );
   await expect(activity).toContainText('6063 fichiers suivis');
-  await activity.getByRole('button', { name: 'Afficher plus de fichiers' }).click();
+  await activity.getByRole('button', { name: 'Suivant' }).click();
   await expect(activity.getByText('Film terminé 50.mkv', { exact: true })).toBeVisible();
+  await activity.getByRole('button', { name: 'Précédent' }).click();
   await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });

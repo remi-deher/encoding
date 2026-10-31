@@ -12,7 +12,9 @@ describe('NodeGroupEditorComponent', () => {
       maxConcurrentTasks: 4,
       status: 'online',
       lastSeenAt: '2026-10-17T00:00:00Z',
-      capabilities: [{ toolId: 'ffmpeg', version: '7.0', mediaTypes: ['video'], accelerationTypes: [] }],
+      capabilities: [
+        { toolId: 'ffmpeg', version: '7.0', mediaTypes: ['video'], accelerationTypes: [] },
+      ],
       inventory: {
         operatingSystem: 'Linux',
         architecture: 'X64',

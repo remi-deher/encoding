@@ -2,7 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { MatButtonModule } from '@angular/material/button';
 import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component';
 import { NodeGroupResponse, NodeResponse, formatNodeLabel } from '../../../shared/models/cluster';
-import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared/models/node-group-rules';
+import {
+  formatGroupCriteriaBadges,
+  matchesGroupCriteria,
+} from '../../../shared/models/node-group-rules';
 
 @Component({
   selector: 'app-node-group-detail',
@@ -16,7 +19,11 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
           <div class="section-title-row">
             <h3>{{ g.name }}</h3>
             <app-status-badge
-              [label]="g.mode === 'manual' ? 'Manuel (' + memberNodes().length + ' nœuds)' : 'Automatique (' + memberNodes().length + ' matchés)'"
+              [label]="
+                g.mode === 'manual'
+                  ? 'Manuel (' + memberNodes().length + ' nœuds)'
+                  : 'Automatique (' + memberNodes().length + ' matchés)'
+              "
               [tone]="g.mode === 'manual' ? 'neutral' : 'accent'"
             />
           </div>
@@ -30,7 +37,11 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
           <div class="section-header">
             <h4>Membres actuels du cluster ({{ memberNodes().length }})</h4>
             <p>
-              {{ g.mode === 'manual' ? 'Nœuds affectés directement à ce groupe manuel.' : 'Nœuds satisfaisant actuellement tous les critères d’inventaire.' }}
+              {{
+                g.mode === 'manual'
+                  ? 'Nœuds affectés directement à ce groupe manuel.'
+                  : 'Nœuds satisfaisant actuellement tous les critères d’inventaire.'
+              }}
             </p>
           </div>
 
@@ -48,7 +59,10 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
                     />
                   </div>
                   <div class="member-specs">
-                    <span>{{ node.inventory?.operatingSystem || 'OS indéfini' }} · {{ node.inventory?.architecture || '' }}</span>
+                    <span
+                      >{{ node.inventory?.operatingSystem || 'OS indéfini' }} ·
+                      {{ node.inventory?.architecture || '' }}</span
+                    >
                     @if (node.inventory?.processorCount) {
                       <span>· {{ node.inventory?.processorCount }} CPU</span>
                     }
@@ -97,7 +111,8 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
           <div class="section-header">
             <h4>Étiquettes partagées (Labels)</h4>
             <p>
-              Transmises automatiquement à tous les membres. Les étiquettes locales du nœud prévalent en cas de clé identique.
+              Transmises automatiquement à tous les membres. Les étiquettes locales du nœud
+              prévalent en cas de clé identique.
             </p>
           </div>
           <div class="labels-list">
@@ -231,7 +246,8 @@ import { formatGroupCriteriaBadges, matchesGroupCriteria } from '../../../shared
       }
     }
 
-    .criteria-list, .labels-list {
+    .criteria-list,
+    .labels-list {
       display: flex;
       flex-wrap: wrap;
       gap: var(--space-2);

@@ -93,9 +93,20 @@ export interface NodeOverviewHardware {
             @switch (hardware()?.platform) {
               @case ('docker') {
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M2.5 13.1h18.3c-.5 4.2-3.1 6.6-7.2 6.6H9.3c-3.8 0-6.1-2.1-6.8-6.6Z" fill="currentColor" />
-                  <path d="M5.2 10.1h2.5v2.4H5.2zm3.1 0h2.5v2.4H8.3zm3.1 0h2.5v2.4h-2.5zm3.1 0H17v2.4h-2.5zM8.3 7.2h2.5v2.4H8.3zm3.1 0h2.5v2.4h-2.5z" fill="currentColor" />
-                  <path d="M20.8 11.2c.8-.2 1.3-.8 1.5-1.6.8.7 1 1.7.7 2.7-.6.2-1.3.1-2-.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                  <path
+                    d="M2.5 13.1h18.3c-.5 4.2-3.1 6.6-7.2 6.6H9.3c-3.8 0-6.1-2.1-6.8-6.6Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M5.2 10.1h2.5v2.4H5.2zm3.1 0h2.5v2.4H8.3zm3.1 0h2.5v2.4h-2.5zm3.1 0H17v2.4h-2.5zM8.3 7.2h2.5v2.4H8.3zm3.1 0h2.5v2.4h-2.5z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M20.8 11.2c.8-.2 1.3-.8 1.5-1.6.8.7 1 1.7.7 2.7-.6.2-1.3.1-2-.1"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                    stroke-linecap="round"
+                  />
                 </svg>
               }
               @case ('linux') {
@@ -104,16 +115,30 @@ export interface NodeOverviewHardware {
                   <ellipse cx="12" cy="14" rx="3.6" ry="5.2" fill="var(--accent-strong)" />
                   <circle cx="9.8" cy="9.5" r=".7" fill="var(--surface-container-high)" />
                   <circle cx="14.2" cy="9.5" r=".7" fill="var(--surface-container-high)" />
-                  <path d="m10.4 10.8 1.6 1 1.6-1M8.1 19.2l-1.2 1.2m9-1.2 1.2 1.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  <path
+                    d="m10.4 10.8 1.6 1 1.6-1M8.1 19.2l-1.2 1.2m9-1.2 1.2 1.2"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
                 </svg>
               }
               @case ('windows') {
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="currentColor" d="M2 4.1 10.7 2.9v8H2zM12 2.7l10-1.4v9.6H12zM2 12.4h8.7v8L2 19.2zM12 12.4h10v9.7l-10-1.4z" />
+                  <path
+                    fill="currentColor"
+                    d="M2 4.1 10.7 2.9v8H2zM12 2.7l10-1.4v9.6H12zM2 12.4h8.7v8L2 19.2zM12 12.4h10v9.7l-10-1.4z"
+                  />
                 </svg>
               }
               @default {
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
                   <rect x="3" y="4" width="18" height="6" rx="2" />
                   <rect x="3" y="14" width="18" height="6" rx="2" />
                   <path d="M7 7h.01M7 17h.01M11 7h7M11 17h7" />
@@ -139,11 +164,38 @@ export interface NodeOverviewHardware {
             }
             <div class="node-overview-badges">
               @if (isMaster()) {
-                <span class="node-overview-master-badge" title="Nœud Maître (Coordinateur actif du cluster)">
-                  <svg class="node-overview-master-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
+                <span
+                  class="node-overview-master-badge"
+                  title="Nœud Maître (Coordinateur actif du cluster)"
+                >
+                  <svg
+                    class="node-overview-master-icon"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
+                    />
                   </svg>
                   <span>Maître</span>
+                </span>
+              } @else {
+                <span
+                  class="node-overview-worker-badge"
+                  title="Nœud Worker (Exécution des encodages)"
+                >
+                  <svg
+                    class="node-overview-worker-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    aria-hidden="true"
+                  >
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  <span>Worker</span>
                 </span>
               }
               <app-status-badge [label]="statusLabel()" [tone]="statusTone()" />
@@ -159,12 +211,16 @@ export interface NodeOverviewHardware {
                       [class.is-active]="control.checked && !control.pending"
                       [class.is-pending]="control.pending"
                       [disabled]="control.disabled ?? false"
-                      [attr.aria-label]="(control.checked ? 'Désactiver' : 'Activer') + ' le rôle ' + control.label"
+                      [attr.aria-label]="
+                        (control.checked ? 'Désactiver' : 'Activer') + ' le rôle ' + control.label
+                      "
                       (click)="roleToggle.emit({ role: control.role, enabled: !control.checked })"
                     >
                       <span class="node-overview-role-dot"></span>
                       <span class="node-overview-role-name">{{ control.label }}</span>
-                      <span class="node-overview-role-status">{{ control.pending ? '…' : control.checked ? 'Actif' : 'Inactif' }}</span>
+                      <span class="node-overview-role-status">{{
+                        control.pending ? '…' : control.checked ? 'Actif' : 'Inactif'
+                      }}</span>
                     </button>
                   }
                 } @else {
@@ -185,7 +241,10 @@ export interface NodeOverviewHardware {
             <section class="node-overview-hardware" aria-label="Ressources matérielles">
               <span class="node-overview-control-label">RESSOURCES MATÉRIELLES</span>
               <div class="node-overview-hw-list">
-                <div class="node-overview-hw-row node-overview-hw-row_cpu" [attr.title]="resources.cpu">
+                <div
+                  class="node-overview-hw-row node-overview-hw-row_cpu"
+                  [attr.title]="resources.cpu"
+                >
                   <span class="node-overview-hw-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                       <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -196,29 +255,33 @@ export interface NodeOverviewHardware {
                   <span class="node-overview-hw-tag">CPU</span>
                   <span class="node-overview-hw-value">{{ resources.cpu }}</span>
                 </div>
-                <div class="node-overview-hw-sub">
-                  <div class="node-overview-hw-row node-overview-hw-row_ram" [attr.title]="resources.memory">
-                    <span class="node-overview-hw-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <path d="M6 19v2M10 19v2M14 19v2M18 19v2M6 3v2M10 3v2M14 3v2M18 3v2" />
-                        <rect x="3" y="5" width="18" height="14" rx="2" />
-                      </svg>
-                    </span>
-                    <span class="node-overview-hw-tag">RAM</span>
-                    <span class="node-overview-hw-value">{{ resources.memory }}</span>
-                  </div>
-                  <div class="node-overview-hw-row node-overview-hw-row_gpu" [attr.title]="resources.gpu">
-                    <span class="node-overview-hw-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <rect x="2" y="6" width="20" height="12" rx="2" />
-                        <circle cx="8" cy="12" r="2.5" />
-                        <circle cx="16" cy="12" r="2.5" />
-                        <path d="M8 9.5v5M16 9.5v5" />
-                      </svg>
-                    </span>
-                    <span class="node-overview-hw-tag">GPU</span>
-                    <span class="node-overview-hw-value">{{ resources.gpu }}</span>
-                  </div>
+                <div
+                  class="node-overview-hw-row node-overview-hw-row_ram"
+                  [attr.title]="resources.memory"
+                >
+                  <span class="node-overview-hw-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M6 19v2M10 19v2M14 19v2M18 19v2M6 3v2M10 3v2M14 3v2M18 3v2" />
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                    </svg>
+                  </span>
+                  <span class="node-overview-hw-tag">RAM</span>
+                  <span class="node-overview-hw-value">{{ resources.memory }}</span>
+                </div>
+                <div
+                  class="node-overview-hw-row node-overview-hw-row_gpu"
+                  [attr.title]="resources.gpu"
+                >
+                  <span class="node-overview-hw-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="2" y="6" width="20" height="12" rx="2" />
+                      <circle cx="8" cy="12" r="2.5" />
+                      <circle cx="16" cy="12" r="2.5" />
+                      <path d="M8 9.5v5M16 9.5v5" />
+                    </svg>
+                  </span>
+                  <span class="node-overview-hw-tag">GPU</span>
+                  <span class="node-overview-hw-value">{{ resources.gpu }}</span>
                 </div>
               </div>
             </section>
@@ -232,7 +295,10 @@ export interface NodeOverviewHardware {
               >
                 <div class="node-overview-admission-header">
                   <span class="node-overview-control-label">ADMISSION</span>
-                  <span class="node-overview-control-state" [class.is-suspended]="!admissionEnabled()">
+                  <span
+                    class="node-overview-control-state"
+                    [class.is-suspended]="!admissionEnabled()"
+                  >
                     {{ admissionEnabled() ? 'Acceptées' : 'Suspendues' }}
                   </span>
                 </div>
@@ -242,7 +308,8 @@ export interface NodeOverviewHardware {
                   [disabled]="admissionDisabled()"
                   [aria-label]="
                     (admissionEnabled() ? 'Suspendre' : 'Réactiver') +
-                    ' les nouvelles tâches sur ' + title()
+                    ' les nouvelles tâches sur ' +
+                    title()
                   "
                   (change)="admissionChange.emit($event.checked)"
                 >
@@ -259,7 +326,10 @@ export interface NodeOverviewHardware {
                 <dl class="node-overview-task-capacity-values">
                   <div>
                     <dt>Tâches</dt>
-                    <dd>{{ capacity.accepted ?? '0' }}{{ capacity.maximum !== null ? ' / ' + capacity.maximum : '' }}</dd>
+                    <dd>
+                      {{ capacity.accepted ?? '0'
+                      }}{{ capacity.maximum !== null ? ' / ' + capacity.maximum : '' }}
+                    </dd>
                   </div>
                   <div>
                     <dt>Disponibles</dt>

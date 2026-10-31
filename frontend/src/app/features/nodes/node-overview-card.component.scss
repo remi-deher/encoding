@@ -24,7 +24,9 @@
 }
 
 .node-overview-card.is-master {
-  border-left: 3px solid #eab308;
+  border-left: 4px solid #facc15;
+  background: linear-gradient(90deg, rgba(234, 179, 8, 0.04) 0%, var(--surface-container) 120px);
+  box-shadow: 0 2px 12px rgba(234, 179, 8, 0.08);
 }
 
 .node-overview-notice-banner {
@@ -52,7 +54,6 @@
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border-subtle));
   background: color-mix(in srgb, var(--danger) 10%, var(--surface-container-low));
 }
-
 
 .node-overview-select {
   flex: 0 0 auto;
@@ -419,7 +420,6 @@
   color: var(--danger-strong);
 }
 
-
 @media (max-width: 800px) {
   .node-overview-section-grid,
   .node-overview-library-grid {
@@ -436,5 +436,4 @@
   .node-overview-libraries {
     padding: var(--space-3);
   }
-
 }

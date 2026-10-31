@@ -85,7 +85,6 @@
       </div>
     }
 
-
     @if (!files().length) {
       <div class="empty-state">
         <h2>{{ pageState().status === 'error' ? 'Données indisponibles' : 'Aucun fichier' }}</h2>
@@ -135,7 +134,8 @@
                 }
                 @if (file.quarantineReason) {
                   <span class="item-detail item-detail_warning">
-                    En quarantaine en attendant une décision sûre du cluster. Un administrateur peut attester l’arrêt complet du propriétaire et forcer une reprise depuis la source.
+                    En quarantaine en attendant une décision sûre du cluster. Un administrateur peut
+                    attester l’arrêt complet du propriétaire et forcer une reprise depuis la source.
                   </span>
                 }
                 @if (file.status === 'active' && file.progress !== null) {
@@ -152,10 +152,7 @@
                   [tone]="statusTone(file.status)"
                 />
                 @if (activityExecutionLabel(file); as exactState) {
-                  <app-status-badge
-                    [label]="exactState"
-                    [tone]="activityExecutionTone(file)"
-                  />
+                  <app-status-badge [label]="exactState" [tone]="activityExecutionTone(file)" />
                 }
                 <span class="item-time">
                   @if (file.status === 'active' && file.progress !== null) {
@@ -168,16 +165,30 @@
           </li>
         }
       </ul>
-      @if (hasMore()) {
-        <button
-          matButton="text"
-          type="button"
-          class="more-button"
-          [disabled]="loadingMore()"
-          (click)="loadMore()"
-        >
-          {{ loadingMore() ? 'Chargement…' : 'Afficher plus de fichiers' }}
-        </button>
+      @if (totalPages() > 1) {
+        <nav class="activity-pagination" aria-label="Pagination des fichiers">
+          <button
+            matButton="outlined"
+            type="button"
+            class="pagination-btn"
+            [disabled]="pageIndex() === 0"
+            (click)="prevPage()"
+            aria-label="Page précédente"
+          >
+            Précédent
+          </button>
+          <span class="pagination-info" aria-live="polite">{{ pageRangeText() }}</span>
+          <button
+            matButton="outlined"
+            type="button"
+            class="pagination-btn"
+            [disabled]="pageIndex() + 1 >= totalPages()"
+            (click)="nextPage()"
+            aria-label="Page suivante"
+          >
+            Suivant
+          </button>
+        </nav>
       }
     }
   </section>
@@ -262,7 +273,10 @@
         <div class="detail-tab-pane">
           @if (file.quarantineReason) {
             <p class="activity-feedback" role="alert">
-              Le cluster vérifie qu’aucun autre nœud ne traite ce média. Un administrateur peut attester l’arrêt complet du propriétaire et de ses workers pour libérer cette tentative source après 135 secondes. Une publication confirmée ou incertaine bloque cette action.
+              Le cluster vérifie qu’aucun autre nœud ne traite ce média. Un administrateur peut
+              attester l’arrêt complet du propriétaire et de ses workers pour libérer cette
+              tentative source après 135 secondes. Une publication confirmée ou incertaine bloque
+              cette action.
               @if (file.conflictingExecutionId) {
                 Référence de l’exécution en conflit : {{ file.conflictingExecutionId }}.
               }

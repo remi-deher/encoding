@@ -301,7 +301,9 @@ export class NodeCatalogPageComponent {
     () => this.nodes().find((node) => node.id === this.local.status()?.nodeId) ?? null,
   );
   protected readonly localOverviewHardware = computed(() =>
-    this.nodeOverviewHardware(this.localNode()?.inventory ?? this.local.status()?.inventory ?? null),
+    this.nodeOverviewHardware(
+      this.localNode()?.inventory ?? this.local.status()?.inventory ?? null,
+    ),
   );
   protected readonly localName = computed(
     () =>
@@ -388,13 +390,15 @@ export class NodeCatalogPageComponent {
   );
   protected readonly localRoleSwitches = computed<readonly NodeOverviewRoleSwitch[]>(() => {
     const mode = this.local.mode();
-    const status = mode ?? (this.local.status()
-      ? {
-          server: this.local.status()!.roles.includes('server'),
-          worker: this.local.status()!.roles.includes('worker'),
-          managed: false,
-        }
-      : null);
+    const status =
+      mode ??
+      (this.local.status()
+        ? {
+            server: this.local.status()!.roles.includes('server'),
+            worker: this.local.status()!.roles.includes('worker'),
+            managed: false,
+          }
+        : null);
     if (!this.isAdmin() || !status || this.local.modeUnavailable()) return [];
     const requested = this.localNode()?.desiredRoles ?? null;
     const applied = this.local.status()?.roles ?? [];
@@ -1399,9 +1403,7 @@ export class NodeCatalogPageComponent {
             ? (this.activeTasks()[node.id] ?? 0)
             : null,
           this.clusterName(),
-        ).filter(
-          (section) => section.id !== 'state' && section.id !== 'hardware',
-        ),
+        ).filter((section) => section.id !== 'state' && section.id !== 'hardware'),
         libraries: this.nodeOverviewLibraries(node.id),
       };
     }),
@@ -1419,11 +1421,35 @@ export class NodeCatalogPageComponent {
             ? 'linux'
             : 'generic';
     const platformLabel =
-      platform === 'docker'
-        ? 'Docker · conteneur'
-        : operatingSystem || 'Plateforme non déclarée';
+      platform === 'docker' ? 'Docker · conteneur' : operatingSystem || 'Plateforme non déclarée';
+    const cleanGpuName = (raw: string): string => {
+      let g = raw
+        .replace(/Advanced Micro Devices, Inc\. \[AMD\/ATI\]/gi, 'AMD')
+        .replace(/Advanced Micro Devices, Inc\./gi, 'AMD')
+        .replace(/Intel Corporation\s*/gi, 'Intel ')
+        .replace(/NVIDIA Corporation\s*/gi, 'NVIDIA ')
+        .replace(/\([Rr]\)|\([Tt][Mm]\)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const match = /\[(.*?)\]/.exec(g);
+      if (match && match[1].length > 3) {
+        const brand = g.startsWith('AMD')
+          ? 'AMD '
+          : g.startsWith('Intel')
+            ? 'Intel '
+            : g.startsWith('NVIDIA')
+              ? 'NVIDIA '
+              : '';
+        if (!match[1].startsWith(brand.trim())) {
+          return `${brand}${match[1]}`.trim();
+        }
+        return match[1].trim();
+      }
+      return g;
+    };
+
     const gpu = inventory?.gpus?.length
-      ? inventory.gpus.map((item) => item.name).join(' · ')
+      ? inventory.gpus.map((item) => cleanGpuName(item.name)).join(' · ')
       : inventory?.gpus
         ? 'Aucun détecté'
         : 'Non déclaré';
@@ -1434,6 +1460,7 @@ export class NodeCatalogPageComponent {
     if (rawCpu) {
       cpu = rawCpu
         .replace(/\([Rr]\)|\([Tt][Mm]\)/g, '')
+        .replace(/@\s*[\d.]+\s*GHz/gi, '')
         .replace(/\s+CPU\b/g, '')
         .replace(/\s+/g, ' ')
         .trim();
@@ -1465,8 +1492,7 @@ export class NodeCatalogPageComponent {
     else if (accepted === null) note = 'Comptage des tâches indisponible.';
     else if (nodeLifecycle(node) === 'draining')
       note = 'Admission suspendue : les places libres ne sont pas attribuées.';
-    else if (nodeLifecycle(node) !== 'online')
-      note = 'Nœud indisponible pour recevoir des tâches.';
+    else if (nodeLifecycle(node) !== 'online') note = 'Nœud indisponible pour recevoir des tâches.';
 
     return { accepted, remaining, maximum, note };
   }
@@ -1495,11 +1521,7 @@ export class NodeCatalogPageComponent {
   protected admissionDisabledFor(node: NodeResponse): boolean {
     return this.admissionBusy().has(node.id);
   }
-  protected setMemberRole(
-    nodeId: string,
-    role: NodeRole,
-    enabled: boolean,
-  ): void {
+  protected setMemberRole(nodeId: string, role: NodeRole, enabled: boolean): void {
     const node = this.nodes().find((item) => item.id === nodeId);
     if (node) void this.updateMemberRole(node, role, enabled);
   }
