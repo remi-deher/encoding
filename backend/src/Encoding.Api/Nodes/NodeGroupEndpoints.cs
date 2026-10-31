@@ -1,5 +1,5 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
-using System.Data.Common;
 using System.Text.RegularExpressions;
 using Encoding.Contracts.Nodes;
 
@@ -22,20 +22,17 @@ public static partial class NodeGroupEndpoints
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 if (!await repository.SaveAsync(null, request, ct)) return Results.Conflict();
                 var created = (await repository.ListAsync(ct)).FirstOrDefault(g => g.Name == request.Name.Trim());
                 return Results.Created("/api/v1/node-groups/" + created?.Id, created);
-            }
-            catch (DbException e) when (Sql.IsUniqueViolation(e)) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
+            }, () => Results.Conflict(new { title = "Un groupe porte déjà ce nom." }));
         }).WithName("CreateNodeGroup");
         groups.MapPut("/{id:guid}", async (Guid id, SaveNodeGroupRequest request, NodeGroupRepository repository, CancellationToken ct) =>
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try { return await repository.SaveAsync(id, request, ct) ? Results.Ok(await repository.GetAsync(id, ct)) : Results.NotFound(); }
-            catch (DbException e) when (Sql.IsUniqueViolation(e)) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
+            return await UniqueConflict.GuardAsync(async () => { return await repository.SaveAsync(id, request, ct) ? Results.Ok(await repository.GetAsync(id, ct)) : Results.NotFound(); }, () => Results.Conflict(new { title = "Un groupe porte déjà ce nom." }));
         }).WithName("UpdateNodeGroup");
         groups.MapDelete("/{id:guid}", async (Guid id, NodeGroupRepository repository, CancellationToken ct) =>
             await repository.DeleteAsync(id, ct) switch

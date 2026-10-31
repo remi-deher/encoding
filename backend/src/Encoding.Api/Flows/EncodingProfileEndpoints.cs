@@ -1,5 +1,5 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
-using System.Data.Common;
 using Encoding.Contracts.Flows;
 
 namespace Encoding.Api.Flows;
@@ -17,16 +17,11 @@ public static class EncodingProfileEndpoints
         {
             var errors = Validate(request.Draft);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var id = Guid.NewGuid();
                 var profile = await repository.CreateAsync(id, request.Draft, ct);
                 return Results.Created($"/api/v1/encoding-profiles/{id:D}", profile);
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un profil d’encodage porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un profil d’encodage porte déjà ce nom." }));
         }).WithName("CreateEncodingProfile");
         profiles.MapGet("/{id:guid}", async (Guid id, EncodingProfileRepository repository, CancellationToken ct) =>
             await repository.GetAsync(id, ct) is { } profile ? Results.Ok(profile) : Results.NotFound())
@@ -38,18 +33,13 @@ public static class EncodingProfileEndpoints
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
             if (id == BuiltInEncodingProfiles.BalancedId)
                 return Results.Conflict(new { title = "Le profil intégré est en lecture seule. Créez un profil personnalisé à partir de ses valeurs." });
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var saved = await repository.SaveDraftAsync(id, request, ct);
                 if (saved is not null) return Results.Ok(saved);
                 return await repository.GetAsync(id, ct) is null
                     ? Results.NotFound()
                     : Results.Conflict(new { title = "Le profil a été modifié ailleurs. Rechargez-le avant de continuer." });
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un profil d’encodage porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un profil d’encodage porte déjà ce nom." }));
         }).WithName("SaveEncodingProfileDraft");
         profiles.MapPost("/{id:guid}/publish", async (Guid id, PublishEncodingProfileRequest request, EncodingProfileRepository repository, CancellationToken ct) =>
         {

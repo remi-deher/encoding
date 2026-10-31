@@ -1,5 +1,5 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
-using System.Data.Common;
 using Encoding.Contracts.Flows;
 
 namespace Encoding.Api.Flows;
@@ -21,17 +21,12 @@ public static class FlowComponentPackEndpoints
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var pack = await repository.CreateFromFlowAsync(Guid.NewGuid(), request, ct);
                 return pack is null
                     ? Results.UnprocessableEntity(new { title = "Le flow publié doit contenir une entrée reliée à au moins un composant." })
                     : Results.Created($"/api/v1/component-packs/{pack.Pack.Id:D}", pack);
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un pack de composants porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un pack de composants porte déjà ce nom." }));
         }).WithName("CreateFlowComponentPackFromFlow");
     }
 

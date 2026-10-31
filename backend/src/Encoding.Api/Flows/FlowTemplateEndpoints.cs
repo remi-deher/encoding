@@ -1,5 +1,5 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
-using System.Data.Common;
 using Encoding.Contracts.Flows;
 
 namespace Encoding.Api.Flows;
@@ -27,18 +27,13 @@ public static class FlowTemplateEndpoints
             var configurationError = repository.ValidateConfiguration(source.Definition, request.Configuration);
             if (configurationError is not null)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["configuration"] = [configurationError] });
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var id = Guid.NewGuid();
                 var template = await repository.CreateFromFlowAsync(id, request, ct);
                 return template is null
                     ? Results.NotFound(new { title = "Cette version publiée du flow est introuvable." })
                     : Results.Created($"/api/v1/templates/{id:D}", template);
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un modèle porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un modèle porte déjà ce nom." }));
         }).WithName("CreateFlowTemplateFromFlow");
 
         templates.MapPut("/{id:guid}", async (
@@ -65,19 +60,14 @@ public static class FlowTemplateEndpoints
             var configurationError = repository.ValidateConfiguration(request.Definition, request.Configuration);
             if (configurationError is not null)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["configuration"] = [configurationError] });
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var updated = await repository.UpdateAsync(id, request, ct);
                 if (updated is not null) return Results.Ok(updated);
                 var current = await repository.GetAsync(id, ct);
                 return current is null
                     ? Results.NotFound()
                     : Results.Conflict(new { title = "Le modèle a été modifié depuis son ouverture. Rechargez-le puis réessayez." });
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un modèle porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un modèle porte déjà ce nom." }));
         }).WithName("UpdateFlowTemplate");
     }
 

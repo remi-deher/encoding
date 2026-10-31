@@ -150,6 +150,7 @@ builder.Services.AddSingleton<TaskCheckpointRepository>();
 builder.Services.AddSingleton<TaskCoordinationProjection>();
 builder.Services.AddSingleton<ClusterTaskTransport>();
 builder.Services.AddSingleton<ClusterTaskCoordinator>();
+builder.Services.AddSingleton<ClusterTaskPeerHandler>();
 builder.Services.AddSingleton<ClusterTaskMaintenance>();
 builder.Services.AddHostedService(services=>services.GetRequiredService<ClusterTaskMaintenance>());
 builder.Services.AddHttpClient("ClusterTaskTransfer",client=>client.Timeout=TimeSpan.FromMinutes(30)).ConfigurePrimaryHttpMessageHandler(()=>new HttpClientHandler{AllowAutoRedirect=false});

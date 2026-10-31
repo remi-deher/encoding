@@ -44,18 +44,7 @@ public sealed class ArchitectureTests
         "Encoding.NodeAgent/Runtime/ProcessToolRunner.cs",
     ];
 
-    // Dette connue : endpoints qui touchent encore au stockage. À vider, jamais à étendre.
-    private static readonly string[] EndpointStorageDebt =
-    [
-        "Encoding.Api/Executions/ClusterTaskEndpoints.cs",
-        "Encoding.Api/Flows/EncodingProfileEndpoints.cs",
-        "Encoding.Api/Flows/FlowComponentPackEndpoints.cs",
-        "Encoding.Api/Flows/FlowScriptEndpoints.cs",
-        "Encoding.Api/Flows/FlowTemplateEndpoints.cs",
-        "Encoding.Api/Libraries/LibraryEndpoints.cs",
-        "Encoding.Api/Nodes/NodeGroupEndpoints.cs",
-        "Encoding.Api/Resources/ResourceEndpoints.cs",
-    ];
+    private static readonly string[] EndpointStorageDebt = [];
 
     [Fact]
     public void ProjectReferencesFollowTheLayering()

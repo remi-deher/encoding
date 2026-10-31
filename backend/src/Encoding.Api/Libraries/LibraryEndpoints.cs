@@ -1,6 +1,5 @@
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
-using System.Data.Common;
 using Encoding.Contracts.Libraries;
 
 namespace Encoding.Api.Libraries;
@@ -36,15 +35,10 @@ public static class LibraryEndpoints
             LibraryRepository repository,
             CancellationToken cancellationToken) =>
         {
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var updated = await repository.UpdateAsync(libraryId, request, cancellationToken);
                 return updated is null ? ApiProblem.NotFound() : Results.Ok(updated);
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return ApiProblem.Conflict("Une bibliothèque porte déjà ce nom.");
-            }
+            }, () => ApiProblem.Conflict("Une bibliothèque porte déjà ce nom."));
         }).AddEndpointFilter<ValidateLibraryNameFilter>().WithName("UpdateLibrary");
 
         libraries.MapPut("/{libraryId:guid}/activation", async (
