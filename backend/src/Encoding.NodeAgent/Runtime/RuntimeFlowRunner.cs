@@ -157,6 +157,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 if(placementPlan?.Strategy==FlowPlacementPlan.StrategyImpossible)
                     throw new IOException("placement_impossible: "+placementPlan.Reason);
             }
+            // Source directe inchangée : un audio déjà conforme se décide sur les métadonnées, sans copier le média.
+            bool AudioAlreadyCompliant(IReadOnlyDictionary<string,System.Text.Json.JsonElement> configuration)
+            {
+                if(context.BeforeMetadata is not {} metadata || context.Plan.Count>0 || FfmpegBuilderPolicy.Active(variables)) return false;
+                try { return AudioRulePlanner.Plan(metadata,AudioRuleOptions.From(configuration)).Steps("probe",AudioRuleOptions.From(configuration)).Count==0; }
+                catch(AudioRuleException) { return false; }
+            }
             async Task EnsureScanAsync()
             {
                 if(directRead) observed!.Verify(original);
@@ -258,7 +265,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         && !FfmpegBuilderPolicy.CanPass(node.Component.PluginId,id))
                         throw new IOException("Fermez la préparation FFmpeg avant cette opération autonome.");
                     // External metadata-only plugins receive no path to the direct source.
-                    if(directRead && !DirectMediaInspection.Allows(node.Component.PluginId,id,c,context.Plan.Count,FfmpegBuilderPolicy.Active(variables)))
+                    if(directRead && !DirectMediaInspection.Allows(node.Component.PluginId,id,c,context.Plan.Count,FfmpegBuilderPolicy.Active(variables))
+                        && !(id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules" && AudioAlreadyCompliant(c)))
                     {
                         var launch=plugins.Installed.SingleOrDefault(plugin=>plugin.Id==node.Component.PluginId && plugin.Version==node.Component.PluginVersion);
                         var descriptor=launch is null?null:(await plugins.DescribeAsync(launch,job.Token)).Components.SingleOrDefault(component=>component.Id==id && component.Version==node.Component.ComponentVersion);
