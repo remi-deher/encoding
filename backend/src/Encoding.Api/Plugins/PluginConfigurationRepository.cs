@@ -1,5 +1,6 @@
 using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Contracts.Plugins;
 using Microsoft.AspNetCore.DataProtection;
@@ -293,10 +294,29 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
     internal byte[] ProtectSnapshot(IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>> values)
         => ProtectData(JsonSerializer.SerializeToUtf8Bytes(values, Json));
     internal IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>> ReadSnapshot(byte[] values)
-        => JsonSerializer.Deserialize<Dictionary<string, IReadOnlyDictionary<string, JsonElement>>>(UnprotectData(values), Json)
-            ?? new Dictionary<string, IReadOnlyDictionary<string, JsonElement>>();
-    private Dictionary<string, JsonElement> Unprotect(byte[] values) =>
-        JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(UnprotectData(values), Json) ?? new(StringComparer.Ordinal);
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, IReadOnlyDictionary<string, JsonElement>>>(UnprotectData(values), Json)
+                ?? new Dictionary<string, IReadOnlyDictionary<string, JsonElement>>();
+        }
+        catch (CryptographicException)
+        {
+            return new Dictionary<string, IReadOnlyDictionary<string, JsonElement>>();
+        }
+    }
+
+    private Dictionary<string, JsonElement> Unprotect(byte[] values)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(UnprotectData(values), Json) ?? new(StringComparer.Ordinal);
+        }
+        catch (CryptographicException)
+        {
+            return new(StringComparer.Ordinal);
+        }
+    }
 }
 
 public sealed class PluginConfigurationValidationException(string message) : Exception(message);

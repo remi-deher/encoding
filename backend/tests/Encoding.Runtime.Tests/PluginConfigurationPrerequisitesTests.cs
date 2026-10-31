@@ -29,4 +29,18 @@ public sealed class PluginConfigurationPrerequisitesTests
         Assert.Empty(PluginConfigurationPrerequisites.FindMissing(flow, registry.Plugins, configurations));
         Assert.DoesNotContain("synthetic-secret", JsonSerializer.Serialize(missing));
     }
+
+    [Fact]
+    public async Task ReadSnapshot_WithCorruptedOrUnknownKey_ReturnsEmptyAndDoesNotThrow()
+    {
+        await using var db = await TestDatabase.CreateSqliteAsync("plugin-snapshot-cryptofail");
+        var repo = new PluginConfigurationRepository(db.Db, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
+
+        // Des octets protégés avec une clé inconnue ou corrompus
+        byte[] invalidData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        var result = repo.ReadSnapshot(invalidData);
+
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
 }

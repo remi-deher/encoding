@@ -136,4 +136,27 @@ public sealed class LeadershipHandoffTests : IDisposable
         Assert.True(executedNext);
         Assert.NotEqual(StatusCodes.Status308PermanentRedirect, context.Response.StatusCode);
     }
+
+    [Fact]
+    public void GetKeyBundle_ReturnsKeyFilesFromPluginKeyDirectory()
+    {
+        var keyDir = Path.Combine(testDir, "plugin-keys");
+        Directory.CreateDirectory(keyDir);
+        var xmlContent = "<key id=\"test\"><descriptor/></key>";
+        File.WriteAllText(Path.Combine(keyDir, "key-test-123.xml"), xmlContent);
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Node:DataDirectory"] = testDir,
+            }).Build();
+
+        var repo = new LeadershipRepository(null!);
+        var service = new LeadershipHandoffService(null!, repo, null!, null!, config, NullLogger<LeadershipHandoffService>.Instance);
+
+        var bundle = service.GetKeyBundle();
+        Assert.Single(bundle.Keys);
+        Assert.Equal("key-test-123.xml", bundle.Keys[0].FileName);
+        Assert.Equal(xmlContent, bundle.Keys[0].Content);
+    }
 }

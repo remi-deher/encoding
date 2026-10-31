@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Security.Cryptography;
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Nodes;
 using Encoding.Contracts.Cluster;
@@ -201,5 +202,25 @@ public sealed class LeadershipHandoffService(
 
         logger.LogInformation("Sauvegarde miroir périodique SQLite terminée ({SizeBytes} octets, sha256: {Digest}).", sizeBytes, digest);
         return new DatabaseBackupRecord(Guid.NewGuid(), digest, sizeBytes, backupPath, timestamp);
+    }
+
+    /// <summary>
+    /// Exporte l'ensemble des clés XML DataProtection locales pour synchronisation sécurisée vers un nœud promu ou récepteur miroir.
+    /// </summary>
+    public LeadershipKeyBundle GetKeyBundle()
+    {
+        var keyDir = ClusterPeerIdentityStore.ResolveKeyDirectory(configuration);
+        if (!Directory.Exists(keyDir))
+            return new LeadershipKeyBundle([]);
+
+        var files = Directory.GetFiles(keyDir, "key-*.xml");
+        var entries = new List<LeadershipKeyEntry>();
+        foreach (var file in files)
+        {
+            var name = Path.GetFileName(file);
+            var content = File.ReadAllText(file);
+            entries.Add(new LeadershipKeyEntry(name, content));
+        }
+        return new LeadershipKeyBundle(entries);
     }
 }

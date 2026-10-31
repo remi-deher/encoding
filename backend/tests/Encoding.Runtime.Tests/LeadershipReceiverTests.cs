@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Contracts.Cluster;
@@ -92,5 +93,38 @@ public sealed class LeadershipReceiverTests : IDisposable
         var info = await service.GetLocalBackupInfoAsync(CancellationToken.None);
 
         Assert.Null(info);
+    }
+
+    [Fact]
+    public async Task SyncKeysAsync_DownloadsAndPersistsKeyFiles()
+    {
+        var options = CreateOptions();
+        var keyContent = "<key id=\"c296aec3-2570-47e3-84ff-d0be5a1458f4\"><test/></key>";
+        var bundle = new LeadershipKeyBundle([new LeadershipKeyEntry("key-c296aec3-2570-47e3-84ff-d0be5a1458f4.xml", keyContent)]);
+
+        var fakeHandler = new FakeHttpMessageHandler((req) =>
+        {
+            Assert.Equal("/api/v1/cluster/leadership/keys", req.RequestUri?.AbsolutePath);
+            Assert.Equal("test-token", req.Headers.GetValues("X-Node-Token").First());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(bundle)
+            };
+        });
+
+        using var client = new HttpClient(fakeHandler) { BaseAddress = new Uri("http://master:8090") };
+        var service = new LeadershipReceiverService(options, NullLogger<LeadershipReceiverService>.Instance, httpClient: client);
+
+        await service.SyncKeysAsync("http://master:8090", "test-token", CancellationToken.None);
+
+        var savedPath = Path.Combine(service.PluginKeysDirectory, "key-c296aec3-2570-47e3-84ff-d0be5a1458f4.xml");
+        Assert.True(File.Exists(savedPath));
+        Assert.Equal(keyContent, await File.ReadAllTextAsync(savedPath));
+    }
+
+    private sealed class FakeHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(handler(request));
     }
 }

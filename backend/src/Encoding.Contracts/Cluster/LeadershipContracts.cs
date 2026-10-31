@@ -61,3 +61,14 @@ public sealed record EmergencyPromotionResponse(
     string Message,
     Guid? ClusterId = null,
     DateTimeOffset? BackupTimestamp = null);
+
+/// <summary>
+/// Trousseau de clés ASP.NET DataProtection exporté pour transmission sécurisée au nœud promu ou standby.
+/// </summary>
+public sealed record LeadershipKeyBundle(IReadOnlyList<LeadershipKeyEntry> Keys);
+
+/// <summary>
+/// Fichier de clé XML de protection de données.
+/// </summary>
+public sealed record LeadershipKeyEntry(string FileName, string Content);
+
