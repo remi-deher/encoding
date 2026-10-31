@@ -150,6 +150,27 @@ public sealed class LeadershipReceiverService(
                 throw new InvalidOperationException($"Empreinte SHA-256 invalide pour l'instantané de passation (reçu: {computedDigest}, attendu: {instruction.Digest}).");
             }
 
+            // Arrêt propre du serveur local avant remplacement du fichier SQLite (pour fermer tous les descripteurs ouverts)
+            if (launcher is not null)
+            {
+                try
+                {
+                    logger.LogInformation("Arrêt du serveur API local avant installation de la nouvelle base de données...");
+                    await launcher.SetAsync(new NodeMode(Server: false, Worker: true), ct);
+                    await Task.Delay(TimeSpan.FromSeconds(2), ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Impossible de demander l'arrêt temporaire du serveur au lanceur.");
+                }
+            }
+
+            // Suppression des journaux WAL et SHM résiduels de l'ancienne base
+            var walPath = DatabaseFilePath + "-wal";
+            var shmPath = DatabaseFilePath + "-shm";
+            if (File.Exists(walPath)) { try { File.Delete(walPath); } catch { } }
+            if (File.Exists(shmPath)) { try { File.Delete(shmPath); } catch { } }
+
             // Déplacement atomique vers cluster.db
             File.Move(tempPath, DatabaseFilePath, overwrite: true);
             logger.LogInformation("Instantané de passation validé et installé dans {DatabaseFilePath}.", DatabaseFilePath);
@@ -201,6 +222,27 @@ public sealed class LeadershipReceiverService(
             var info = await GetLocalBackupInfoAsync(ct);
             logger.LogWarning("DÉCLENCHEMENT DE LA PROMOTION D'URGENCE. Restauration de la BDD depuis {BackupFilePath} (sauvegarde du {Timestamp})...",
                 BackupFilePath, info?.Timestamp);
+
+            // Arrêt propre du serveur local avant restauration de la base
+            if (launcher is not null)
+            {
+                try
+                {
+                    logger.LogInformation("Arrêt du serveur API local avant restauration d'urgence...");
+                    await launcher.SetAsync(new NodeMode(Server: false, Worker: true), ct);
+                    await Task.Delay(TimeSpan.FromSeconds(2), ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Impossible de demander l'arrêt temporaire du serveur au lanceur.");
+                }
+            }
+
+            // Suppression des journaux WAL et SHM résiduels
+            var walPath = DatabaseFilePath + "-wal";
+            var shmPath = DatabaseFilePath + "-shm";
+            if (File.Exists(walPath)) { try { File.Delete(walPath); } catch { } }
+            if (File.Exists(shmPath)) { try { File.Delete(shmPath); } catch { } }
 
             // Copier le snapshot vers cluster.db
             File.Copy(BackupFilePath, DatabaseFilePath, overwrite: true);

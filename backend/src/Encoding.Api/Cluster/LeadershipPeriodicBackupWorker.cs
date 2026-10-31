@@ -12,6 +12,7 @@ public sealed class LeadershipPeriodicBackupWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var startedAt = DateTimeOffset.UtcNow;
         // Laisser le serveur démarrer complètement avant la première vérification
         await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
 
@@ -22,8 +23,10 @@ public sealed class LeadershipPeriodicBackupWorker(
                 var intervalMinutes = await repository.GetBackupIntervalMinutesAsync(stoppingToken);
                 if (intervalMinutes is > 0)
                 {
+                    var interval = TimeSpan.FromMinutes(intervalMinutes.Value);
                     var latest = await repository.GetLatestBackupAsync(stoppingToken);
-                    var due = latest is null || (DateTimeOffset.UtcNow - latest.CreatedAt) >= TimeSpan.FromMinutes(intervalMinutes.Value);
+                    var due = (latest is not null && (DateTimeOffset.UtcNow - latest.CreatedAt) >= interval)
+                           || (latest is null && (DateTimeOffset.UtcNow - startedAt) >= interval);
                     if (due)
                     {
                         logger.LogInformation("L'intervalle de sauvegarde miroir ({Minutes} min) est atteint. Lancement du snapshot...", intervalMinutes.Value);

@@ -154,9 +154,28 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
     }
     private async Task BindIdentityAsync(DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var bind=Sql.Command("INSERT INTO task_server_identity(singleton,peer_id) VALUES(1,@peer) ON CONFLICT(singleton) DO UPDATE SET peer_id=excluded.peer_id WHERE task_server_identity.peer_id=excluded.peer_id",c,tx);
-        bind.Parameters.AddWithValue("peer",identity.PeerId);
-        if(await bind.ExecuteNonQueryAsync(ct)!=1) throw new InvalidOperationException("L’identité serveur ne correspond pas à la file locale.");
+        Guid? previousPeer = null;
+        await using (var read = Sql.Command("SELECT peer_id FROM task_server_identity WHERE singleton=1", c, tx))
+        await using (var r = await read.ExecuteReaderAsync(ct))
+        {
+            if (await r.ReadAsync(ct) && !r.IsDBNull(0))
+            {
+                if (Guid.TryParse(r.GetString(0), out var parsed))
+                    previousPeer = parsed;
+            }
+        }
+
+        await using var bind = Sql.Command("INSERT INTO task_server_identity(singleton,peer_id) VALUES(1,@peer) ON CONFLICT(singleton) DO UPDATE SET peer_id=excluded.peer_id", c, tx);
+        bind.Parameters.AddWithValue("peer", identity.PeerId);
+        await bind.ExecuteNonQueryAsync(ct);
+
+        if (previousPeer.HasValue && previousPeer.Value != identity.PeerId)
+        {
+            await using var reassign = Sql.Command("UPDATE task_ownership SET owner_peer_id=@peer WHERE owner_peer_id=@previous AND state IN ('active','frozen','quarantined')", c, tx);
+            reassign.Parameters.AddWithValue("peer", identity.PeerId);
+            reassign.Parameters.AddWithValue("previous", previousPeer.Value);
+            await reassign.ExecuteNonQueryAsync(ct);
+        }
     }
     public async Task<int> ProjectAsync(CancellationToken ct)
     {
