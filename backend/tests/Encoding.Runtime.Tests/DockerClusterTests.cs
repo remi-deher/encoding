@@ -194,7 +194,7 @@ public sealed class DockerClusterTests
         {
             var logs = await DockerAsync(allowFailure: true, "logs", "--since", "10m", container);
             var runtime = logs.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-                .Where(line => line.Contains("api/v1/runtime/nodes", StringComparison.OrdinalIgnoreCase)
+                .Where(line => line.Contains("api/v1/runtime/", StringComparison.OrdinalIgnoreCase)
                     || line.Contains("RuntimeFlowRunner", StringComparison.Ordinal)
                     || line.Contains("RuntimeWorkerService", StringComparison.Ordinal))
                 .TakeLast(80);
