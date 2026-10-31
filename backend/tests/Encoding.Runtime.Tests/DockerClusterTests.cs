@@ -200,7 +200,10 @@ public sealed class DockerClusterTests
                     && line.Contains("/executions/", StringComparison.OrdinalIgnoreCase)
                     || line.Contains("RuntimeFlowRunner", StringComparison.Ordinal)
                     || line.Contains("RuntimeWorkerService", StringComparison.Ordinal)
-                    || line.Contains("RuntimeRepository", StringComparison.Ordinal))
+                    || line.Contains("RuntimeRepository", StringComparison.Ordinal)
+                    || line.Contains("[launcher]", StringComparison.Ordinal)
+                    || line.Contains("warn:", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains("fail:", StringComparison.OrdinalIgnoreCase))
                 .TakeLast(100);
             return $"[{container}] " + string.Join(Environment.NewLine, runtime);
         })));
@@ -236,7 +239,7 @@ public sealed class DockerClusterTests
         await using var cluster = new Cluster();
         await cluster.StartServerAsync();
         var source = Path.Combine(cluster.Media, "film.mkv");
-        await EncodeFixtureAsync(source, seconds: 90, size: "1280x720");
+        await EncodeFixtureAsync(source, seconds: 20, size: "1280x720");
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
         await cluster.StartWorkerAsync("worker-a", Image, preseedRuntimePackages: true);
         await cluster.StartWorkerAsync("worker-b", Image, preseedRuntimePackages: true);
@@ -335,7 +338,7 @@ public sealed class DockerClusterTests
             ? new object[]
             {
                 new { id = "entry", component = "base-input-video", configuration = new { } },
-                new { id = "encode", component = "base-transcode-video", configuration = new { processingMode = "direct" } },
+                new { id = "encode", component = "base-transcode-video", configuration = new { processingMode = "direct", videoCodec = "h264", preset = "fast" } },
                 new { id = "end", component = "base-complete-flow", configuration = new { } }
             }
             :
@@ -395,7 +398,7 @@ public sealed class DockerClusterTests
         {
             try { if (await condition()) return; }
             catch (Exception exception) when (exception is HttpRequestException or JsonException or TaskCanceledException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException or ArgumentOutOfRangeException) { }
-            await Task.Delay(1000);
+            await Task.Delay(500);
         }
         throw new TimeoutException($"Délai dépassé : {description}\n{diagnostic?.Invoke()}\n{(cluster is null ? "" : await cluster.LogsAsync())}");
     }
