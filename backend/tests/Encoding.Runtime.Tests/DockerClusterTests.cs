@@ -130,6 +130,7 @@ public sealed class DockerClusterTests
         private async Task RunAsync(string name, params string[] arguments)
         {
             var full = new List<string> { "run", "-d", "--name", $"{name}-{id}".Replace($"-{id}-{id}", $"-{id}"), "--network", Network,
+                "--network-alias", name + ".local",
                 "-e", "ASPNETCORE_ENVIRONMENT=Production", "-e", "Auth__CookieSecure=false" };
             full.AddRange(arguments);
             containers.Add($"{name}-{id}".Replace($"-{id}-{id}", $"-{id}"));
@@ -227,7 +228,7 @@ public sealed class DockerClusterTests
         var source = Path.Combine(cluster.Media, "film.mkv");
         await EncodeFixtureAsync(source, seconds: 6, size: "640x360");
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
-        await cluster.StartWorkerAsync("worker-old", previous);   // seul worker : c'est l'ancienne version qui doit faire le travail
+        await cluster.StartWorkerAsync("worker-old", previous, preseedRuntimePackages: true);   // seul worker : c'est l'ancienne version qui doit faire le travail
         var nodes = await WaitForWorkersAsync(cluster, 1);
         var executionId = await QueueEncodingAsync(cluster, nodes, encodeVideo: false);
 
