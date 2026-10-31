@@ -150,6 +150,8 @@ public sealed class DockerClusterTests
         public string ContainerOf(string nodeName) => containers.Single(container => container.StartsWith(nodeName, StringComparison.Ordinal));
 
         public async Task<string> ProcessesAsync(string container) => await DockerAsync("top", container);
+        public async Task<string> ProcessDiagnosticsAsync() => string.Join("\n", await Task.WhenAll(containers.Select(async container =>
+            $"[{container}] {await DockerAsync(allowFailure: true, "top", container)}")));
 
         public async ValueTask DisposeAsync()
         {
@@ -194,7 +196,8 @@ public sealed class DockerClusterTests
         {
             var logs = await DockerAsync(allowFailure: true, "logs", "--since", "10m", container);
             var runtime = logs.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
-                .Where(line => line.Contains("/executions/", StringComparison.OrdinalIgnoreCase)
+                .Where(line => line.Contains("/api/v1/runtime/nodes/", StringComparison.OrdinalIgnoreCase)
+                    && line.Contains("/executions/", StringComparison.OrdinalIgnoreCase)
                     || line.Contains("RuntimeFlowRunner", StringComparison.Ordinal)
                     || line.Contains("RuntimeWorkerService", StringComparison.Ordinal)
                     || line.Contains("RuntimeRepository", StringComparison.Ordinal))
@@ -265,7 +268,7 @@ public sealed class DockerClusterTests
         }, 420, "reprise et fin de l'exécution", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.LibraryAccessDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.LibraryAccessDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.ProcessDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
         Assert.NotEqual(victim, final.GetProperty("node").GetString());
         Assert.Contains("reprise", history, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
@@ -293,7 +296,7 @@ public sealed class DockerClusterTests
         }, 300, "exécution par le worker de l'ancienne version", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.LibraryAccessDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.NodeDiagnosticsAsync()}\n{await cluster.LibraryAccessDiagnosticsAsync()}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.ProcessDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
         Assert.Equal("worker-old", final.GetProperty("node").GetString());
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
     }
