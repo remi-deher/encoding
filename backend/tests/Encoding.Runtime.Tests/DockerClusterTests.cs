@@ -61,15 +61,18 @@ public sealed class DockerClusterTests
             Assert.True(window.IsSuccessStatusCode);
         }
 
-        public Task StartWorkerAsync(string name, string image)
+        public Task StartWorkerAsync(string name, string image, bool preseedRuntimePackages = false)
         {
             var workerData = Data + "-" + name;
             PrepareStorePackages(workerData);
             dataDirectories.Add(workerData);
-            return RunAsync(name, "--hostname", name, "-v", $"{workerData}:/var/lib/encoding-node", "-v", $"{Media}:/media/lib",
-                "-e", "Node__DataDirectory=/var/lib/encoding-node",
-                "-e", "Node__Roles=worker", "-e", "Node__Name=" + name, "-e", "Node__MaxConcurrentTasks=1", "-e", $"Cluster__ApiBaseUrl=http://{ServerName}:8080/",
-                "-e", "Worker__AutoAcceptEnrollment=true", image);
+            if (preseedRuntimePackages) PrepareCustomPluginCatalog(workerData);
+            var arguments = new List<string> { "--hostname", name, "-v", $"{workerData}:/var/lib/encoding-node", "-v", $"{Media}:/media/lib",
+                "-e", "Node__DataDirectory=/var/lib/encoding-node" };
+            if (preseedRuntimePackages) arguments.AddRange(["-e", "Runtime__CustomPluginDirectory=/var/lib/encoding-node/custom-plugins"]);
+            arguments.AddRange(["-e", "Node__Roles=worker", "-e", "Node__Name=" + name, "-e", "Node__MaxConcurrentTasks=1", "-e", $"Cluster__ApiBaseUrl=http://{ServerName}:8080/",
+                "-e", "Worker__AutoAcceptEnrollment=true", image]);
+            return RunAsync(name, [.. arguments]);
         }
 
         private static void PrepareStorePackages(string dataDirectory)
@@ -106,10 +109,27 @@ public sealed class DockerClusterTests
                 File.SetUnixFileMode(dataDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
         }
 
+        private static void PrepareCustomPluginCatalog(string dataDirectory)
+        {
+            var fixtureDirectory = Path.Combine(Harness.RepositoryRoot(), "tests", "Fixtures", "StoreCatalog");
+            foreach (var id in new[] { "base", "video" })
+            {
+                var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(fixtureDirectory, id + ".json")))!.AsObject();
+                manifest["runtime"] = new JsonObject { ["type"] = "native", ["entrypoint"] = "" };
+                var version = manifest["version"]!.GetValue<string>();
+                var directory = Path.Combine(dataDirectory, "custom-plugins", id, version);
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(Path.Combine(directory, "plugin.json"), manifest.ToJsonString());
+                var package = File.ReadAllBytes(Path.Combine(dataDirectory, "plugin-store", "packages", id, version, "package.zip"));
+                var sha256 = Convert.ToHexString(SHA256.HashData(package)).ToLowerInvariant();
+                File.WriteAllText(Path.Combine(directory, CustomPluginCatalog.VerifiedMarker), sha256);
+            }
+        }
+
         private async Task RunAsync(string name, params string[] arguments)
         {
             var full = new List<string> { "run", "-d", "--name", $"{name}-{id}".Replace($"-{id}-{id}", $"-{id}"), "--network", Network,
-                "--network-alias", name + ".local", "-e", "ASPNETCORE_ENVIRONMENT=Production", "-e", "Auth__CookieSecure=false" };
+                "-e", "ASPNETCORE_ENVIRONMENT=Production", "-e", "Auth__CookieSecure=false" };
             full.AddRange(arguments);
             containers.Add($"{name}-{id}".Replace($"-{id}-{id}", $"-{id}"));
             await DockerAsync([.. full]);
@@ -160,8 +180,8 @@ public sealed class DockerClusterTests
         var source = Path.Combine(cluster.Media, "film.mkv");
         await EncodeFixtureAsync(source, seconds: 90, size: "1280x720");
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
-        await cluster.StartWorkerAsync("worker-a", Image);
-        await cluster.StartWorkerAsync("worker-b", Image);
+        await cluster.StartWorkerAsync("worker-a", Image, preseedRuntimePackages: true);
+        await cluster.StartWorkerAsync("worker-b", Image, preseedRuntimePackages: true);
         var nodes = await WaitForWorkersAsync(cluster, 2, requireStoreCapabilities: true);
         var executionId = await QueueEncodingAsync(cluster, nodes);
 
@@ -208,7 +228,7 @@ public sealed class DockerClusterTests
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
         await cluster.StartWorkerAsync("worker-old", previous);   // seul worker : c'est l'ancienne version qui doit faire le travail
         var nodes = await WaitForWorkersAsync(cluster, 1);
-        var executionId = await QueueEncodingAsync(cluster, nodes);
+        var executionId = await QueueEncodingAsync(cluster, nodes, encodeVideo: false);
 
         JsonElement final = default;
         await WaitAsync(async () =>
@@ -243,7 +263,7 @@ public sealed class DockerClusterTests
         return workersNow;
     }
 
-    private static async Task<Guid> QueueEncodingAsync(Cluster cluster, JsonElement workers)
+    private static async Task<Guid> QueueEncodingAsync(Cluster cluster, JsonElement workers, bool encodeVideo = true)
     {
         var client = cluster.Client;
         var library = (await PostAsync(client, "api/v1/libraries", new { name = "Docker" })).GetProperty("id").GetGuid();
@@ -251,20 +271,30 @@ public sealed class DockerClusterTests
         {
             nodes = workers.EnumerateArray().Select(node => new { nodeId = node.GetProperty("id").GetGuid(), mode = "direct", localPath = "/media/lib", canRead = true, canWrite = true, transferSourceNodeId = (Guid?)null, isEnabled = true })
         })) Assert.True(access.IsSuccessStatusCode, await access.Content.ReadAsStringAsync());
-        var flow = (await PostAsync(client, "api/v1/flows", new
-        {
-            name = "Docker", mediaType = "video", publish = true,
-            nodes = new object[]
+        var flowNodes = encodeVideo
+            ? new object[]
             {
                 new { id = "entry", component = "base-input-video", configuration = new { } },
                 new { id = "encode", component = "base-transcode-video", configuration = new { processingMode = "direct" } },
                 new { id = "end", component = "base-complete-flow", configuration = new { } }
-            },
-            connections = new object[]
+            }
+            :
+            [
+                new { id = "entry", component = "base-input-video", configuration = new { } },
+                new { id = "end", component = "base-complete-flow", configuration = new { } }
+            ];
+        var flowConnections = encodeVideo
+            ? new object[]
             {
                 new { id = "c1", sourceNodeId = "entry", sourceOutputId = "success", targetNodeId = "encode" },
                 new { id = "c2", sourceNodeId = "encode", sourceOutputId = "success", targetNodeId = "end" }
             }
+            : [new { id = "c1", sourceNodeId = "entry", sourceOutputId = "success", targetNodeId = "end" }];
+        var flow = (await PostAsync(client, "api/v1/flows", new
+        {
+            name = "Docker", mediaType = "video", publish = true,
+            nodes = flowNodes,
+            connections = flowConnections
         })).GetProperty("definition").GetProperty("id").GetGuid();
         var workflow = await client.GetFromJsonAsync<JsonElement>($"api/v1/libraries/{library}/workflow");
         using (var assign = await client.PutAsJsonAsync($"api/v1/libraries/{library}/flow", new { flowId = flow, version = 1, expectedRevision = workflow.GetProperty("revision").GetInt32() }))
