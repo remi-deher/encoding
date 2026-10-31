@@ -86,7 +86,7 @@ const ACTIVITY_STATUSES: readonly { value: LibraryActivityStatus; label: string 
   { value: 'disabled', label: 'Désactivés' },
 ];
 const PAGE_SIZE = 50;
-const PAGE_REFRESH_MS = 5000;
+const PAGE_REFRESH_MS = 10000;
 interface ActivityPageState {
   readonly status: 'loading' | 'ready' | 'error';
   readonly data: LibraryActivityResponse | null;
@@ -288,7 +288,7 @@ export class ActivityPageComponent {
                   this.statusCache.get(key) ??
                   (this.lastSuccessfulPage()?.key === key ? this.lastSuccessfulPage()!.data : null);
                 return of({
-                  status: fallback ? 'ready' : 'error',
+                  status: 'error',
                   data: fallback,
                   revision,
                 } as ActivityPageState);
