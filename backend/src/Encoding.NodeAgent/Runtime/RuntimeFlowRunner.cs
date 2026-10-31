@@ -113,21 +113,17 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 if(directRead)
                 {
                     observed!.Verify(original);
-                    current=Path.Combine(directory,"current"+context.Extension);
-                    if(original!=current && !File.Exists(current))
+                    await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source/prepare",new RuntimeFence(lease.Epoch),job.Token);
+                    while(sourceSha is null)
                     {
-                        File.Copy(original,current,true);
-                        currentStamp=MediaFileStamp.Read(current);
-                        if(currentStamp.Bytes!=observed.Bytes) throw new IOException("La copie locale est incomplète.");
+                        sourceSha=(await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}",job.Token)).SourceSha256;
+                        if(sourceSha is null) await Task.Delay(TimeSpan.FromMilliseconds(250),job.Token);
                     }
-                    else
-                    {
-                        currentStamp=MediaFileStamp.Read(current);
-                    }
-                    context=context with { CurrentSha256=sourceSha??observed.ToDigest(),DirectSource=null };
+                    observed.Verify(original);
                     directRead=false;
-                    materialized=true;
-                    return;
+                    original=Path.Combine(directory,"source"+extension);
+                    current=Path.Combine(directory,"current"+context.Extension);
+                    context=context with { CurrentSha256=sourceSha,DirectSource=null };
                 }
                 await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
                 if(context.CurrentSha256==sourceSha)
@@ -798,22 +794,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 if(handoff is null && next is not null && placementPlan?.NodeAssignments?.TryGetValue(next,out var plannedWorker)==true
                     && plannedWorker!=client.NodeId)
                 {
+                    if(directRead) await EnsureFilesAsync();
                     handoff=new RuntimeHandoffSelector("node",plannedWorker);
                     placementHandoff=true;
                 }
-                if(handoff is not null && directRead)
-                {
-                    observed!.Verify(original);
-                    await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source/prepare",new RuntimeFence(lease.Epoch),job.Token);
-                    while(sourceSha is null)
-                    {
-                        sourceSha=(await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}",job.Token)).SourceSha256;
-                        if(sourceSha is null) await Task.Delay(TimeSpan.FromMilliseconds(250),job.Token);
-                    }
-                    observed.Verify(original);
-                    context=context with { CurrentSha256=sourceSha,DirectSource=null };
-                    directRead=false;
-                }
+                if(handoff is not null && directRead) await EnsureFilesAsync();
                 context=context with { Variables=new Dictionary<string,JsonElement>(variables) };
                 var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal,handoff,wait,placementHandoff);
                 var eventId=Guid.NewGuid();
