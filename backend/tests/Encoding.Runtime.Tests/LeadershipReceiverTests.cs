@@ -1,0 +1,86 @@
+using System.Net;
+using System.Security.Cryptography;
+using System.Text.Json;
+using Encoding.Contracts.Cluster;
+using Encoding.NodeAgent;
+using Encoding.NodeAgent.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace Encoding.Runtime.Tests;
+
+public sealed class LeadershipReceiverTests : IDisposable
+{
+    private readonly string testDir;
+
+    public LeadershipReceiverTests()
+    {
+        testDir = Path.Combine(Path.GetTempPath(), "encoding_receiver_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDir);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(testDir))
+        {
+            try { Directory.Delete(testDir, recursive: true); }
+            catch { }
+        }
+    }
+
+    private NodeAgentOptions CreateOptions() =>
+        NodeAgentOptions.FromConfiguration(new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Node:Name"] = "test-worker",
+                ["Node:DataDirectory"] = testDir,
+                ["Node:Roles"] = "worker"
+            }).Build());
+
+    [Fact]
+    public async Task EmergencyPromoteAsync_FailsCleanlyWhenNoBackupExists()
+    {
+        var options = CreateOptions();
+
+        var service = new LeadershipReceiverService(options, NullLogger<LeadershipReceiverService>.Instance);
+        var result = await service.EmergencyPromoteAsync(force: false, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("Aucune sauvegarde", result.Message);
+        Assert.False(File.Exists(service.DatabaseFilePath));
+    }
+
+    [Fact]
+    public async Task EmergencyPromoteAsync_RestoresDatabaseFromBackup()
+    {
+        var options = CreateOptions();
+
+        var service = new LeadershipReceiverService(options, NullLogger<LeadershipReceiverService>.Instance);
+
+        // Créer un faux snapshot dans backup/cluster-latest.db
+        Directory.CreateDirectory(service.BackupDirectory);
+        var fakeDbContent = "SQLITE_HEADER_TEST_" + Guid.NewGuid().ToString();
+        await File.WriteAllTextAsync(service.BackupFilePath, fakeDbContent);
+
+        var info = new LocalBackupInfo("digest123", fakeDbContent.Length, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        await File.WriteAllTextAsync(service.BackupInfoFilePath, JsonSerializer.Serialize(info));
+
+        var result = await service.EmergencyPromoteAsync(force: false, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.True(File.Exists(service.DatabaseFilePath));
+        Assert.Equal(fakeDbContent, await File.ReadAllTextAsync(service.DatabaseFilePath));
+    }
+
+    [Fact]
+    public async Task GetLocalBackupInfoAsync_ReturnsNullWhenFileDoesNotExist()
+    {
+        var options = CreateOptions();
+
+        var service = new LeadershipReceiverService(options, NullLogger<LeadershipReceiverService>.Instance);
+        var info = await service.GetLocalBackupInfoAsync(CancellationToken.None);
+
+        Assert.Null(info);
+    }
+}

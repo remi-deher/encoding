@@ -11,6 +11,7 @@ public sealed class NodeHeartbeatService(
     IToolCapabilityProbe capabilityProbe,
     WorkerEnrollmentService enrollment,
     ILogger<NodeHeartbeatService> logger,
+    LeadershipReceiverService? leadershipReceiver = null,
     LauncherControlClient? launcher = null) : BackgroundService
 {
     private readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
@@ -74,9 +75,18 @@ public sealed class NodeHeartbeatService(
                                 }
                                 if (node?.ClusterServerUrls is { Count: > 0 })
                                     await identityStore.UpdateKnownServersAsync(node.ClusterServerUrls, stoppingToken);
+                                if (!string.IsNullOrWhiteSpace(node?.MasterUrl))
+                                    await identityStore.UpdateMasterUrlAsync(node.MasterUrl, stoppingToken);
+
+                                if (node?.LeadershipHandoff is not null && leadershipReceiver is not null && !string.IsNullOrWhiteSpace(identity.NodeToken))
+                                    _ = Task.Run(async () => await leadershipReceiver.HandleHandoffAsync(node.LeadershipHandoff, serverUrl, identity.NodeToken, stoppingToken));
+                                else if (node?.LatestBackup is not null && leadershipReceiver is not null && !string.IsNullOrWhiteSpace(identity.NodeToken))
+                                    _ = Task.Run(async () => await leadershipReceiver.HandleBackupNotificationAsync(node.LatestBackup, serverUrl, identity.NodeToken, stoppingToken));
+
                                 logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId} vers {ServerUrl}.", identity.Id, serverUrl);
                                 ReportLifecycle(node);
-                                await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
+                                if (node?.LeadershipHandoff is null)
+                                    await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
                             }
                         }
                         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !stoppingToken.IsCancellationRequested)
