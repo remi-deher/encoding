@@ -289,8 +289,9 @@
       <app-node-overview-card
         ariaLabel="Fiche du nœud local"
         layout="local"
+        [isMaster]="localNode()?.id === masterNodeId()"
         [title]="localSheet().title"
-        [subtitle]="localSheet().subtitle"
+        [subtitle]="localNode()?.id === masterNodeId() ? 'Coordinateur actif de ' + clusterName() : localSheet().subtitle"
         [hardware]="localOverviewHardware()"
         [statusLabel]="localOverviewStatus().label"
         [statusTone]="localOverviewStatus().tone"
@@ -371,6 +372,7 @@
           @for (card of memberCards(); track card.id) {
             <app-node-overview-card
               [ariaLabel]="'Carte du nœud ' + card.title"
+              [isMaster]="card.isMaster"
               [title]="card.title"
               [subtitle]="card.subtitle"
               [hardware]="card.hardware"

@@ -175,6 +175,7 @@ interface MemberCard {
   readonly subtitle: string;
   readonly statusLabel: string;
   readonly statusTone: StatusTone;
+  readonly isMaster: boolean;
   readonly roles: readonly string[];
   readonly roleSwitches: readonly NodeOverviewRoleSwitch[];
   readonly admissionEnabled: boolean | null;
@@ -260,6 +261,7 @@ export class NodeCatalogPageComponent {
   private readonly nodes = signal<readonly NodeResponse[]>([]);
   protected readonly reconciliationStatus = signal<ClusterReconciliationHealthStatus | null>(null);
   protected readonly taskStatus = signal<ClusterTaskStatus | null>(null);
+  protected readonly masterNodeId = signal<string | null>(null);
   private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
   private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
   private readonly nodeAccessByLibrary = signal<
@@ -1374,12 +1376,16 @@ export class NodeCatalogPageComponent {
     this.filteredRawNodes().map((node) => {
       const lifecycle = nodeLifecycle(node);
       const record = this.toRecord(node);
+      const isMaster = node.id === this.masterNodeId();
       return {
         id: node.id,
         title: formatNodeLabel(node.name, node.displayName),
-        subtitle: `Membre de ${this.clusterName()}`,
+        subtitle: isMaster
+          ? `Coordinateur actif de ${this.clusterName()}`
+          : `Membre de ${this.clusterName()}`,
         statusLabel: NODE_LIFECYCLE_LABELS[lifecycle],
         statusTone: NODE_LIFECYCLE_TONES[lifecycle],
+        isMaster,
         roles: node.roles.map((role) => NODE_ROLE_LABELS[role]),
         roleSwitches: this.memberRoleSwitches(node),
         admissionEnabled: this.admissionEnabledFor(node),
@@ -1422,10 +1428,24 @@ export class NodeCatalogPageComponent {
         ? 'Aucun détecté'
         : 'Non déclaré';
 
+    const rawCpu = inventory?.processorModel?.trim() || '';
+    const cores = inventory?.processorCount;
+    let cpu = 'Non déclaré';
+    if (rawCpu) {
+      cpu = rawCpu
+        .replace(/\([Rr]\)|\([Tt][Mm]\)/g, '')
+        .replace(/\s+CPU\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (cores && !cpu.toLowerCase().includes('cœur') && !cpu.toLowerCase().includes('core')) {
+        cpu += ` (${cores} cœurs)`;
+      }
+    } else if (cores) {
+      cpu = `${cores} cœurs`;
+    }
+
     return {
-      cpu: inventory
-        ? inventory.processorModel?.trim() || `${inventory.processorCount} cœurs`
-        : 'Non déclaré',
+      cpu,
       memory: inventory ? formatMemory(inventory.memoryMb) : 'Non déclarée',
       gpu,
       platform,
@@ -1878,6 +1898,7 @@ export class NodeCatalogPageComponent {
             nodes: this.clusterApi.listNodes(),
             reconciliation: this.clusterApi.reconciliationStatus().pipe(catchError(() => of(null))),
             tasks: this.clusterApi.taskStatus().pipe(catchError(() => of(null))),
+            leadership: this.clusterApi.leadershipStatus().pipe(catchError(() => of(null))),
             pending: this.http.get<readonly PendingNodeEnrollmentResponse[]>(
               '/api/v1/nodes/enrollment-requests',
             ),
@@ -1893,10 +1914,13 @@ export class NodeCatalogPageComponent {
         ),
         takeUntilDestroyed(),
       )
-      .subscribe(({ nodes, reconciliation, tasks, pending, activity }) => {
+      .subscribe(({ nodes, reconciliation, tasks, leadership, pending, activity }) => {
         if (activity) {
           this.activeTasks.set(activity);
           this.activityLoaded.set(true);
+        }
+        if (leadership?.masterNodeId) {
+          this.masterNodeId.set(leadership.masterNodeId);
         }
         this.nodes.set(nodes);
         this.reconciliationStatus.set(reconciliation);

@@ -60,6 +60,7 @@ export interface NodeOverviewHardware {
       class="node-overview-card"
       [class.is-active]="active()"
       [class.is-selected]="selected()"
+      [class.is-master]="isMaster()"
       [attr.aria-label]="ariaLabel()"
     >
       @for (notice of notices(); track notice.title) {
@@ -71,7 +72,7 @@ export interface NodeOverviewHardware {
       <header
         class="node-overview-head"
         [class.node-overview-head_local]="layout() === 'local'"
-        [class.node-overview-head_with-summary]="hardware() !== null && taskCapacity() !== null"
+        [class.node-overview-head_with-summary]="hardware() !== null"
         [class.has-select]="selectable()"
       >
         @if (selectable()) {
@@ -137,129 +138,145 @@ export interface NodeOverviewHardware {
               <p class="node-overview-subtitle">{{ subtitle() }}</p>
             }
             <div class="node-overview-badges">
-              <app-status-badge [label]="statusLabel()" [tone]="statusTone()" />
-            </div>
-          </div>
-        </div>
-        <div class="node-overview-head-controls">
-          @if (admissionEnabled() !== null) {
-            <div
-              class="node-overview-admission-control"
-              [class.is-disabled]="admissionDisabled()"
-            >
-              <span class="node-overview-control-label">ADMISSION</span>
-              <mat-slide-toggle
-                class="node-overview-admission-toggle"
-                [checked]="admissionEnabled() ?? false"
-                [disabled]="admissionDisabled()"
-                [aria-label]="
-                  (admissionEnabled() ? 'Suspendre' : 'Réactiver') +
-                  ' les nouvelles tâches sur ' + title()
-                "
-                (change)="admissionChange.emit($event.checked)"
-              >
-                Nouvelles tâches
-              </mat-slide-toggle>
-              <span class="node-overview-control-state">
-                {{ admissionEnabled() ? 'Acceptées' : 'Suspendues' }}
-              </span>
-            </div>
-          }
-          @if (hardware(); as resources) {
-            <section class="node-overview-hardware" aria-label="Ressources matérielles">
-              <span class="node-overview-control-label">RESSOURCES MATÉRIELLES</span>
-              <dl class="node-overview-hardware-values">
-                <div>
-                  <dt>CPU</dt>
-                  <dd [attr.title]="resources.cpu">{{ resources.cpu }}</dd>
-                </div>
-                <div>
-                  <dt>RAM</dt>
-                  <dd [attr.title]="resources.memory">{{ resources.memory }}</dd>
-                </div>
-                <div>
-                  <dt>GPU</dt>
-                  <dd [attr.title]="resources.gpu">{{ resources.gpu }}</dd>
-                </div>
-              </dl>
-            </section>
-          }
-          @if (taskCapacity(); as capacity) {
-            <section
-              class="node-overview-task-capacity"
-              aria-label="Tâches acceptées et places restantes"
-            >
-              <span class="node-overview-control-label">CAPACITÉ DE TRAITEMENT</span>
-              <dl class="node-overview-task-capacity-values">
-                <div>
-                  <dt>Tâches acceptées</dt>
-                  <dd>{{ capacity.accepted ?? '—' }}</dd>
-                </div>
-                <div>
-                  <dt>Places restantes</dt>
-                  <dd>{{ capacity.remaining ?? '—' }}</dd>
-                </div>
-              </dl>
-              @if (capacity.maximum !== null) {
-                <span class="node-overview-task-capacity-total">
-                  Sur {{ capacity.maximum }} place(s) simultanée(s)
+              @if (isMaster()) {
+                <span class="node-overview-master-badge" title="Nœud Maître (Coordinateur actif du cluster)">
+                  <svg class="node-overview-master-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
+                  </svg>
+                  <span>Maître</span>
                 </span>
               }
-              @if (capacity.note) {
-                <span class="node-overview-task-capacity-note">{{ capacity.note }}</span>
-              }
-            </section>
-          }
-          @if (meta()) {
-            <div class="node-overview-meta-control">
-              <span class="node-overview-control-label">DERNIER SIGNAL</span>
-              <span class="node-overview-meta">{{ meta() }}</span>
+              <app-status-badge [label]="statusLabel()" [tone]="statusTone()" />
             </div>
-          }
-        </div>
-        @if (roleSwitches().length || roles().length) {
-          <section class="node-overview-functions" aria-label="Fonctions du nœud">
-            <span class="node-overview-control-label">FONCTIONS</span>
-            <div class="node-overview-function-list" role="group" aria-label="Fonctions du nœud">
-              @if (roleSwitches().length) {
-                @for (control of roleSwitches(); track control.role) {
-                  <div class="node-overview-function-control">
-                    <mat-slide-toggle
-                      [checked]="control.checked"
-                      [disabled]="control.disabled ?? false"
-                      [aria-label]="
-                        (control.checked ? 'Désactiver' : 'Activer') +
-                        ' la fonction ' + control.label + ' de ' + title()
-                      "
-                      (change)="roleToggle.emit({ role: control.role, enabled: $event.checked })"
-                    >
-                      {{ control.label }}
-                    </mat-slide-toggle>
-                    <span
-                      class="node-overview-role-state"
+
+            @if (roleSwitches().length || roles().length) {
+              <div class="node-overview-roles-line" role="group" aria-label="Rôles du nœud">
+                @if (roleSwitches().length) {
+                  @for (control of roleSwitches(); track control.role) {
+                    <button
+                      type="button"
+                      class="node-overview-role-btn"
                       [class.is-active]="control.checked && !control.pending"
+                      [class.is-pending]="control.pending"
+                      [disabled]="control.disabled ?? false"
+                      [attr.aria-label]="(control.checked ? 'Désactiver' : 'Activer') + ' le rôle ' + control.label"
+                      (click)="roleToggle.emit({ role: control.role, enabled: !control.checked })"
                     >
-                      {{
-                        control.pending
-                          ? 'En attente'
-                          : control.checked
-                            ? 'Activée'
-                            : 'Désactivée'
-                      }}
-                    </span>
-                  </div>
+                      <span class="node-overview-role-dot"></span>
+                      <span class="node-overview-role-name">{{ control.label }}</span>
+                      <span class="node-overview-role-status">{{ control.pending ? '…' : control.checked ? 'Actif' : 'Inactif' }}</span>
+                    </button>
+                  }
+                } @else {
+                  @for (role of roles(); track role) {
+                    <span class="node-overview-role-pill">{{ role }}</span>
+                  }
                 }
-              } @else {
-                @for (role of roles(); track role) {
-                  <span class="node-overview-role">{{ role }}</span>
-                }
-              }
-            </div>
+              </div>
+            }
             @if (roleControlNote()) {
               <p class="node-overview-role-note">{{ roleControlNote() }}</p>
             }
-          </section>
-        }
+          </div>
+        </div>
+
+        <div class="node-overview-head-controls">
+          @if (hardware(); as resources) {
+            <section class="node-overview-hardware" aria-label="Ressources matérielles">
+              <span class="node-overview-control-label">RESSOURCES MATÉRIELLES</span>
+              <div class="node-overview-hw-list">
+                <div class="node-overview-hw-row node-overview-hw-row_cpu" [attr.title]="resources.cpu">
+                  <span class="node-overview-hw-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="4" y="4" width="16" height="16" rx="2" />
+                      <rect x="9" y="9" width="6" height="6" />
+                      <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+                    </svg>
+                  </span>
+                  <span class="node-overview-hw-tag">CPU</span>
+                  <span class="node-overview-hw-value">{{ resources.cpu }}</span>
+                </div>
+                <div class="node-overview-hw-sub">
+                  <div class="node-overview-hw-row node-overview-hw-row_ram" [attr.title]="resources.memory">
+                    <span class="node-overview-hw-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M6 19v2M10 19v2M14 19v2M18 19v2M6 3v2M10 3v2M14 3v2M18 3v2" />
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                      </svg>
+                    </span>
+                    <span class="node-overview-hw-tag">RAM</span>
+                    <span class="node-overview-hw-value">{{ resources.memory }}</span>
+                  </div>
+                  <div class="node-overview-hw-row node-overview-hw-row_gpu" [attr.title]="resources.gpu">
+                    <span class="node-overview-hw-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <rect x="2" y="6" width="20" height="12" rx="2" />
+                        <circle cx="8" cy="12" r="2.5" />
+                        <circle cx="16" cy="12" r="2.5" />
+                        <path d="M8 9.5v5M16 9.5v5" />
+                      </svg>
+                    </span>
+                    <span class="node-overview-hw-tag">GPU</span>
+                    <span class="node-overview-hw-value">{{ resources.gpu }}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          }
+
+          <div class="node-overview-controls-panel">
+            @if (admissionEnabled() !== null) {
+              <div
+                class="node-overview-admission-control"
+                [class.is-disabled]="admissionDisabled()"
+              >
+                <div class="node-overview-admission-header">
+                  <span class="node-overview-control-label">ADMISSION</span>
+                  <span class="node-overview-control-state" [class.is-suspended]="!admissionEnabled()">
+                    {{ admissionEnabled() ? 'Acceptées' : 'Suspendues' }}
+                  </span>
+                </div>
+                <mat-slide-toggle
+                  class="node-overview-admission-toggle"
+                  [checked]="admissionEnabled() ?? false"
+                  [disabled]="admissionDisabled()"
+                  [aria-label]="
+                    (admissionEnabled() ? 'Suspendre' : 'Réactiver') +
+                    ' les nouvelles tâches sur ' + title()
+                  "
+                  (change)="admissionChange.emit($event.checked)"
+                >
+                  Nouvelles tâches
+                </mat-slide-toggle>
+              </div>
+            }
+            @if (taskCapacity(); as capacity) {
+              <section
+                class="node-overview-task-capacity"
+                aria-label="Tâches acceptées et places restantes"
+              >
+                <span class="node-overview-control-label">CAPACITÉ</span>
+                <dl class="node-overview-task-capacity-values">
+                  <div>
+                    <dt>Tâches</dt>
+                    <dd>{{ capacity.accepted ?? '0' }}{{ capacity.maximum !== null ? ' / ' + capacity.maximum : '' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Disponibles</dt>
+                    <dd>{{ capacity.remaining ?? '—' }}</dd>
+                  </div>
+                </dl>
+              </section>
+            }
+            @if (meta()) {
+              <div class="node-overview-meta-control" [attr.title]="'Dernier signal : ' + meta()">
+                <span class="node-overview-meta-dot"></span>
+                <span class="node-overview-meta">{{ meta() }}</span>
+              </div>
+            }
+          </div>
+        </div>
+
         @if (actions().length) {
           <button
             mat-icon-button
@@ -416,6 +433,7 @@ export class NodeOverviewCardComponent {
   readonly ariaLabel = input('Informations du nœud');
   readonly title = input.required<string>();
   readonly subtitle = input('');
+  readonly isMaster = input(false);
   readonly statusLabel = input.required<string>();
   readonly statusTone = input<StatusTone>('neutral');
   readonly layout = input<'standard' | 'local'>('standard');

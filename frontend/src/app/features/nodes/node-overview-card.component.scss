@@ -23,6 +23,10 @@
   background: var(--surface-container-high);
 }
 
+.node-overview-card.is-master {
+  border-left: 3px solid #eab308;
+}
+
 .node-overview-notice-banner {
   display: grid;
   gap: var(--space-1);
