@@ -208,4 +208,45 @@ public sealed class TaskOwnershipTests
 
         if (Directory.Exists(newRoot)) Directory.Delete(newRoot, true);
     }
+
+    [Fact]
+    public async Task AdoptOrphanedTasks_WhenPreviousServerIsDemotedToWorker_ReassignsToCurrentMaster()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var id = await f.AddAsync();
+
+        // Simuler qu'un ancien peer possédait cette tâche et a été rétrogradé en worker
+        var oldPeer = Guid.NewGuid();
+        var oldNode = Guid.NewGuid();
+        await using (var setup = f.Db.Db.CreateCommand("""
+            INSERT INTO cluster_nodes(id, name, roles, max_concurrent_tasks, capabilities, last_seen_at)
+            VALUES(@node, 'old-node', ARRAY['worker'], 1, '[]', clock_timestamp());
+            INSERT INTO cluster_peer_admissions(cluster_id, peer_id, node_id, public_key, approved_by_peer_id, key_fingerprint, issued_at, signature)
+            VALUES((SELECT id FROM cluster_identity WHERE singleton=true), @peer, @node, 'fake-key', @peer, 'fingerprint', clock_timestamp(), 'sig');
+            UPDATE task_ownership SET owner_peer_id=@peer WHERE execution_id=@id;
+            """))
+        {
+            setup.Parameters.AddWithValue("node", oldNode);
+            setup.Parameters.AddWithValue("peer", oldPeer);
+            setup.Parameters.AddWithValue("id", id);
+            await setup.ExecuteNonQueryAsync();
+        }
+
+        // Créer l'identité du maître actuel
+        var masterRoot = Path.Combine(Path.GetTempPath(), "active-master-" + Guid.NewGuid().ToString("N"));
+        using var masterIdentity = new ClusterPeerIdentityStore(
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginSettings:KeyDirectory"] = masterRoot }).Build(),
+            new EphemeralDataProtectionProvider());
+
+        var ownershipRepo = new TaskOwnershipRepository(f.Db.Db, masterIdentity, f.Health);
+        await ownershipRepo.InitializeAsync(default);
+
+        // La tâche doit avoir été adoptée par le maître actuel car l'ancien peer n'a plus le rôle server
+        await using var check = f.Db.Db.CreateCommand("SELECT owner_peer_id FROM task_ownership WHERE execution_id=@id");
+        check.Parameters.AddWithValue("id", id);
+        var owner = await check.ExecuteScalarAsync();
+        Assert.Equal(masterIdentity.PeerId.ToString("D"), owner?.ToString());
+
+        if (Directory.Exists(masterRoot)) Directory.Delete(masterRoot, true);
+    }
 }

@@ -13,16 +13,18 @@ namespace Encoding.NodeAgent.Services;
 public sealed class LeadershipReceiverService(
     NodeAgentOptions options,
     ILogger<LeadershipReceiverService> logger,
-    LauncherControlClient? launcher = null)
+    LauncherControlClient? launcher = null,
+    HttpClient? httpClient = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromMinutes(10) };
+    private readonly HttpClient httpClient = httpClient ?? new() { Timeout = TimeSpan.FromMinutes(10) };
     private readonly SemaphoreSlim syncGate = new(1, 1);
 
     public string BackupDirectory => Path.Combine(options.DataDirectory, "backup");
     public string BackupFilePath => Path.Combine(BackupDirectory, "cluster-latest.db");
     public string BackupInfoFilePath => Path.Combine(BackupDirectory, "backup-info.json");
     public string DatabaseFilePath => Path.Combine(options.DataDirectory, "cluster.db");
+    public string PluginKeysDirectory => Path.Combine(options.DataDirectory, "plugin-keys");
 
     public async Task<LocalBackupInfo?> GetLocalBackupInfoAsync(CancellationToken ct)
     {
@@ -96,6 +98,9 @@ public sealed class LeadershipReceiverService(
             }
 
             logger.LogInformation("Sauvegarde miroir SQLite {Digest} ({SizeBytes} octets) enregistrée avec succès.", computedDigest, info.SizeBytes);
+
+            // Synchroniser les clés DataProtection du Maître avec la sauvegarde
+            await SyncKeysAsync(masterUrl, nodeToken, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -189,6 +194,9 @@ public sealed class LeadershipReceiverService(
                 logger.LogWarning(ex, "Impossible de joindre le Maître cédant pour l'accusé de réception (la promotion continue).");
             }
 
+            // Synchroniser les clés DataProtection du Maître avant de démarrer le rôle serveur
+            await SyncKeysAsync(masterUrl, nodeToken, ct);
+
             // Démarrer la fonction serveur locale via le lanceur
             if (launcher is not null)
             {
@@ -203,6 +211,51 @@ public sealed class LeadershipReceiverService(
         finally
         {
             syncGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Synchronise les clés XML ASP.NET DataProtection depuis le Maître pour assurer le déchiffrement des configurations et snapshots.
+    /// </summary>
+    public async Task SyncKeysAsync(string masterUrl, string nodeToken, CancellationToken ct)
+    {
+        try
+        {
+            var keysUri = new Uri(new Uri(masterUrl), "api/v1/cluster/leadership/keys");
+            using var request = new HttpRequestMessage(HttpMethod.Get, keysUri);
+            request.Headers.Add("X-Node-Token", nodeToken);
+            using var response = await httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogDebug("Impossible de récupérer les clés DataProtection depuis le Maître (HTTP {Status}).", (int)response.StatusCode);
+                return;
+            }
+
+            var bundle = await response.Content.ReadFromJsonAsync<LeadershipKeyBundle>(JsonOptions, ct);
+            if (bundle is null || bundle.Keys.Count == 0) return;
+
+            Directory.CreateDirectory(PluginKeysDirectory);
+            foreach (var key in bundle.Keys)
+            {
+                if (string.IsNullOrWhiteSpace(key.FileName) || !key.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var safeFileName = Path.GetFileName(key.FileName);
+                var localPath = Path.Combine(PluginKeysDirectory, safeFileName);
+                if (!File.Exists(localPath))
+                {
+                    await File.WriteAllTextAsync(localPath, key.Content, ct);
+                    logger.LogInformation("Clé DataProtection {KeyFile} synchronisée depuis le Maître.", safeFileName);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Impossible de synchroniser les clés DataProtection depuis le Maître.");
         }
     }
 

@@ -94,6 +94,20 @@ public static class LeadershipEndpoints
             return Results.File(backup.FilePath, "application/x-sqlite3", enableRangeProcessing: true);
         }).AllowAnonymous().WithName("DownloadLatestDatabaseBackup");
 
+        // GET /api/v1/cluster/leadership/keys
+        group.MapGet("/keys", async (
+            LeadershipHandoffService handoff,
+            NodeRepository nodeRepo,
+            HttpContext httpContext,
+            CancellationToken ct) =>
+        {
+            var token = httpContext.Request.Headers["X-Node-Token"].ToString();
+            if (string.IsNullOrWhiteSpace(token) || !await nodeRepo.AuthenticateTokenAsync(token, ct))
+                return Results.Unauthorized();
+
+            return Results.Ok(handoff.GetKeyBundle());
+        }).AllowAnonymous().WithName("GetLeadershipDataProtectionKeys");
+
         // PUT /api/v1/cluster/leadership/backup-interval
         group.MapPut("/backup-interval", async (
             [FromBody] BackupIntervalRequest request,
