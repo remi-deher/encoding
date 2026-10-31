@@ -23,16 +23,6 @@ public sealed class ArchitectureTests
     // Dette connue : fichiers déjà au-dessus de MaxFileLines. Ne jamais augmenter une valeur.
     private static readonly Dictionary<string, int> OversizedFileCeilings = new()
     {
-        ["Encoding.Api/Executions/FlowPlacementPlanner.cs"] = 712,
-        ["Encoding.Api/Executions/RuntimeRepository.cs"] = 994,
-        ["Encoding.Api/Infrastructure/ClusterEntityReconciliation.cs"] = 988,
-        ["Encoding.Api/Infrastructure/ClusterPeerSecurity.cs"] = 622,
-        ["Encoding.Api/Mcp/BusinessOperationCatalog.cs"] = 736,
-        ["Encoding.Api/Mcp/McpService.cs"] = 1646,
-        ["Encoding.Api/Nodes/NodeRepository.cs"] = 624,
-        ["Encoding.Api/Tools/AiAssistantService.cs"] = 1552,
-        ["Encoding.NodeAgent/Runtime/Media/MediaActions.cs"] = 896,
-        ["Encoding.NodeAgent/Runtime/RuntimeFlowExecution.Steps.cs"] = 740,
     };
 
     private static readonly string[] ProcessLaunchAllowList =

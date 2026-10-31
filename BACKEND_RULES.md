@@ -27,7 +27,7 @@ Ces règles sont obligatoires pour toute conception ou modification du backend. 
 - Les adaptateurs d’infrastructure encapsulent le stockage, les files de tâches, les systèmes de fichiers, les outils média et les services externes.
 - Les plugins s’intègrent par des contrats et points d’extension communs ; ils ne contournent pas les règles centrales.
 - Suivre les conventions et les frontières déjà établies dans le code environnant.
-- Ces frontières sont vérifiées par `backend/tests/Encoding.Runtime.Tests/ArchitectureTests.cs` : références de projets, aucun type de stockage (`DbException`, SQL, `DbDataSource`) dans les endpoints, lancement de processus limité à une liste fermée, plafond de 600 lignes par fichier (les dépassements existants sont plafonnés et ne peuvent que décroître). Ne jamais relever un plafond ; scinder le fichier.
+- Ces frontières sont vérifiées par `backend/tests/Encoding.Runtime.Tests/ArchitectureTests.cs` : références de projets, aucun type de stockage (`DbException`, SQL, `DbDataSource`) dans les endpoints, lancement de processus limité à une liste fermée, aucun accès fichier direct dans les endpoints (`FileResults`), plafond de 600 lignes par fichier : scinder en classes partielles ou en types distincts plutôt que d’ajouter une exception.
 - Un endpoint traduit HTTP vers un service ; les conflits d’unicité passent par `UniqueConflict.GuardAsync`, la logique de pair maillé par `ClusterTaskPeerHandler`.
 
 ## 4. Centraliser les règles et les états
