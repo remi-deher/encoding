@@ -247,9 +247,11 @@ public sealed class DockerClusterTests
     private static async Task<JsonElement> WaitForWorkersAsync(Cluster cluster, int workers, bool requireStoreCapabilities = false)
     {
         JsonElement workersNow = default;
+        string? nodeDiagnostic = null;
         await WaitAsync(async () =>
         {
             var all = await cluster.Client.GetFromJsonAsync<JsonElement>("api/v1/nodes");
+            nodeDiagnostic = all.ToString();
             var online = all.EnumerateArray().Where(node => node.GetProperty("name").GetString()!.StartsWith("worker", StringComparison.Ordinal) && node.GetProperty("status").GetString() == "online").ToArray();
             if (online.Length != workers) return false;
             if (requireStoreCapabilities)
@@ -260,7 +262,7 @@ public sealed class DockerClusterTests
             }
             workersNow = JsonSerializer.SerializeToElement(online);
             return true;
-        }, 150, $"{workers} worker(s) en ligne", cluster);
+        }, 150, $"{workers} worker(s) en ligne", cluster, () => nodeDiagnostic);
         return workersNow;
     }
 
