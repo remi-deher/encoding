@@ -1,4 +1,5 @@
-FROM encoding:ci
+ARG BASE_IMAGE=encoding:ci
+FROM ${BASE_IMAGE}
 
 USER root
 RUN apt-get update \

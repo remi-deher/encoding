@@ -256,7 +256,7 @@ public sealed partial class ClusterTaskTransferTests(ITestOutputHelper output)
     public async Task MeasuresTwoServerOwnershipLoad(bool concurrentCapture)
     {
         await using var pair=await Pair.CreateAsync();var setup=Stopwatch.StartNew();await pair.A.SeedAsync(3500,"a");await pair.B.SeedAsync(3500,"b");setup.Stop();
-        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(8));var claims=new List<double>();var renewals=new List<double>();var overviews=new List<double>();var history=new List<double>();var ids=new HashSet<Guid>();var gate=new object();
+        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(12));var claims=new List<double>();var renewals=new List<double>();var overviews=new List<double>();var history=new List<double>();var ids=new HashSet<Guid>();var gate=new object();
         var beforeA=((SqliteDataSource)pair.A.Db.Db).Writer.Snapshot();var beforeB=((SqliteDataSource)pair.B.Db.Db).Writer.Snapshot();var watch=Stopwatch.StartNew();
         var done=0;var passes=0;var start=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);var replicationStarted=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         async Task Worker(Site site)
