@@ -14,7 +14,7 @@ const file = (overrides: Partial<LibraryActivityFile> = {}): LibraryActivityFile
   libraryActive: true,
   flow: 'HEVC',
   flowVersion: 8,
-  status: 'failed',
+  status: 'cancelled',
   executionId: 'execution-1',
   executionState: 'cancelled',
   detail: 'Annulée avant démarrage.',
@@ -26,9 +26,9 @@ const file = (overrides: Partial<LibraryActivityFile> = {}): LibraryActivityFile
 });
 
 describe('library activity execution diagnostics', () => {
-  it('shows a cancelled execution in the errors and cancellations bucket', () => {
+  it('shows a cancelled execution with warning tone in the cancelled section', () => {
     expect(activityExecutionLabel(file())).toBe('Annulée');
-    expect(activityExecutionTone(file())).toBe('neutral');
+    expect(activityExecutionTone(file())).toBe('warning');
   });
 
   it('shows quarantine separately from the execution state', () => {

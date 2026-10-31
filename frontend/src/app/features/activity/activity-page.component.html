@@ -64,24 +64,49 @@
       </p>
     }
 
-    @if (selectedCancelableFiles().length) {
+    @if (selectedCount() > 0) {
       <div
         class="activity-selection"
         role="toolbar"
-        aria-label="Actions sur les traitements actifs"
+        aria-label="Actions groupées sur les fichiers sélectionnés"
       >
-        <span aria-live="polite">{{ selectedCancelableFiles().length }} sélectionnée(s)</span>
-        <button
-          matButton="outlined"
-          type="button"
-          [disabled]="actionBusy()"
-          (click)="runBulkCancel()"
-        >
-          Annuler la sélection
-        </button>
-        <button matButton="text" type="button" (click)="clearActionSelection()">
-          Tout désélectionner
-        </button>
+        <span class="selection-count" aria-live="polite">
+          {{ selectedCount() }} fichier{{ selectedCount() > 1 ? 's' : '' }} sélectionné{{ selectedCount() > 1 ? 's' : '' }}
+        </span>
+        <div class="selection-actions">
+          @if (selectedRetriableFiles().length > 0) {
+            <button
+              matButton="filled"
+              type="button"
+              class="bulk-action-btn"
+              [disabled]="actionBusy()"
+              (click)="runBulkRetry()"
+            >
+              <app-icon name="refresh" />
+              <span>Relancer la tâche ({{ selectedRetriableFiles().length }})</span>
+            </button>
+          }
+          @if (selectedCancelableFiles().length > 0) {
+            <button
+              matButton="outlined"
+              type="button"
+              class="bulk-action-btn bulk-action-btn_danger"
+              [disabled]="actionBusy()"
+              (click)="runBulkCancel()"
+            >
+              <app-icon name="close" />
+              <span>Annuler la tâche ({{ selectedCancelableFiles().length }})</span>
+            </button>
+          }
+          <button
+            matButton="text"
+            type="button"
+            class="bulk-action-btn"
+            (click)="clearSelection()"
+          >
+            Tout désélectionner
+          </button>
+        </div>
       </div>
     }
 
@@ -97,18 +122,32 @@
         </p>
       </div>
     } @else {
+      <div class="activity-list-header">
+        <mat-checkbox
+          class="item-select-all"
+          [checked]="isAllSelected()"
+          [indeterminate]="isPartiallySelected()"
+          (change)="toggleSelectAll($event.checked)"
+          aria-label="Sélectionner ou désélectionner tous les fichiers de cette page"
+        >
+          <span class="select-all-label">Tout sélectionner ({{ files().length }})</span>
+        </mat-checkbox>
+      </div>
+
       <ul class="item-stack">
         @for (file of files(); track file.id) {
-          <li class="item-row" [class.is-selected]="selectedFile()?.id === file.id">
-            @if (status() === 'active' && file.executionId && file.executionState === 'running') {
-              <mat-checkbox
-                class="item-select"
-                [checked]="selectedActionIds().has(file.executionId)"
-                [aria-label]="'Sélectionner ' + fileName(file.relativePath)"
-                (click)="$event.stopPropagation()"
-                (change)="toggleActionSelection(file, $event.checked)"
-              />
-            }
+          <li
+            class="item-row"
+            [class.is-selected]="selectedFile()?.id === file.id"
+            [class.is-checked]="selectedIds().has(file.id)"
+          >
+            <mat-checkbox
+              class="item-select"
+              [checked]="selectedIds().has(file.id)"
+              [aria-label]="'Sélectionner ' + fileName(file.relativePath)"
+              (click)="$event.stopPropagation()"
+              (change)="toggleFileSelection(file, $event.checked)"
+            />
             <button type="button" class="item-main" (click)="open(file)">
               <span
                 class="item-icon"
@@ -219,19 +258,6 @@
       <app-icon name="download" />
       <span>Télécharger le journal</span>
     </button>
-    @if (canRetry()) {
-      <button
-        matButton="text"
-        type="button"
-        class="header-action-btn"
-        [disabled]="actionBusy()"
-        (click)="retrySelected()"
-        title="Créer une nouvelle tentative"
-      >
-        <app-icon name="refresh" />
-        <span>Re-traiter</span>
-      </button>
-    }
     @if (canResume()) {
       <button
         matButton="text"

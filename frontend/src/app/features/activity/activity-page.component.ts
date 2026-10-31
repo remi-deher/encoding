@@ -81,6 +81,7 @@ const ACTIVITY_STATUSES: readonly { value: LibraryActivityStatus; label: string 
   { value: 'active', label: 'En cours' },
   { value: 'done', label: 'Déjà traité' },
   { value: 'failed', label: 'Erreurs' },
+  { value: 'cancelled', label: 'Annulées' },
   { value: 'disabled', label: 'Désactivés' },
 ];
 const PAGE_SIZE = 50;
@@ -101,6 +102,8 @@ function statusFromLegacyView(view: string | null): LibraryActivityStatus {
       return 'active';
     case 'errors':
       return 'failed';
+    case 'cancelled':
+      return 'cancelled';
     case 'history':
       return 'done';
     default:
@@ -114,6 +117,8 @@ function viewFromStatus(status: LibraryActivityStatus): string {
       return 'active';
     case 'failed':
       return 'errors';
+    case 'cancelled':
+      return 'cancelled';
     case 'done':
       return 'history';
     default:
@@ -195,7 +200,8 @@ export class ActivityPageComponent {
   protected readonly pageIndex = signal(0);
   protected readonly actionBusy = signal(false);
   protected readonly feedback = signal('');
-  protected readonly selectedActionIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly selectedActionIds = this.selectedIds;
   protected readonly selectedFile = signal<LibraryActivityFile | null>(null);
   protected readonly selectedExecution = signal<ExecutionResponse | null>(null);
   protected readonly executionLoading = signal(false);
@@ -345,12 +351,14 @@ export class ActivityPageComponent {
   protected nextPage(): void {
     if (this.pageIndex() + 1 < this.totalPages()) {
       this.pageIndex.update((p) => p + 1);
+      this.clearSelection();
     }
   }
 
   protected prevPage(): void {
     if (this.pageIndex() > 0) {
       this.pageIndex.update((p) => p - 1);
+      this.clearSelection();
     }
   }
 
@@ -364,18 +372,52 @@ export class ActivityPageComponent {
   protected readonly countText = computed(() => {
     const count = this.counts();
     if (!count) return 'Suivi des fichiers';
-    const total = count.untreated + count.active + count.done + count.failed + count.disabled;
+    const total =
+      count.untreated +
+      count.active +
+      count.done +
+      count.failed +
+      (count.cancelled ?? 0) +
+      count.disabled;
     return `${total} fichier${total === 1 ? '' : 's'} suivi${total === 1 ? '' : 's'}`;
   });
   protected readonly currentStatusLabel = computed(
     () => ACTIVITY_STATUSES.find((item) => item.value === this.status())?.label ?? 'Activité',
   );
+
+  protected readonly selectedFiles = computed(() => {
+    const ids = this.selectedIds();
+    if (!ids.size) return [];
+    return this.files().filter((file) => ids.has(file.id));
+  });
+
+  protected readonly selectedCount = computed(() => this.selectedIds().size);
+
+  protected readonly isAllSelected = computed(() => {
+    const list = this.files();
+    return list.length > 0 && list.every((file) => this.selectedIds().has(file.id));
+  });
+
+  protected readonly isPartiallySelected = computed(() => {
+    const list = this.files();
+    const count = list.filter((file) => this.selectedIds().has(file.id)).length;
+    return count > 0 && count < list.length;
+  });
+
   protected readonly selectedCancelableFiles = computed(() =>
-    this.files().filter(
+    this.selectedFiles().filter(
       (file) =>
         file.executionId &&
-        file.executionState === 'running' &&
-        this.selectedActionIds().has(file.executionId),
+        ['running', 'queued', 'cancelling'].includes(file.executionState ?? ''),
+    ),
+  );
+
+  protected readonly selectedRetriableFiles = computed(() =>
+    this.selectedFiles().filter(
+      (file) =>
+        (file.executionId && ['failed', 'cancelled'].includes(file.executionState ?? '')) ||
+        file.status === 'done' ||
+        file.status === 'untreated',
     ),
   );
 
@@ -506,7 +548,7 @@ export class ActivityPageComponent {
     if (!validStatus(value) || value === this.status()) return;
     this.status.set(value);
     this.pageIndex.set(0);
-    this.selectedActionIds.set(new Set());
+    this.clearSelection();
     this.close();
     this.syncQueryParams();
   }
@@ -516,7 +558,7 @@ export class ActivityPageComponent {
     if (libraryId === this.libraryFilter()) return;
     this.libraryFilter.set(libraryId);
     this.pageIndex.set(0);
-    this.selectedActionIds.set(new Set());
+    this.clearSelection();
     this.close();
     this.syncQueryParams();
   }
@@ -526,7 +568,7 @@ export class ActivityPageComponent {
     if (flow === this.flowFilter()) return;
     this.flowFilter.set(flow);
     this.pageIndex.set(0);
-    this.selectedActionIds.set(new Set());
+    this.clearSelection();
     this.close();
     this.syncQueryParams();
   }
@@ -536,7 +578,7 @@ export class ActivityPageComponent {
     if (node === this.nodeFilter()) return;
     this.nodeFilter.set(node);
     this.pageIndex.set(0);
-    this.selectedActionIds.set(new Set());
+    this.clearSelection();
     this.close();
     this.syncQueryParams();
   }
@@ -546,23 +588,45 @@ export class ActivityPageComponent {
     this.flowFilter.set(null);
     this.nodeFilter.set(null);
     this.pageIndex.set(0);
-    this.selectedActionIds.set(new Set());
+    this.clearSelection();
     this.close();
     this.syncQueryParams();
   }
 
-  protected toggleActionSelection(file: LibraryActivityFile, checked: boolean): void {
-    if (!file.executionId) return;
-    this.selectedActionIds.update((current) => {
+  protected toggleSelectAll(checked: boolean): void {
+    const list = this.files();
+    this.selectedIds.update((current) => {
       const next = new Set(current);
-      if (checked) next.add(file.executionId!);
-      else next.delete(file.executionId!);
+      if (checked) {
+        for (const file of list) next.add(file.id);
+      } else {
+        for (const file of list) next.delete(file.id);
+      }
       return next;
     });
   }
 
+  protected toggleFileSelection(file: LibraryActivityFile, checked: boolean): void {
+    this.selectedIds.update((current) => {
+      const next = new Set(current);
+      if (checked) next.add(file.id);
+      else next.delete(file.id);
+      return next;
+    });
+  }
+
+  protected clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
+
+  /** @deprecated use toggleFileSelection */
+  protected toggleActionSelection(file: LibraryActivityFile, checked: boolean): void {
+    this.toggleFileSelection(file, checked);
+  }
+
+  /** @deprecated use clearSelection */
   protected clearActionSelection(): void {
-    this.selectedActionIds.set(new Set());
+    this.clearSelection();
   }
 
   protected open(file: LibraryActivityFile): void {
@@ -613,8 +677,10 @@ export class ActivityPageComponent {
         return 'success';
       case 'failed':
         return 'danger';
-      case 'disabled':
+      case 'cancelled':
         return 'warning';
+      case 'disabled':
+        return 'neutral';
       default:
         return 'neutral';
     }
@@ -627,9 +693,9 @@ export class ActivityPageComponent {
       this.dialog
         .open(ConfirmationDialogComponent, {
           data: {
-            title: `Annuler ${targets.length} exécution(s) ?`,
-            message: 'Une demande sera envoyée pour les exécutions encore en cours.',
-            confirmLabel: 'Annuler les exécutions',
+            title: `Annuler ${targets.length} tâche(s) ?`,
+            message: `${targets.length} tâche(s) recevront une demande d’interruption immédiate.`,
+            confirmLabel: 'Annuler les tâches',
             variant: 'danger',
           } satisfies ConfirmationDialogData,
         })
@@ -641,11 +707,68 @@ export class ActivityPageComponent {
       targets.map((file) => firstValueFrom(this.tracking.cancel(file.executionId!))),
     );
     this.actionBusy.set(false);
-    this.selectedActionIds.set(new Set());
+    this.clearSelection();
     this.tracking.refresh();
     this.refreshRevision.update((value) => value + 1);
     const succeeded = results.filter((result) => result.status === 'fulfilled').length;
-    this.notifications.show(`${succeeded}/${targets.length} exécution(s) annulée(s).`);
+    this.notifications.show(`${succeeded}/${targets.length} tâche(s) annulée(s).`);
+  }
+
+  protected async runBulkRetry(): Promise<void> {
+    const targets = this.selectedRetriableFiles();
+    if (!targets.length || this.actionBusy()) return;
+    const accepted = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          data: {
+            title: `Relancer ${targets.length} tâche(s) ?`,
+            message: `Une relance va être demandée pour les ${targets.length} élément(s) sélectionné(s).`,
+            confirmLabel: 'Relancer les tâches',
+          } satisfies ConfirmationDialogData,
+        })
+        .afterClosed(),
+    );
+    if (!accepted) return;
+    this.actionBusy.set(true);
+
+    const promises: Promise<unknown>[] = [];
+
+    const failedFiles = targets.filter((f) => f.executionId && f.executionState === 'failed');
+    for (const f of failedFiles) {
+      promises.push(firstValueFrom(this.tracking.retry(f.executionId!)));
+    }
+
+    const cancelledFiles = targets.filter(
+      (f) => f.executionId && f.executionState === 'cancelled',
+    );
+    for (const f of cancelledFiles) {
+      promises.push(firstValueFrom(this.tracking.resume(f.executionId!)));
+    }
+
+    const enqueuableFiles = targets.filter(
+      (f) =>
+        (!f.executionId || !['failed', 'cancelled'].includes(f.executionState ?? '')) &&
+        (f.status === 'untreated' || f.status === 'done'),
+    );
+    if (enqueuableFiles.length > 0) {
+      const byLibrary = new Map<string, string[]>();
+      for (const f of enqueuableFiles) {
+        const list = byLibrary.get(f.libraryId) ?? [];
+        list.push(f.id);
+        byLibrary.set(f.libraryId, list);
+      }
+      for (const [libId, fileIds] of byLibrary.entries()) {
+        promises.push(firstValueFrom(this.clusterApi.enqueueLibraryFiles(libId, fileIds, 1)));
+      }
+    }
+
+    const results = await Promise.allSettled(promises);
+    this.actionBusy.set(false);
+    this.clearSelection();
+    this.tracking.refresh();
+    this.refreshRevision.update((value) => value + 1);
+    const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+    this.notifications.show(`${succeeded}/${targets.length} tâche(s) relancée(s).`);
   }
 
   protected cancelSelected(): void {
