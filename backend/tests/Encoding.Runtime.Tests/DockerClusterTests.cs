@@ -97,8 +97,12 @@ public sealed class DockerClusterTests
                 manifest["runtime"] = new JsonObject { ["type"] = "native", ["entrypoint"] = "" };
                 using var buffer = new MemoryStream();
                 using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-                using (var writer = new StreamWriter(archive.CreateEntry("plugin.json").Open()))
+                {
+                    var entry = archive.CreateEntry("plugin.json");
+                    entry.LastWriteTime = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+                    using var writer = new StreamWriter(entry.Open());
                     writer.Write(manifest.ToJsonString());
+                }
                 var bytes = buffer.ToArray();
                 var packageDirectory = Path.Combine(storeDirectory, "packages", id, version);
                 Directory.CreateDirectory(packageDirectory);
@@ -123,17 +127,25 @@ public sealed class DockerClusterTests
         private static void PrepareCustomPluginCatalog(string dataDirectory)
         {
             var fixtureDirectory = Path.Combine(Harness.RepositoryRoot(), "tests", "Fixtures", "StoreCatalog");
+            var customPlugins = Path.Combine(dataDirectory, "custom-plugins");
             foreach (var id in new[] { "base", "video" })
             {
                 var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(fixtureDirectory, id + ".json")))!.AsObject();
                 manifest["runtime"] = new JsonObject { ["type"] = "native", ["entrypoint"] = "" };
                 var version = manifest["version"]!.GetValue<string>();
-                var directory = Path.Combine(dataDirectory, "custom-plugins", id, version);
+                var directory = Path.Combine(customPlugins, id, version);
                 Directory.CreateDirectory(directory);
                 File.WriteAllText(Path.Combine(directory, "plugin.json"), manifest.ToJsonString());
                 var package = File.ReadAllBytes(Path.Combine(dataDirectory, "plugin-store", "packages", id, version, "package.zip"));
                 var sha256 = Convert.ToHexString(SHA256.HashData(package)).ToLowerInvariant();
                 File.WriteAllText(Path.Combine(directory, CustomPluginCatalog.VerifiedMarker), sha256);
+            }
+            if (!OperatingSystem.IsWindows() && Directory.Exists(customPlugins))
+            {
+                var fullMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute;
+                File.SetUnixFileMode(customPlugins, fullMode);
+                foreach (var path in Directory.EnumerateFileSystemEntries(customPlugins, "*", SearchOption.AllDirectories))
+                    File.SetUnixFileMode(path, fullMode);
             }
         }
 

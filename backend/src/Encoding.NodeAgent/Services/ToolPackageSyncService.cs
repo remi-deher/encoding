@@ -22,7 +22,7 @@ public sealed class ToolPackageSyncService(NodeAgentOptions options, WorkerIdent
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await SyncOnceAsync(stoppingToken); }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or JsonException && !stoppingToken.IsCancellationRequested)
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or JsonException && !stoppingToken.IsCancellationRequested)
             { logger.LogWarning("La synchronisation des outils gérés a échoué : {Reason}", exception.Message); }
             await Task.Delay(Interval, stoppingToken);
         }

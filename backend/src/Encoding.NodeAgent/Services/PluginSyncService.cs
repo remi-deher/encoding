@@ -24,7 +24,7 @@ public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentitySt
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await SyncOnceAsync(stoppingToken); }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or JsonException && !stoppingToken.IsCancellationRequested)
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or JsonException && !stoppingToken.IsCancellationRequested)
             {
                 logger.LogWarning("La synchronisation des plugins a échoué : {Reason}", exception.Message);
             }
@@ -61,6 +61,7 @@ public sealed class PluginSyncService(NodeAgentOptions options, WorkerIdentitySt
                 && File.ReadAllText(Path.Combine(target, CustomPluginCatalog.VerifiedMarker)).Trim() == plugin.Sha256) continue;
             try { await InstallAsync(identity, activeServerUrl, plugin, target, ct); changed = true; }
             catch (PluginPackageException exception) { logger.LogError("Le plugin {PluginId} {Version} est refusé : {Reason}", plugin.Id, plugin.Version, exception.Message); }
+            catch (Exception exception) when (exception is not OperationCanceledException) { logger.LogError(exception, "L'installation du plugin {PluginId} {Version} a échoué.", plugin.Id, plugin.Version); }
         }
         // Ménage : seulement quand la liste a bien été reçue, jamais sur une panne.
         foreach (var pluginDirectory in Directory.EnumerateDirectories(root))
