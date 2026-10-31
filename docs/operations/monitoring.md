@@ -84,9 +84,9 @@ La rétention est activée par défaut (3 jours pour les exécutions réussies o
 ```yaml
 Operations__ArtifactRetention__Enabled: "true" # "false" pour désactiver
 Operations__ArtifactRetention__DryRun: "true"   # journalise sans supprimer
-Operations__ArtifactRetention__Days: "3"        # réussies et annulées
-Operations__ArtifactRetention__FailedDays: "7"  # 0 : conserver les échecs
-Operations__ArtifactRetention__IntervalMinutes: "60"
+Operations__ArtifactRetention__Days: "0"        # réussies et annulées (0 : purge sans délai)
+Operations__ArtifactRetention__FailedDays: "0"  # échecs (0 : purge sans délai)
+Operations__ArtifactRetention__IntervalMinutes: "10"
 Operations__ArtifactRetention__BatchSize: "50"
 Operations__ArtifactRetention__TempFileHours: "24"
 ```
@@ -103,8 +103,8 @@ Chaque nœud supprime lui-même `executions/<id>` et `transfers/<id>` de son dos
 
 ```yaml
 Node__Workspace__CleanupEnabled: "true"           # "false" pour désactiver
-Node__Workspace__CompletedRetentionHours: "1"     # réussies et annulées
-Node__Workspace__FailedRetentionHours: "24"       # échouées
+Node__Workspace__CompletedRetentionHours: "0"     # réussies et annulées
+Node__Workspace__FailedRetentionHours: "0"        # échouées
 Node__Workspace__UnknownRetentionHours: "72"      # identifiant inconnu du serveur
 Node__Workspace__CleanupIntervalMinutes: "10"
 ```

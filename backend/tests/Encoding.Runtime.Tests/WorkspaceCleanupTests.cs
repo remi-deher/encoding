@@ -10,15 +10,13 @@ public sealed class WorkspaceCleanupTests
     private static WorkspaceRetentionOptions Defaults() => WorkspaceRetentionOptions.FromConfiguration(new ConfigurationBuilder().Build());
 
     [Fact]
-    public void DefaultsKeepCompletedForOneHourAndFailedForOneDay()
+    public void DefaultsPurgeFinishedExecutionsImmediately()
     {
         var options = Defaults();
         Assert.True(options.Enabled);
-        Assert.False(options.ShouldDelete("succeeded", TimeSpan.FromMinutes(59)));
-        Assert.True(options.ShouldDelete("succeeded", TimeSpan.FromHours(1)));
-        Assert.True(options.ShouldDelete("cancelled", TimeSpan.FromHours(2)));
-        Assert.False(options.ShouldDelete("failed", TimeSpan.FromHours(23)));
-        Assert.True(options.ShouldDelete("failed", TimeSpan.FromHours(24)));
+        Assert.True(options.ShouldDelete("succeeded", TimeSpan.Zero));
+        Assert.True(options.ShouldDelete("cancelled", TimeSpan.Zero));
+        Assert.True(options.ShouldDelete("failed", TimeSpan.Zero));
     }
 
     [Theory]
@@ -53,12 +51,12 @@ public sealed class WorkspaceCleanupTests
     }
 
     [Fact]
-    public void ArtifactRetentionIsEnabledByDefaultWithBoundedDelays()
+    public void ArtifactRetentionIsEnabledByDefaultAndPurgesWithoutDelay()
     {
         var options = new ArtifactRetentionOptions();
         Assert.True(options.Enabled);
-        Assert.Equal(3, options.Days);
-        Assert.Equal(7, options.FailedDays);
+        Assert.Equal(0, options.Days);
+        Assert.Equal(0, options.FailedDays);
         options.Validate();
     }
 }

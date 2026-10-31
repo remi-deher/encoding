@@ -23,7 +23,7 @@ public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactSt
           AND NOT EXISTS(SELECT 1 FROM task_transfers t WHERE t.execution_id=e.id AND t.state IN ('proposed','received'))
           AND NOT EXISTS(SELECT 1 FROM pending_source_writes p WHERE p.execution_id=e.id AND p.state IN ('waiting','claimed'))
           AND ((e.state IN ('succeeded','cancelled') AND e.finished_at < clock_timestamp() - make_interval(days => @days))
-            OR (e.state = 'failed' AND @failedDays > 0 AND e.finished_at < clock_timestamp() - make_interval(days => @failedDays)))
+            OR (e.state = 'failed' AND e.finished_at < clock_timestamp() - make_interval(days => @failedDays)))
           AND NOT (e.state = 'succeeded' AND w.publication_requested AND w.published_path IS NULL)
           AND NOT EXISTS (SELECT 1 FROM media_reservations r WHERE r.execution_id = e.id)
         ORDER BY e.finished_at, e.id

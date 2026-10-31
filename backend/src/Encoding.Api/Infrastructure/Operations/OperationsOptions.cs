@@ -37,11 +37,11 @@ public sealed class ArtifactRetentionOptions
 {
     /// <summary>Activé par défaut : les artefacts de travail d'exécutions terminées ne doivent pas remplir le disque. Ne touche jamais aux médias.</summary>
     public bool Enabled { get; init; } = true;
-    /// <summary>Jours de conservation après la fin d’une exécution réussie ou annulée.</summary>
-    public int Days { get; init; } = 3;
-    /// <summary>Jours de conservation après un échec ; 0 conserve indéfiniment les artefacts des exécutions échouées.</summary>
-    public int FailedDays { get; init; } = 7;
-    public int IntervalMinutes { get; init; } = 60;
+    /// <summary>Jours de conservation après la fin d’une exécution réussie ou annulée ; 0 purge dès la passe suivante.</summary>
+    public int Days { get; init; }
+    /// <summary>Jours de conservation après un échec ; 0 purge dès la passe suivante (la reprise repart de zéro).</summary>
+    public int FailedDays { get; init; }
+    public int IntervalMinutes { get; init; } = 10;
     public int BatchSize { get; init; } = 50;
     /// <summary>Journalise et compte sans rien supprimer.</summary>
     public bool DryRun { get; init; }
@@ -51,7 +51,7 @@ public sealed class ArtifactRetentionOptions
     public void Validate()
     {
         if (!Enabled) return;
-        if (Days < 1) throw new InvalidOperationException("Operations:ArtifactRetention:Days doit être supérieur à zéro.");
+        if (Days < 0) throw new InvalidOperationException("Operations:ArtifactRetention:Days ne peut pas être négatif.");
         if (FailedDays < 0) throw new InvalidOperationException("Operations:ArtifactRetention:FailedDays ne peut pas être négatif.");
         if (IntervalMinutes < 1) throw new InvalidOperationException("Operations:ArtifactRetention:IntervalMinutes doit être supérieur à zéro.");
         if (BatchSize is < 1 or > 1000) throw new InvalidOperationException("Operations:ArtifactRetention:BatchSize doit être compris entre 1 et 1000.");
