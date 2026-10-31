@@ -203,7 +203,9 @@ public sealed class DockerClusterTests
                     || line.Contains("RuntimeRepository", StringComparison.Ordinal)
                     || line.Contains("[launcher]", StringComparison.Ordinal)
                     || line.Contains("warn:", StringComparison.OrdinalIgnoreCase)
-                    || line.Contains("fail:", StringComparison.OrdinalIgnoreCase))
+                    || line.Contains("fail:", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains("crit:", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains("Exception", StringComparison.OrdinalIgnoreCase))
                 .TakeLast(100);
             return $"[{container}] " + string.Join(Environment.NewLine, runtime);
         })));
@@ -239,7 +241,7 @@ public sealed class DockerClusterTests
         await using var cluster = new Cluster();
         await cluster.StartServerAsync();
         var source = Path.Combine(cluster.Media, "film.mkv");
-        await EncodeFixtureAsync(source, seconds: 20, size: "1280x720");
+        await EncodeFixtureAsync(source, seconds: 12, size: "640x360");
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
         await cluster.StartWorkerAsync("worker-a", Image, preseedRuntimePackages: true);
         await cluster.StartWorkerAsync("worker-b", Image, preseedRuntimePackages: true);
