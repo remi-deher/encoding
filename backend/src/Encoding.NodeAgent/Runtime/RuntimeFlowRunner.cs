@@ -158,11 +158,31 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     throw new IOException("placement_impossible: "+placementPlan.Reason);
             }
             // Source directe inchangée : un audio déjà conforme se décide sur les métadonnées, sans copier le média.
+            var conformingNodes=new HashSet<string>(StringComparer.Ordinal);
             bool AudioAlreadyCompliant(IReadOnlyDictionary<string,System.Text.Json.JsonElement> configuration)
             {
                 if(context.BeforeMetadata is not {} metadata || context.Plan.Count>0 || FfmpegBuilderPolicy.Active(variables)) return false;
                 try { return AudioRulePlanner.Plan(metadata,AudioRuleOptions.From(configuration)).Steps("probe",AudioRuleOptions.From(configuration)).Count==0; }
                 catch(AudioRuleException) { return false; }
+            }
+            // Nommage et sous-titres : planification à blanc sur la source directe ; aucun téléchargement si rien ne change.
+            async Task<bool> SourceAlreadyConformsAsync(string nodeId,string id,IReadOnlyDictionary<string,System.Text.Json.JsonElement> configuration)
+            {
+                var naming=id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id);
+                var subtitles=id is "base-subtitle-manage" or "subtitles-manage" || FlowOperationConfiguration.IsSubtitleOperation(id);
+                if(!directRead || !(naming || subtitles) || context.BeforeMetadata is not {} metadata || context.Plan.Count>0 || FfmpegBuilderPolicy.Active(variables)) return false;
+                if(naming && MediaActions.Text(configuration,"mode","apply")=="snapshot") return false;
+                try
+                {
+                    observed!.Verify(original);
+                    var outcome=naming
+                        ? await actions.TrackNamesAsync(configuration,metadata,variables.TryGetValue("tracks.origin",out var saved)?saved:null,original,directory,nodeId,job.Token,planOnly:true)
+                        : await actions.SubtitleManageAsync(configuration,metadata,original,directory,nodeId,job.Token,planOnly:true);
+                    observed.Verify(original);
+                    if(outcome.NeedsChanges || outcome.Primary is not null) return false;
+                    conformingNodes.Add(nodeId); return true;
+                }
+                catch(Exception) when(!job.IsCancellationRequested) { return false; }
             }
             async Task EnsureScanAsync()
             {
@@ -266,7 +286,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         throw new IOException("Fermez la préparation FFmpeg avant cette opération autonome.");
                     // External metadata-only plugins receive no path to the direct source.
                     if(directRead && !DirectMediaInspection.Allows(node.Component.PluginId,id,c,context.Plan.Count,FfmpegBuilderPolicy.Active(variables))
-                        && !(id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules" && AudioAlreadyCompliant(c)))
+                        && !(id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules" && AudioAlreadyCompliant(c))
+                        && !(await SourceAlreadyConformsAsync(node.Id,id,c)))
                     {
                         var launch=plugins.Installed.SingleOrDefault(plugin=>plugin.Id==node.Component.PluginId && plugin.Version==node.Component.PluginVersion);
                         var descriptor=launch is null?null:(await plugins.DescribeAsync(launch,job.Token)).Components.SingleOrDefault(component=>component.Id==id && component.Version==node.Component.ComponentVersion);
@@ -516,6 +537,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(result.Status=="unchanged") output="unchanged";
                         else variables["runtime.inPlaceEdited"]=JsonSerializer.SerializeToElement(result.NewSha256);
                     }
+                    else if(directRead && conformingNodes.Contains(node.Id)) output="unchanged";
                     else if(id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id))
                     {
                         await EnsureScanAsync();
