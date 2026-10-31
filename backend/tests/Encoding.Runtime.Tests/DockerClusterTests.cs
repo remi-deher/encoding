@@ -52,7 +52,9 @@ public sealed class DockerClusterTests
             var port = FreePort();
             await RunAsync(ServerName, "--hostname", ServerName, "-v", $"{Data}:/var/lib/encoding-node", "-p", $"127.0.0.1:{port}:8080",
                 "-e", "Node__DataDirectory=/var/lib/encoding-node",
-                "-e", "Node__Roles=server", "-e", "Node__Name=" + ServerName, "-e", $"Cluster__AdvertisedApiBaseUrl=http://{ServerName}:8080/", Image);
+                "-e", "Node__Roles=server", "-e", "Node__Name=" + ServerName,
+                "-e", $"Cluster__AdvertisedApiBaseUrl=http://{ServerName}:8080/",
+                "-e", $"Cluster__Reconciliation__AdvertisedApiBaseUrl=http://{ServerName}.local:8080/", Image);
             Client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() }) { BaseAddress = new Uri($"http://127.0.0.1:{port}/"), Timeout = TimeSpan.FromSeconds(20) };
             Client.DefaultRequestHeaders.Add("X-Encoding-Csrf", "1");
             await WaitAsync(async () => (await Client.GetAsync("health/live")).IsSuccessStatusCode, 90, "le serveur");
@@ -164,6 +166,27 @@ public sealed class DockerClusterTests
                 try { Directory.Delete(directory, true); } catch { }
         }
 
+        public string IdentityDiagnostics()
+        {
+            var entries = new List<string>();
+            foreach (var directory in dataDirectories)
+            {
+                var path = Path.Combine(directory, "node-identity.json");
+                if (!File.Exists(path)) continue;
+                using var document = JsonDocument.Parse(File.ReadAllText(path));
+                var identity = document.RootElement;
+                entries.Add(JsonSerializer.Serialize(new
+                {
+                    node = Path.GetFileName(directory),
+                    id = identity.TryGetProperty("id", out var id) ? id.GetString() : null,
+                    clusterId = identity.TryGetProperty("clusterId", out var clusterId) ? clusterId.GetString() : null,
+                    apiBaseUrl = identity.TryGetProperty("apiBaseUrl", out var apiBaseUrl) ? apiBaseUrl.GetString() : null,
+                    knownServerUrls = identity.TryGetProperty("knownServerUrls", out var knownServerUrls) ? knownServerUrls.ToString() : null
+                }));
+            }
+            return string.Join(Environment.NewLine, entries);
+        }
+
         public async Task<string> LogsAsync() => string.Join("\n", await Task.WhenAll(containers.Select(async container => $"[{container}] " + await DockerAsync(allowFailure: true, "logs", "--tail", "15", container))));
     }
 
@@ -220,7 +243,7 @@ public sealed class DockerClusterTests
         }, 420, "reprise et fin de l'exécution", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{cluster.IdentityDiagnostics()}\n{await cluster.LogsAsync()}");
         Assert.NotEqual(victim, final.GetProperty("node").GetString());
         Assert.Contains("reprise", history, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
@@ -248,7 +271,7 @@ public sealed class DockerClusterTests
         }, 300, "exécution par le worker de l'ancienne version", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{cluster.IdentityDiagnostics()}\n{await cluster.LogsAsync()}");
         Assert.Equal("worker-old", final.GetProperty("node").GetString());
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
     }
