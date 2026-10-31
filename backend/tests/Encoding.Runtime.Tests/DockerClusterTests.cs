@@ -190,7 +190,16 @@ public sealed class DockerClusterTests
             return string.Join(Environment.NewLine, entries);
         }
 
-        public async Task<string> LogsAsync() => string.Join("\n", await Task.WhenAll(containers.Select(async container => $"[{container}] " + await DockerAsync(allowFailure: true, "logs", "--tail", "15", container))));
+        public async Task<string> LogsAsync() => string.Join("\n", await Task.WhenAll(containers.Select(async container =>
+        {
+            var logs = await DockerAsync(allowFailure: true, "logs", "--since", "10m", container);
+            var runtime = logs.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                .Where(line => line.Contains("api/v1/runtime/nodes", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains("RuntimeFlowRunner", StringComparison.Ordinal)
+                    || line.Contains("RuntimeWorkerService", StringComparison.Ordinal))
+                .TakeLast(80);
+            return $"[{container}] " + string.Join(Environment.NewLine, runtime);
+        })));
         public async Task<string> NodeDiagnosticsAsync() => (await Client.GetFromJsonAsync<JsonElement>("api/v1/nodes")).ToString();
         public async Task<string> LibraryAccessDiagnosticsAsync()
         {
