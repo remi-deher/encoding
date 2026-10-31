@@ -11,9 +11,10 @@
 }
 
 .subnav-template {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   width: 100%;
   min-width: 0;
   padding-block: var(--space-1);
@@ -29,21 +30,22 @@
 }
 
 .subnav-template-info {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: start;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .subnav-template-navigation {
-  grid-column: 2;
-  grid-row: 1;
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
   max-width: 100%;
-  justify-self: center;
+  margin-inline: auto;
 }
 
 .subnav-template-actions {
-  grid-column: 3;
-  grid-row: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -56,26 +58,25 @@
   display: none;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 860px) {
   .subnav-template {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    flex-wrap: wrap;
     row-gap: var(--space-2);
   }
 
   .subnav-template-navigation {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    width: fit-content;
-    max-width: 100%;
+    order: 1;
+    width: 100%;
+    flex: 1 0 100%;
+    justify-content: flex-start;
   }
 
   .subnav-template-info {
-    grid-column: 1;
-    grid-row: 2;
+    order: 2;
   }
 
   .subnav-template-actions {
-    grid-column: 2;
-    grid-row: 2;
+    order: 3;
+    margin-inline-start: auto;
   }
 }

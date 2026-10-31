@@ -5,14 +5,24 @@
 .activity-count-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
+  gap: 6px;
+  padding: 6px 14px;
   border-radius: var(--radius-pill);
   background: var(--surface-container);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
   color: var(--text-secondary);
-  font-size: var(--font-label);
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.activity-refresh-bar {
+  height: 3px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
 }
 
 .activity-panel {
