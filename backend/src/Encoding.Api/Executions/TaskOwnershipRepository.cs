@@ -176,24 +176,6 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
             reassign.Parameters.AddWithValue("previous", previousPeer.Value);
             await reassign.ExecuteNonQueryAsync(ct);
         }
-
-        // Adopter automatiquement les tâches orphelines dont le propriétaire n'est plus un serveur actif du cluster
-        await using var adopt = Sql.Command("""
-            UPDATE task_ownership 
-            SET owner_peer_id=@peer 
-            WHERE owner_peer_id<>@peer 
-              AND state IN ('active','frozen','quarantined')
-              AND NOT EXISTS (
-                  SELECT 1 FROM cluster_peer_admissions a
-                  JOIN cluster_nodes n ON n.id=a.node_id
-                  WHERE a.peer_id=task_ownership.owner_peer_id
-                    AND a.revoked_at IS NULL
-                    AND n.deleted_at IS NULL
-                    AND 'server'=ANY(n.roles)
-              )
-            """, c, tx);
-        adopt.Parameters.AddWithValue("peer", identity.PeerId);
-        await adopt.ExecuteNonQueryAsync(ct);
     }
     public async Task<int> ProjectAsync(CancellationToken ct)
     {
