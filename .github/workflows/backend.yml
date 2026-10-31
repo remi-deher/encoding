@@ -1,7 +1,7 @@
 name: Backend
 on:
   pull_request:
-    branches: [main]
+    branches: [dev, main]
     paths:
       - "backend/**"
       - ".github/workflows/backend.yml"

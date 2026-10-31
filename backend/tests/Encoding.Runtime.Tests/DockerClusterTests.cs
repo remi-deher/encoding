@@ -56,7 +56,15 @@ public sealed class DockerClusterTests
             Client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() }) { BaseAddress = new Uri($"http://127.0.0.1:{port}/"), Timeout = TimeSpan.FromSeconds(20) };
             Client.DefaultRequestHeaders.Add("X-Encoding-Csrf", "1");
             await WaitAsync(async () => (await Client.GetAsync("health/live")).IsSuccessStatusCode, 90, "le serveur");
-            using var setup = await Client.PostAsJsonAsync("api/v1/auth/setup", new { username = "admin", password = "StrongPassword123!", setupToken = (string?)null, nodeDisplayName = "srv" });
+            using var setup = await Client.PostAsJsonAsync("api/v1/auth/setup", new
+            {
+                username = "admin",
+                password = "StrongPassword123!",
+                setupToken = (string?)null,
+                nodeDisplayName = "srv",
+                mode = "createCluster",
+                clusterName = "Docker integration"
+            });
             Assert.Equal(HttpStatusCode.Created, setup.StatusCode);
             using var window = await Client.PutAsJsonAsync("api/v1/nodes/enrollment-window", new { minutes = 30 });
             Assert.True(window.IsSuccessStatusCode);
@@ -184,7 +192,7 @@ public sealed class DockerClusterTests
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
         await cluster.StartWorkerAsync("worker-a", Image, preseedRuntimePackages: true);
         await cluster.StartWorkerAsync("worker-b", Image, preseedRuntimePackages: true);
-        var nodes = await WaitForWorkersAsync(cluster, 2, requireStoreCapabilities: true);
+        var nodes = await WaitForWorkersAsync(cluster, 2, requiredCapabilities: ["plugin/video", "ffmpeg"]);
         var executionId = await QueueEncodingAsync(cluster, nodes);
 
         string? victim = null;
@@ -229,7 +237,7 @@ public sealed class DockerClusterTests
         await EncodeFixtureAsync(source, seconds: 6, size: "640x360");
         var sourceSha = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source)));
         await cluster.StartWorkerAsync("worker-old", previous, preseedRuntimePackages: true);   // seul worker : c'est l'ancienne version qui doit faire le travail
-        var nodes = await WaitForWorkersAsync(cluster, 1);
+        var nodes = await WaitForWorkersAsync(cluster, 1, requiredCapabilities: ["plugin/base"]);
         var executionId = await QueueEncodingAsync(cluster, nodes, encodeVideo: false);
 
         JsonElement final = default;
@@ -245,7 +253,7 @@ public sealed class DockerClusterTests
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
     }
 
-    private static async Task<JsonElement> WaitForWorkersAsync(Cluster cluster, int workers, bool requireStoreCapabilities = false)
+    private static async Task<JsonElement> WaitForWorkersAsync(Cluster cluster, int workers, IReadOnlyCollection<string>? requiredCapabilities = null)
     {
         JsonElement workersNow = default;
         string? nodeDiagnostic = null;
@@ -255,10 +263,10 @@ public sealed class DockerClusterTests
             nodeDiagnostic = all.ToString();
             var online = all.EnumerateArray().Where(node => node.GetProperty("name").GetString()!.StartsWith("worker", StringComparison.Ordinal) && node.GetProperty("status").GetString() == "online").ToArray();
             if (online.Length != workers) return false;
-            if (requireStoreCapabilities)
+            if (requiredCapabilities is { Count: > 0 })
             {
-                var requiredCapabilities = new HashSet<string>(["plugin/video", "ffmpeg"], StringComparer.Ordinal);
-                if (online.Any(node => !requiredCapabilities.IsSubsetOf(node.GetProperty("capabilities").EnumerateArray()
+                var required = requiredCapabilities.ToHashSet(StringComparer.Ordinal);
+                if (online.Any(node => !required.IsSubsetOf(node.GetProperty("capabilities").EnumerateArray()
                         .Select(capability => capability.GetProperty("toolId").GetString()!).ToHashSet(StringComparer.Ordinal)))) return false;
             }
             workersNow = JsonSerializer.SerializeToElement(online);
