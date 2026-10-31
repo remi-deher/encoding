@@ -130,20 +130,24 @@ public sealed partial class RuntimeRepository
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         IReadOnlyList<NodeToolCapability> capabilities; int capacity; NodeInventory? inventory;
-        await using(var node=Sql.Command("SELECT capabilities::text,COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id),max_concurrent_tasks),(SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),(SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),inventory::text FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND accepts_work AND 'worker'=ANY(roles) AND last_seen_at>clock_timestamp()-@offline FOR UPDATE",c,tx))
+        await using(var node=Sql.Command("SELECT capabilities::text,COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id),max_concurrent_tasks),(SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),(SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),inventory::text FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND accepts_work AND 'worker'=ANY(roles) AND last_seen_at>clock_timestamp()-@offline FOR UPDATE",
+            c,tx))
         {
             node.Parameters.AddWithValue("offline",presence.OfflineAfter); node.Parameters.AddWithValue("node",worker); await using var r=await node.ExecuteReaderAsync(ct);
             if(!await r.ReadAsync(ct)) return new(null);
-            capabilities=JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(0),Json)??[]; capacity=r.GetInt32(1); inventory=r.IsDBNull(4)?null:JsonSerializer.Deserialize<NodeInventory>(r.GetString(4),Json);
+            capabilities=JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(0),Json)??[]; capacity=r.GetInt32(1);
+                inventory=r.IsDBNull(4)?null:JsonSerializer.Deserialize<NodeInventory>(r.GetString(4),Json);
             // Le calendrier ne bloque que les nouveaux démarrages : les baux actifs ne sont ni révoqués ni interrompus.
             if(!r.IsDBNull(2) && !r.IsDBNull(3) && !new NodeSchedule(true,r.GetString(2),r.GetString(3)).IsOpen(DateTimeOffset.UtcNow)) return new(null);
         }
-        await using(var active=Sql.Command("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",c,tx))
+        await using(var active=Sql.Command("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",
+            c,tx))
         { active.Parameters.AddWithValue("worker",worker); if((long)(await active.ExecuteScalarAsync(ct))!>=capacity) return new(null); }
         var nodeIdentity=await nodeGroups.GetNodeIdentityAsync(worker,ct);
         if(nodeIdentity is null) return new(null);
         var candidates=new List<(Guid Id,Guid Library,string Path,string Key,FlowDefinition Flow,int Attempt,int Revision,long Epoch,
-            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe,DateTimeOffset QueuedAt,FlowPlacementPlan? PlacementPlan,JsonElement? BeforeMetadata)>();
+            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe,
+                DateTimeOffset QueuedAt,FlowPlacementPlan? PlacementPlan,JsonElement? BeforeMetadata)>();
         var cursorPredicate = after is null ? "" : "AND (e.queued_at,e.id) > (@after_time,@after_id)";
         await using(var read=Sql.Command($"""
           SELECT e.id,w.library_id,w.media_path,w.media_key,e.flow_definition::text,e.attempt,e.revision,w.lease_epoch,
@@ -173,11 +177,14 @@ public sealed partial class RuntimeRepository
             }
             read.Parameters.AddWithValue("page_size", CandidatePageSize);
             await using var r=await read.ExecuteReaderAsync(ct);
-            while(await r.ReadAsync(ct)) candidates.Add((r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetString(3),JsonSerializer.Deserialize<FlowDefinition>(r.GetString(4),Json)!,r.GetInt32(5),r.GetInt32(6),r.GetInt64(7),
+            while(await r.ReadAsync(ct)) candidates.Add((r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetString(3),
+                JsonSerializer.Deserialize<FlowDefinition>(r.GetString(4),Json)!,r.GetInt32(5),r.GetInt32(6),r.GetInt64(7),
                 r.IsDBNull(8)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(8),Json),
                 r.IsDBNull(9)?null:JsonSerializer.Deserialize<RuntimeHandoffSelector>(r.GetString(9),Json),
                 r.IsDBNull(10)?null:r.GetGuid(10),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:(byte[])r[12],
-                r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!),r.GetFieldValue<DateTimeOffset>(14),r.IsDBNull(15)?null:JsonSerializer.Deserialize<FlowPlacementPlan>(r.GetString(15),Json),r.IsDBNull(16)?null:JsonSerializer.Deserialize<JsonElement>(r.GetString(16),Json)));
+                r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!),
+                    r.GetFieldValue<DateTimeOffset>(14),r.IsDBNull(15)?null:JsonSerializer.Deserialize<FlowPlacementPlan>(r.GetString(15),Json),
+                    r.IsDBNull(16)?null:JsonSerializer.Deserialize<JsonElement>(r.GetString(16),Json)));
         }
         var placementCandidatesByLibrary=new Dictionary<Guid,IReadOnlyList<NodePlacementCandidate>>();
         var placementPlans=new Dictionary<(Guid Library,Guid Flow,int Version,string Metadata),FlowPlacementPlan>();
@@ -248,7 +255,8 @@ public sealed partial class RuntimeRepository
                 && (plan.Strategy == FlowPlacementPlan.StrategyDirectUnified && plan.AssignedNodeId == worker
                     || plan.Strategy == FlowPlacementPlan.StrategyTransferWorker && plan.AssignedNodeId == worker);
 
-            if(item.Probe is null && !planValidatesWorker && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,inventory,
+            if(item.Probe is null && !planValidatesWorker
+                && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,inventory,
                 placementIsPersisted || item.Checkpoint is null ? plan?.NodeAssignments : null)) continue;
             var sourceEditResume=false;
             await using(var waiting=Sql.Command("SELECT EXISTS(SELECT 1 FROM runtime_source_write_waits WHERE execution_id=@id)",c,tx))
@@ -282,7 +290,8 @@ public sealed partial class RuntimeRepository
             var needsWrite=item.Flow.Nodes.Any(n=>components.Resolve(n.Component)!.RequiresWriteAccess);
             bool replacementAccess = false;
             if (needsWrite)
-            await using (var policy = Sql.Command("SELECT w.media_policy<>'beside' AND EXISTS(SELECT 1 FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled) FROM execution_work w WHERE w.execution_id=@id", c, tx))
+            await using (var policy = Sql.Command("SELECT w.media_policy<>'beside' AND EXISTS(SELECT 1 FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled) FROM execution_work w WHERE w.execution_id=@id",
+                c, tx))
             {
                 policy.Parameters.AddWithValue("id", item.Id);
                 replacementAccess = await policy.ScalarBoolAsync(ct);
@@ -309,7 +318,8 @@ public sealed partial class RuntimeRepository
                         AND sn.deleted_at IS NULL AND sn.last_seen_at>clock_timestamp()-@offline))
                   """,c,tx))
                 {
-                    access.Parameters.AddWithValue("offline",presence.OfflineAfter); access.Parameters.AddWithValue("library",item.Library); access.Parameters.AddWithValue("worker",worker); access.Parameters.AddWithValue("write",needsWrite);
+                    access.Parameters.AddWithValue("offline",presence.OfflineAfter); access.Parameters.AddWithValue("library",item.Library);
+                        access.Parameters.AddWithValue("worker",worker); access.Parameters.AddWithValue("write",needsWrite);
                     access.Parameters.AddWithValue("direct",needsDirect); access.Parameters.AddWithValue("defer",deferToDirect);
                     await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
                     source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
@@ -357,7 +367,8 @@ public sealed partial class RuntimeRepository
                     {
                         await using var actor=Sql.Command("UPDATE executions SET node_id=@worker WHERE id=@id",c,tx);
                         actor.Parameters.AddWithValue("id",item.Id); actor.Parameters.AddWithValue("worker",worker); await actor.ExecuteNonQueryAsync(ct);
-                        await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"La configuration du relais ne désigne pas un worker valide."),c,tx,ct);
+                        await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,
+                            "La configuration du relais ne désigne pas un worker valide."),c,tx,ct);
                         await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return new(null);
                     }
                     if(destination.Mode=="node" && destination.TargetNodeId==worker) returnsToSelf=true;
@@ -395,14 +406,17 @@ public sealed partial class RuntimeRepository
                 uncertain.Parameters.AddWithValue("id",item.Id);
                 if((await uncertain.ScalarBoolAsync(ct)))
                 {
-                    await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"Une étape externe a un effet incertain après interruption. Une relance explicite est nécessaire."),c,tx,ct);
+                    await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,
+                        "Une étape externe a un effet incertain après interruption. Une relance explicite est nécessaire."),c,tx,ct);
                     await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return new(null);
                 }
             }
             if(!await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"running",worker,null,
-                item.Probe is not null?"Vérification de la condition d'attente confiée au worker.":item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),c,tx,ct)) return new(null);
+                item.Probe is not null?"Vérification de la condition d'attente confiée au worker.":item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),
+                    c,tx,ct)) return new(null);
             RuntimeCheckpoint? checkpoint=null; string? sourceSha=null; DateTimeOffset expires;
-            await using(var state=Sql.Command("SELECT source_sha,lease_until,(SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1) FROM execution_work WHERE execution_id=@id",c,tx))
+            await using(var state=Sql.Command("SELECT source_sha,lease_until,(SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1) FROM execution_work WHERE execution_id=@id",
+                c,tx))
             {
                 state.Parameters.AddWithValue("id",item.Id); await using var r=await state.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
                 sourceSha=r.IsDBNull(0)?null:r.GetString(0); expires=r.GetFieldValue<DateTimeOffset>(1);
@@ -416,7 +430,10 @@ public sealed partial class RuntimeRepository
                 await prepare.ExecuteNonQueryAsync(ct);
             }
             if(ownership is not null) await ownership.SaveCheckpointAsync(item.Id,c,tx,ct);
-            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,SourceWriteGuardsSupported:sourceWrites is not null,VerifyPublicationAccess:needsWrite,VerifyReplacementAccess:replacementAccess,PlacementPlan:plan));
+            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,
+                item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,
+                SourceWriteGuardsSupported:sourceWrites is not null,VerifyPublicationAccess:needsWrite,VerifyReplacementAccess:replacementAccess,
+                PlacementPlan:plan));
         }
         return new(null, candidates.Count == CandidatePageSize
             ? new(candidates[^1].QueuedAt, candidates[^1].Id) : null);

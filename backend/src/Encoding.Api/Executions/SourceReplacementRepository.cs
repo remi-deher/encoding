@@ -19,7 +19,8 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource,ClusterS
     /// <returns>false si la bibliothèque est introuvable ou si la révision attendue est périmée.</returns>
     public async Task<bool> SavePolicyAsync(Guid library,SaveLibraryReplacementPolicy request,CancellationToken ct)
     {
-        if(request.GracePeriodHours is <1 or >8760 || request.ExpectedRevision is <0 or int.MaxValue) throw new ArgumentException("La période de grâce doit être comprise entre 1 heure et 8 760 heures.");
+        if(request.GracePeriodHours is <1 or >8760
+            || request.ExpectedRevision is <0 or int.MaxValue) throw new ArgumentException("La période de grâce doit être comprise entre 1 heure et 8 760 heures.");
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         await using var locked=Sql.Command("SELECT id FROM libraries WHERE id=@id FOR UPDATE",c,tx); locked.Parameters.AddWithValue("id",library);
         if(await locked.ExecuteScalarAsync(ct) is null) return false;
@@ -29,7 +30,8 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource,ClusterS
           INSERT INTO library_replacement_policies(library_id,enabled,grace_period_hours,revision) VALUES(@id,@enabled,@hours,@revision)
           ON CONFLICT(library_id) DO UPDATE SET enabled=@enabled,grace_period_hours=@hours,revision=@revision
           """,c,tx);
-        save.Parameters.AddWithValue("id",library); save.Parameters.AddWithValue("enabled",request.Enabled); save.Parameters.AddWithValue("hours",request.GracePeriodHours); save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);
+        save.Parameters.AddWithValue("id",library); save.Parameters.AddWithValue("enabled",request.Enabled); save.Parameters.AddWithValue("hours",
+            request.GracePeriodHours); save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);
         await save.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return true;
     }
 
@@ -67,7 +69,8 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource,ClusterS
     /// <summary>Le fichier produit par le système ne doit pas être remis automatiquement en file par la surveillance.</summary>
     private static async Task MarkAsync(Guid library,string path,long bytes,DateTimeOffset modified,Guid execution,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var mark=Sql.Command("INSERT INTO media_replacement_marks(library_id,relative_path,byte_length,modified_at,execution_id) VALUES(@library,@path,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
+        await using var mark=Sql.Command("INSERT INTO media_replacement_marks(library_id,relative_path,byte_length,modified_at,execution_id) VALUES(@library,@path,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",
+            c,tx);
         mark.Parameters.AddWithValue("library",library); mark.Parameters.AddWithValue("path",path); mark.Parameters.AddWithValue("bytes",bytes);
         mark.Parameters.AddWithValue("modified",modified.ToUniversalTime()); mark.Parameters.AddWithValue("execution",execution); await mark.ExecuteNonQueryAsync(ct);
     }
@@ -101,7 +104,8 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource,ClusterS
           INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until) VALUES(@library,@key,@id,-1,clock_timestamp()+@lease) ON CONFLICT DO NOTHING
           """,c,tx))
         {
-            reserve.Parameters.AddWithValue("library",library); reserve.Parameters.AddWithValue("key",key); reserve.Parameters.AddWithValue("id",execution); reserve.Parameters.AddWithValue("lease",RollbackReservation);
+            reserve.Parameters.AddWithValue("library",library); reserve.Parameters.AddWithValue("key",key); reserve.Parameters.AddWithValue("id",execution);
+                reserve.Parameters.AddWithValue("lease",RollbackReservation);
             if(await reserve.ExecuteNonQueryAsync(ct)<1) return "busy";
         }
         await using var update=Sql.Command("UPDATE source_replacements SET state='rollback_requested',detail=NULL WHERE execution_id=@id",c,tx);
@@ -125,7 +129,8 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource,ClusterS
           ORDER BY r.replaced_at LIMIT 20
           """);
         cmd.Parameters.AddWithValue("node",node); await using var r=await cmd.ExecuteReaderAsync(ct); var tasks=new List<RuntimeReplacementTask>();
-        while(await r.ReadAsync(ct)) tasks.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetString(6),r.GetString(7),SourceWriteGuardsSupported:sourceWrites is not null));
+        while(await r.ReadAsync(ct)) tasks.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetString(6),
+            r.GetString(7),SourceWriteGuardsSupported:sourceWrites is not null));
         return tasks;
     }
 
@@ -167,9 +172,11 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource,ClusterS
             if(request.ByteLength is not>0 || request.ModifiedAt is null) return false;
             await MarkAsync(library,original,request.ByteLength.Value,request.ModifiedAt.Value,execution,c,tx,ct);
         }
-        await using(var update=Sql.Command("UPDATE source_replacements SET state=@state,detail=@detail,finished_at=CASE WHEN @state IN ('rolled_back','finalized','retained') THEN clock_timestamp() END WHERE execution_id=@id",c,tx))
+        await using(var update=Sql.Command("UPDATE source_replacements SET state=@state,detail=@detail,finished_at=CASE WHEN @state IN ('rolled_back','finalized','retained') THEN clock_timestamp() END WHERE execution_id=@id",
+            c,tx))
         {
-            update.Parameters.AddWithValue("id",execution); update.Parameters.AddWithValue("state",next); update.Parameters.AddWithValue("detail",SqlKind.Text,(object?)request.Detail??DBNull.Value); await update.ExecuteNonQueryAsync(ct);
+            update.Parameters.AddWithValue("id",execution); update.Parameters.AddWithValue("state",next); update.Parameters.AddWithValue("detail",SqlKind.Text,
+                (object?)request.Detail??DBNull.Value); await update.ExecuteNonQueryAsync(ct);
         }
         if(state=="rollback_requested")
         {

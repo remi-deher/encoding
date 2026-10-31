@@ -4,6 +4,44 @@ namespace Encoding.Api.Mcp;
 
 public static partial class BusinessOperationCatalog
 {
+    private static readonly HashSet<string> Mutations = new(StringComparer.Ordinal)
+    {
+        "create_flow", "clone_flow", "delete_flow", "save_script", "publish_script",
+        "save_encoding_profile", "publish_encoding_profile", "create_template_from_flow",
+        "create_component_pack_from_flow", "save_plugin_configuration", "save_flow_plugin_configuration", "configure_library_node_access",
+        "save_library_processing", "set_library_activation", "assign_library_flow", "request_library_discovery",
+        "create_library", "update_library", "delete_library", "save_node_group", "delete_node_group",
+        "save_node_identity", "set_node_draining", "save_node_processing", "cancel_execution", "retry_execution", "resume_execution",
+        "delete_script", "create_resource", "update_resource", "add_resource_version", "delete_resource"
+    };
+
+    private static readonly HashSet<string> AssistantActions = new(StringComparer.Ordinal)
+    {
+        "publish-flow", "delete-flow", "start-library", "cancel-execution",
+        "assign-library-flow", "create-flow-template"
+    };
+
+    public static IReadOnlyList<BusinessOperationDescriptor> Describe() =>
+        DescribeTools().Concat(AssistantActions.Order(StringComparer.Ordinal).Select(ActionDescriptor)).ToArray();
+
+    public static IReadOnlyList<BusinessOperationDescriptor> DescribeTools() =>
+        ToolDefinitions.Select(tool =>
+        {
+            var mutation = Mutations.Contains(tool.Name);
+            return new BusinessOperationDescriptor(
+                tool.Name,
+                DomainFor(tool.Name),
+                tool.Description,
+                !mutation,
+                mutation,
+                !mutation,
+                CompleteInputSchema(tool.InputSchema),
+                RequiresConfirmation: mutation);
+        }).ToArray();
+
+    public static BusinessOperationDescriptor? FindTool(string name) =>
+        DescribeTools().FirstOrDefault(operation => operation.Name == name);
+
     public static bool ValidateArguments(string name, System.Text.Json.JsonElement arguments)
     {
         var operation = FindTool(name);
@@ -152,8 +190,12 @@ public static partial class BusinessOperationCatalog
     {
         object schema = name switch
         {
-            "assign-library-flow" => new { type = "object", properties = new { resourceId = new { type = "string" }, expectedVersion = new { type = "integer" }, flowId = new { type = "string" }, flowVersion = new { type = "integer" } }, required = new[] { "resourceId", "expectedVersion", "flowId", "flowVersion" } },
-            "create-flow-template" => new { type = "object", properties = new { resourceId = new { type = "string" }, expectedVersion = new { type = "integer" }, templateName = new { type = "string" } }, required = new[] { "resourceId", "expectedVersion", "templateName" } },
+            "assign-library-flow" => new { type = "object", properties = new { resourceId = new { type = "string" }, expectedVersion = new { type = "integer" },
+                flowId = new { type = "string" }, flowVersion = new { type = "integer" } }, required = new[] { "resourceId", "expectedVersion", "flowId",
+                "flowVersion" } },
+            "create-flow-template" => new { type = "object", properties = new { resourceId = new { type = "string" },
+                expectedVersion = new { type = "integer" }, templateName = new { type = "string" } }, required = new[] { "resourceId", "expectedVersion",
+                "templateName" } },
             _ => new { type = "object", properties = new { resourceId = new { type = "string" }, expectedVersion = new { type = "integer" } }, required = new[] { "resourceId", "expectedVersion" } }
         };
         return new(name, name switch

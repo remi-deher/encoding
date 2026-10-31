@@ -13,12 +13,18 @@ public sealed record MediaActionOutcome(string? Primary,IReadOnlyList<string> Ad
 public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IToolCapabilityProbe capabilities,ILogger<MediaActions>? logger=null)
 {
     public static string Text(IReadOnlyDictionary<string,JsonElement> c,string key,string fallback="")=>c.TryGetValue(key,out var v)&&v.ValueKind==JsonValueKind.String?v.GetString()!:fallback;
-    public static string Number(IReadOnlyDictionary<string,JsonElement> c,string key,decimal fallback=0)=>c.TryGetValue(key,out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetDecimal(out var n)?n.ToString(CultureInfo.InvariantCulture):fallback.ToString(CultureInfo.InvariantCulture);
-    public static bool Flag(IReadOnlyDictionary<string,JsonElement> c,string key,bool fallback=false)=>c.TryGetValue(key,out var v)&&v.ValueKind is JsonValueKind.True or JsonValueKind.False?v.GetBoolean():fallback;
-    private static int[] Ids(string value)=>string.IsNullOrWhiteSpace(value)?[]:value.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Select(value=>int.TryParse(value,out var id)&&id>=0?id:throw new IOException("Identifiant de piste invalide.")).Distinct().ToArray();
-    private static string Output(string directory,string node,string extension)=>Path.Combine(directory,"out-"+Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(node)))[..16]+extension);
+    public static string Number(IReadOnlyDictionary<string,JsonElement> c,string key,decimal fallback=0)=>c.TryGetValue(key,
+        out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetDecimal(out var n)?n.ToString(CultureInfo.InvariantCulture):fallback.ToString(CultureInfo.InvariantCulture);
+    public static bool Flag(IReadOnlyDictionary<string,JsonElement> c,string key,bool fallback=false)=>c.TryGetValue(key,
+        out var v)&&v.ValueKind is JsonValueKind.True or JsonValueKind.False?v.GetBoolean():fallback;
+    private static int[] Ids(string value)=>string.IsNullOrWhiteSpace(value)?[]:value.Split(',',
+        StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Select(value=>int.TryParse(value,
+        out var id)&&id>=0?id:throw new IOException("Identifiant de piste invalide.")).Distinct().ToArray();
+    private static string Output(string directory,string node,string extension)=>Path.Combine(directory,
+        "out-"+Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(node)))[..16]+extension);
 
-    public async Task<MediaActionOutcome> ExecuteAsync(string id,IReadOnlyDictionary<string,JsonElement> config,string current,string directory,string node,Func<string,Task<string>> extra,Guid workerId,CancellationToken ct,JsonElement? knownMetadata=null)
+    public async Task<MediaActionOutcome> ExecuteAsync(string id,IReadOnlyDictionary<string,JsonElement> config,string current,string directory,string node,
+        Func<string,Task<string>> extra,Guid workerId,CancellationToken ct,JsonElement? knownMetadata=null)
     {
         if(id.StartsWith("base-probe-",StringComparison.Ordinal) || id.StartsWith("probe-",StringComparison.Ordinal))
         {
@@ -33,7 +39,8 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             using var json=JsonDocument.Parse(raw); var value=json.RootElement.Clone();
             if(id is "base-export-media-report" or "probe-export-report") { var file=Output(directory,node,".json"); await File.WriteAllTextAsync(file,raw,ct); return new(null,[file],value); }
             if(id is not ("base-inspect-media" or "probe-inspect-media") && value.TryGetProperty("media",out var media) && media.TryGetProperty("track",out var tracks))
-                value=JsonSerializer.SerializeToElement(tracks.EnumerateArray().Where(track=>id is not ("base-inspect-hdr" or "probe-inspect-hdr")||track.TryGetProperty("@type",out var type)&&type.GetString()=="Video").Skip(int.Parse(Number(config,"trackId"))).Take(1));
+                value=JsonSerializer.SerializeToElement(tracks.EnumerateArray().Where(track=>id is not ("base-inspect-hdr" or "probe-inspect-hdr")||track.TryGetProperty("@type",
+                    out var type)&&type.GetString()=="Video").Skip(int.Parse(Number(config,"trackId"))).Take(1));
             return new(null,[],value);
         }
         if(id is "base-transcode-video" or "video-transcode" or "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize" or "base-resize-video" or "video-resize" or "base-remux-media" or "video-remux-media" or "base-auto-crop" or "video-auto-crop" or "base-deinterlace-video" or "video-deinterlace")
@@ -45,7 +52,8 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             if(Text(config,"language")!="")
             {
                 var metadata=await scanner.ScanAsync(current,ct);
-                selected=metadata.GetProperty("streams").EnumerateArray().Where(s=>s.TryGetProperty("tags",out var tags)&&tags.TryGetProperty("language",out var language)&&language.GetString()==Text(config,"language")
+                selected=metadata.GetProperty("streams").EnumerateArray().Where(s=>s.TryGetProperty("tags",out var tags)&&tags.TryGetProperty("language",
+                    out var language)&&language.GetString()==Text(config,"language")
                     && (selected.Length==0||selected.Contains(s.GetProperty("index").GetInt32()))
                     && (Text(config,"trackType","all")=="all" || s.GetProperty("codec_type").GetString()==(Text(config,"trackType")=="subtitles"?"subtitle":Text(config,"trackType"))))
                     .Select(s=>s.GetProperty("index").GetInt32()).ToArray();
@@ -58,18 +66,21 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         if(id is "base-video-thumbnail" or "video-thumbnail")
         {
             var file=Output(directory,node,".jpg");
-            await tools.CheckedAsync("ffmpeg",["-nostdin","-y","-v","error","-ss",Number(config,"positionSeconds"),"-i",current,"-frames:v","1","-vf","scale="+Number(config,"width",1280)+":"+Number(config,"height",720)+":force_original_aspect_ratio=decrease",file],directory,ct);
+            await tools.CheckedAsync("ffmpeg",["-nostdin","-y","-v","error","-ss",Number(config,"positionSeconds"),"-i",current,"-frames:v","1","-vf",
+                "scale="+Number(config,"width",1280)+":"+Number(config,"height",720)+":force_original_aspect_ratio=decrease",file],directory,ct);
             return new(null,[file]);
         }
         if(id is "base-extract-audio" or "audio-extract")
         {
             var codec=Text(config,"audioCodec","copy"); var file=Output(directory,node,codec=="flac"?".flac":codec=="opus"?".opus":".mka");
-            await tools.CheckedAsync("ffmpeg",["-nostdin","-y","-v","error","-i",current,"-map","0:a:"+Number(config,"trackId"),"-vn","-c:a",codec=="opus"?"libopus":codec,file],directory,ct); return new(null,[file]);
+            await tools.CheckedAsync("ffmpeg",["-nostdin","-y","-v","error","-i",current,"-map","0:a:"+Number(config,"trackId"),"-vn","-c:a",
+                codec=="opus"?"libopus":codec,file],directory,ct); return new(null,[file]);
         }
         if(id is "base-extract-subtitles" or "subtitles-extract")
         {
             var metadata=await scanner.ScanAsync(current,ct); var selected=Ids(Text(config,"trackIds")); var files=new List<string>();
-            foreach(var stream in metadata.GetProperty("streams").EnumerateArray().Where(s=>s.GetProperty("codec_type").GetString()=="subtitle" && (selected.Length==0||selected.Contains(s.GetProperty("index").GetInt32()))))
+            foreach(var stream in metadata.GetProperty("streams").EnumerateArray().Where(s=>s.GetProperty("codec_type").GetString()=="subtitle"
+                && (selected.Length==0||selected.Contains(s.GetProperty("index").GetInt32()))))
             {
                 var file=Output(directory,node+stream.GetProperty("index").GetInt32(),stream.GetProperty("codec_name").GetString()=="ass"?".ass":".srt");
                 await tools.CheckedAsync("ffmpeg",["-nostdin","-y","-v","error","-i",current,"-map","0:"+stream.GetProperty("index").GetInt32(),file],directory,ct); files.Add(file);

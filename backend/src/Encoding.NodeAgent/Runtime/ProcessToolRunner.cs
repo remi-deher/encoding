@@ -70,7 +70,8 @@ public sealed class ProcessToolRunner
         {
             if (!trackProgress || progressDurationSeconds is not > 0) return null;
             var matches = System.Text.RegularExpressions.Regex.Matches(outputLog.ToString(), @"(?:^|\n)out_time_us=(\d+)");
-            if (matches.Count == 0 || !double.TryParse(matches[^1].Groups[1].Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var microseconds)) return null;
+            if (matches.Count == 0 || !double.TryParse(matches[^1].Groups[1].Value, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var microseconds)) return null;
             return (decimal)Math.Clamp(microseconds / 1000000 / progressDurationSeconds.Value * 100, 0, 100);
         }
 

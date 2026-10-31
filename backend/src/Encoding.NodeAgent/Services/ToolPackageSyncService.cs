@@ -22,7 +22,8 @@ public sealed class ToolPackageSyncService(NodeAgentOptions options, WorkerIdent
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await SyncOnceAsync(stoppingToken); }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or JsonException && !stoppingToken.IsCancellationRequested)
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or JsonException
+                && !stoppingToken.IsCancellationRequested)
             { logger.LogWarning("La synchronisation des outils gérés a échoué : {Reason}", exception.Message); }
             await Task.Delay(Interval, stoppingToken);
         }
@@ -51,7 +52,8 @@ public sealed class ToolPackageSyncService(NodeAgentOptions options, WorkerIdent
             var marker = Path.Combine(target, ".verified");
             if (File.Exists(marker) && string.Equals(File.ReadAllText(marker).Trim(), item.ArchiveSha256, StringComparison.OrdinalIgnoreCase)) continue;
             try { await InstallAsync(identity, activeServer, item, target, ct); changed = true; }
-            catch (ToolPackageException exception) { logger.LogError("Le paquet outil {ToolId} {Version} ({Platform}) est refusé : {Reason}", item.Id, item.Version, item.Platform, exception.Message); }
+            catch (ToolPackageException exception) { logger.LogError("Le paquet outil {ToolId} {Version} ({Platform}) est refusé : {Reason}", item.Id,
+                item.Version, item.Platform, exception.Message); }
         }
         foreach (var toolDirectory in Directory.EnumerateDirectories(Root))
             foreach (var versionDirectory in Directory.EnumerateDirectories(toolDirectory))

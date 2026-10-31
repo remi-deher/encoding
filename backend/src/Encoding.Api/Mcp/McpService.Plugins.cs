@@ -289,9 +289,12 @@ public sealed partial class McpService
                 executables = new[] { "mkvmerge", "mkvextract", "mkvpropedit" },
                 subTools = new[]
                 {
-                    new { executable = "mkvmerge", purpose = "Remuxer des conteneurs, sélectionner/ordonner des flux et ajouter des pistes.", exitCodeRules = "Code 0 = Succès, Code 1 = Succès avec avertissements mineurs (valide), Code > 1 = Erreur critique." },
+                    new { executable = "mkvmerge", purpose = "Remuxer des conteneurs, sélectionner/ordonner des flux et ajouter des pistes.",
+                        exitCodeRules = "Code 0 = Succès, Code 1 = Succès avec avertissements mineurs (valide), Code > 1 = Erreur critique." },
                     new { executable = "mkvextract", purpose = "Extraire des pistes de sous-titres (ASS/SRT), pistes audio natives, chapitres ou pièces jointes.", exitCodeRules = "Code 0 = Succès." },
-                    new { executable = "mkvpropedit", purpose = "Modifier les métadonnées de pistes (titre, langue, flag 'default', flag 'forced') directement sur la copie de travail sans réécriture intégrale.", exitCodeRules = "Code 0 = Succès, Code 1 = Avertissements." }
+                    new { executable = "mkvpropedit",
+                        purpose = "Modifier les métadonnées de pistes (titre, langue, flag 'default', flag 'forced') directement sur la copie de travail sans réécriture intégrale.",
+                        exitCodeRules = "Code 0 = Succès, Code 1 = Avertissements." }
                 }
             },
             "mediainfo" => new

@@ -26,9 +26,11 @@ public static class AiToolEndpoints
         group.MapPost("/{id}/auth/input", async (string id, AiCliAuthInputRequest request, DeviceCodeAuthService service, CancellationToken ct) =>
             await GuardAsync(async () => { await service.SubmitAuthInputAsync(id, request.Input, ct, request.AttemptId); return Results.Ok(new { accepted = true }); }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapGet("/{id}/auth/device-code/status", async (string id, DeviceCodeAuthService service, CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));
+        group.MapGet("/{id}/auth/device-code/status", async (string id, DeviceCodeAuthService service,
+            CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));
         group.MapPost("/claude-cli/auth/token", async (ClaudeTokenRequest request, DeviceCodeAuthService service, AiQuotaService quotas, AiModelCatalogService models, CancellationToken ct) =>
-            await GuardAsync(async () => { quotas.Invalidate("claude-cli"); models.Invalidate("claude-cli"); try { await service.SaveClaudeTokenAsync(request.Token, ct); return Results.Ok(new { saved = true }); } finally { quotas.Invalidate("claude-cli"); models.Invalidate("claude-cli"); } }))
+            await GuardAsync(async () => { quotas.Invalidate("claude-cli"); models.Invalidate("claude-cli"); try { await service.SaveClaudeTokenAsync(request.Token,
+                ct); return Results.Ok(new { saved = true }); } finally { quotas.Invalidate("claude-cli"); models.Invalidate("claude-cli"); } }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapPost("/{id}/auth/cancel", async (string id, AiCliAuthCancelRequest request, DeviceCodeAuthService service) =>
         {
@@ -36,7 +38,8 @@ public static class AiToolEndpoints
             return Results.Ok();
         }).RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapDelete("/{id}/auth", async (string id, DeviceCodeAuthService service, AiQuotaService quotas, AiModelCatalogService models, CancellationToken ct) =>
-            await GuardAsync(async () => { quotas.Invalidate(id); models.Invalidate(id); try { return Results.Ok(new { revoked = await service.RevokeAuthAsync(id, ct) }); } finally { quotas.Invalidate(id); models.Invalidate(id); } }))
+            await GuardAsync(async () => { quotas.Invalidate(id); models.Invalidate(id); try { return Results.Ok(new { revoked = await service.RevokeAuthAsync(id,
+                ct) }); } finally { quotas.Invalidate(id); models.Invalidate(id); } }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapGet("/settings", async (AiClusterService service, CancellationToken ct) => PublicSettings(await service.GetSettingsAsync(ct)));
         group.MapGet("/settings/model-options", async (bool? refresh, AiClusterService service, CancellationToken ct) =>

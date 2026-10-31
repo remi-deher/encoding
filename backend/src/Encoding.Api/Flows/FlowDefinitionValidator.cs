@@ -15,7 +15,8 @@ public sealed class FlowDefinitionValidator(
     {
         // A disabled plugin may remain in an editable draft; publication and execution are checked separately.
         var result=Validate(flow,true,false);
-        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict","wait.invalid","wait.block.invalid","builder.scope.invalid","builder.scope.unclosed"};
+        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown",
+            "connection.output.unknown","node.constraint.conflict","wait.invalid","wait.block.invalid","builder.scope.invalid","builder.scope.unclosed"};
         var issues=result.Issues.Where(issue=>!allowed.Contains(issue.Code)
             && !(issue.Code=="field.invalid" && (issue.Message=="Ce paramètre est obligatoire."
                 || issue.Path.EndsWith("/targetNodeId",StringComparison.Ordinal)
@@ -87,7 +88,8 @@ public sealed class FlowDefinitionValidator(
             if (checkPluginActivation && activation is not null && !activation.IsPluginEnabled(pluginId))
                 Issue("plugin.disabled", path + "/component", "Ce plugin est désactivé pour les nouveaux traitements du cluster.");
             nodes.Add(node.Id, component);
-            if (!component.SupportedFlowMediaTypes.Contains(flow.MediaType, StringComparer.Ordinal)) Issue("component.incompatible", path + "/component", "Composant incompatible avec le média du flow.");
+            if (!component.SupportedFlowMediaTypes.Contains(flow.MediaType, StringComparer.Ordinal)) Issue("component.incompatible", path + "/component",
+                "Composant incompatible avec le média du flow.");
             if (node.Configuration is null) { Issue("configuration.required", path + "/configuration", "La configuration doit être un objet."); continue; }
             foreach (var key in node.Configuration.Keys)
                 if (!component.ConfigurationSchema.Fields.Any(f => f.Id == key)) Issue("field.unknown", path + "/configuration/" + Pointer(key), "Champ inconnu.");
@@ -166,7 +168,8 @@ public sealed class FlowDefinitionValidator(
             if (edge.SourceNodeId is null || edge.TargetNodeId is null || !ids.Contains(edge.SourceNodeId) || !ids.Contains(edge.TargetNodeId))
             { Issue("connection.node.unknown", path, "La connexion référence un bloc inconnu."); continue; }
             if (edge.SourceNodeId == edge.TargetNodeId) Issue("connection.self", path, "Un bloc ne peut pas se relier à lui-même.");
-            if (nodes.TryGetValue(edge.SourceNodeId, out var source) && !source.Outputs.Any(o => o.Id == edge.SourceOutputId)) Issue("connection.output.unknown", path + "/sourceOutputId", "Sortie non déclarée.");
+            if (nodes.TryGetValue(edge.SourceNodeId, out var source)
+                && !source.Outputs.Any(o => o.Id == edge.SourceOutputId)) Issue("connection.output.unknown", path + "/sourceOutputId", "Sortie non déclarée.");
             if (nodes.TryGetValue(edge.TargetNodeId, out var target) && target.Kind == "input") Issue("connection.entry", path + "/targetNodeId", "L’entrée du flow ne reçoit pas de liaison.");
             if (!outputs.Add((edge.SourceNodeId, edge.SourceOutputId))) Issue("connection.output.duplicate", path, "Une sortie ne peut être reliée qu’une fois.");
             outgoing[edge.SourceNodeId].Add(edge.TargetNodeId);
@@ -197,7 +200,8 @@ public sealed class FlowDefinitionValidator(
             var reachable = new HashSet<string>(StringComparer.Ordinal); var pending = new Queue<string>(); pending.Enqueue(reference.NodeId);
             while (pending.TryDequeue(out var current))
                 if (reachable.Add(current) && outgoing.TryGetValue(current, out var targets)) foreach (var target in targets) pending.Enqueue(target);
-            if (!reachable.Contains(consumer.Id)) Issue("artifact.reference.invalid", "/nodes/" + consumer.Id + "/configuration/sourceFile", "Le producteur doit précéder le consommateur sur un chemin du flow.");
+            if (!reachable.Contains(consumer.Id)) Issue("artifact.reference.invalid", "/nodes/" + consumer.Id + "/configuration/sourceFile",
+                "Le producteur doit précéder le consommateur sur un chemin du flow.");
         }
         var packInstanceIds = new HashSet<string>(StringComparer.Ordinal);
         var packMembers = new Dictionary<string, FlowComponentPackInstance>(StringComparer.Ordinal);
@@ -358,7 +362,9 @@ public sealed class FlowDefinitionValidator(
                 return value.ValueKind == JsonValueKind.String && VideoEncoderCatalog.Find(value.GetString()) is not null
                     ? null : "Choisissez un encodeur pris en charge.";
             case "boolean": return value.ValueKind is JsonValueKind.True or JsonValueKind.False ? null : "Une valeur Oui ou Non est attendue.";
-            case "select": return value.ValueKind == JsonValueKind.String && (field.Options ?? []).Any(o => o.Value == value.GetString() && (o.SupportedFlowMediaTypes is null || o.SupportedFlowMediaTypes.Contains(mediaType))) ? null : "Choisissez une valeur proposée pour ce média.";
+            case "select": return value.ValueKind == JsonValueKind.String && (field.Options ?? []).Any(o => o.Value == value.GetString()
+                && (o.SupportedFlowMediaTypes is null
+                || o.SupportedFlowMediaTypes.Contains(mediaType))) ? null : "Choisissez une valeur proposée pour ce média.";
             case "number":
                 if (value.ValueKind != JsonValueKind.Number || !value.TryGetDecimal(out var number)) return "Un nombre valide est attendu.";
                 if (field.Min is { } min && number < min) return $"Minimum : {min}.";

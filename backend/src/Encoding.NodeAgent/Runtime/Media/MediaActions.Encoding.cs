@@ -9,7 +9,8 @@ namespace Encoding.NodeAgent.Runtime.Media;
 
 public sealed partial class MediaActions
 {
-    public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true,IReadOnlySet<int>? forceCpuFallbackSteps=null,JsonElement? knownMetadata=null)
+    public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,
+        CancellationToken ct,bool preserve=true,IReadOnlySet<int>? forceCpuFallbackSteps=null,JsonElement? knownMetadata=null)
     {
         // This input is immutable while the command is composed. Share one mandatory
         // inspection across selection, resize and video policy; output validation is separate.
@@ -30,10 +31,13 @@ public sealed partial class MediaActions
         var input=new List<string> { "-nostdin","-y","-v","error" }; var args=new List<string> { "-c","copy" }; var videoFilters=new List<string>(); var hardwareMode="cpu";
         var resolutions=new List<ResolvedVideoEncoding>();
         var hardwareFallbackSteps=new HashSet<int>();
-        if(preserve || !plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode" or "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize" or "base-resize-video" or "video-resize" or "base-auto-crop" or "video-auto-crop" or "base-deinterlace-video" or "video-deinterlace")) args.AddRange(["-map","0"]);
+        if(preserve || !plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode" or "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize" or "base-resize-video" or "video-resize" or "base-auto-crop" or "video-auto-crop" or "base-deinterlace-video" or "video-deinterlace")) args.AddRange(["-map",
+            "0"]);
         else {
-            if(plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode" or "base-resize-video" or "video-resize" or "base-auto-crop" or "video-auto-crop" or "base-deinterlace-video" or "video-deinterlace")) args.AddRange(["-map","0:v?"]);
-            foreach(var track in plan.Where(p=>p.ComponentId is "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize").Select(p=>Number(p.Configuration,"trackId")).Distinct()) args.AddRange(["-map","0:a:"+track]);
+            if(plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode" or "base-resize-video" or "video-resize" or "base-auto-crop" or "video-auto-crop" or "base-deinterlace-video" or "video-deinterlace")) args.AddRange(["-map",
+                "0:v?"]);
+            foreach(var track in plan.Where(p=>p.ComponentId is "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize").Select(p=>Number(p.Configuration,
+                "trackId")).Distinct()) args.AddRange(["-map","0:a:"+track]);
         }
         for(var stepIndex=0;stepIndex<plan.Count;stepIndex++)
         {
@@ -133,7 +137,8 @@ public sealed partial class MediaActions
                     break;
                 }
                 case "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize": break;
-                case "base-resize-video" or "video-resize": videoFilters.Add(VideoResizePolicy.Filter(c)); if(!plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode")) args.AddRange(["-c:v","libx264"]); break;
+                case "base-resize-video" or "video-resize": videoFilters.Add(VideoResizePolicy.Filter(c));
+                    if(!plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode")) args.AddRange(["-c:v","libx264"]); break;
                 case "base-auto-crop" or "video-auto-crop":
                     var cropF=Text(c,"cropFilter");
                     if(!string.IsNullOrEmpty(cropF)) videoFilters.Add(cropF);
@@ -168,7 +173,8 @@ public sealed partial class MediaActions
         return new(output,[],null,resolutions);
     }
 
-    private async Task<MediaActionOutcome> MatroskaAsync(string id,IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,Func<string,Task<string>> extra,CancellationToken ct)
+    private async Task<MediaActionOutcome> MatroskaAsync(string id,IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,
+        Func<string,Task<string>> extra,CancellationToken ct)
     {
         var file=Output(directory,node,".mkv");
         if(id is "base-extract-track" or "base-extract-attachments" or "base-extract-chapters" or "mkv-extract-track" or "mkv-extract-attachments" or "mkv-extract-chapters")
@@ -176,7 +182,8 @@ public sealed partial class MediaActions
             if(id is "base-extract-chapters" or "mkv-extract-chapters")
             {
                 var simple=Text(c,"format","xml")!="xml"; var args=new List<string> { current,"chapters" }; if(simple) args.Add("--simple");
-                file=Output(directory,node,simple?".txt":".xml"); var text=await tools.CheckedAsync("mkvextract",args,directory,ct); await File.WriteAllTextAsync(file,text,ct); return new(null,[file]);
+                file=Output(directory,node,simple?".txt":".xml"); var text=await tools.CheckedAsync("mkvextract",args,directory,ct);
+                    await File.WriteAllTextAsync(file,text,ct); return new(null,[file]);
             }
             var tracks=(id is "base-extract-track" or "mkv-extract-track")?[int.Parse(Number(c,"trackId"))]:Ids(Text(c,"attachmentIds"));
             if(tracks.Length==0)
@@ -204,7 +211,8 @@ public sealed partial class MediaActions
             if(id is "base-remove-attachments" or "mkv-remove-attachments")
             {
                 var selected=Ids(Text(c,"attachmentIds"));
-                if(selected.Length==0) { await tools.CheckedAsync("mkvmerge",["-o",file+".next.mkv","--no-attachments",current],directory,ct); File.Move(file+".next.mkv",file,true); return new(file,[]); }
+                if(selected.Length==0) { await tools.CheckedAsync("mkvmerge",["-o",file+".next.mkv","--no-attachments",current],directory,ct);
+                    File.Move(file+".next.mkv",file,true); return new(file,[]); }
                 foreach(var attachment in selected) args.AddRange(["--delete-attachment",attachment.ToString()]);
             }
             await tools.CheckedAsync("mkvpropedit",args,directory,ct); return new(file,[]);
@@ -222,7 +230,8 @@ public sealed partial class MediaActions
                     && (ids.Length==0||ids.Contains(track.GetProperty("id").GetInt32()))).Select(track=>track.GetProperty("id").GetInt32()).ToArray();
                 if(ids.Length==0) throw new MediaToolException("sélection de pistes",1);
             }
-            if(ids.Length>0) foreach(var type in types) merge.AddRange(["--"+(type=="subtitles"?"subtitle":type)+"-tracks",((id is "base-remove-tracks" or "mkv-remove-tracks")?"!":"")+string.Join(',',ids)]);
+            if(ids.Length>0) foreach(var type in types) merge.AddRange(["--"+(type=="subtitles"?"subtitle":type)+"-tracks",
+                ((id is "base-remove-tracks" or "mkv-remove-tracks")?"!":"")+string.Join(',',ids)]);
             if((id is "base-remove-tracks" or "mkv-remove-tracks") && ids.Length==0) foreach(var type in types) merge.Add("--no-"+type);
             if(Text(c,"title")!="") merge.AddRange(["--title",Text(c,"title")]);
             if((id is "base-remux-matroska" or "mkv-remux-matroska") && !Flag(c,"keepAttachments",true)) merge.Add("--no-attachments");
@@ -233,7 +242,8 @@ public sealed partial class MediaActions
         {
             if(Text(c,"language")!="") merge.AddRange(["--language","0:"+Text(c,"language")]);
             if(Text(c,"trackName")!="") merge.AddRange(["--track-name","0:"+Text(c,"trackName")]);
-            merge.AddRange([id is "base-add-audio-track" or "audio-add-track"?"--default-track-flag":"--forced-display-flag","0:"+(Flag(c,id is "base-add-audio-track" or "audio-add-track"?"defaultTrack":"forcedTrack")?"1":"0")]);
+            merge.AddRange([id is "base-add-audio-track" or "audio-add-track"?"--default-track-flag":"--forced-display-flag","0:"+(Flag(c,
+                id is "base-add-audio-track" or "audio-add-track"?"defaultTrack":"forcedTrack")?"1":"0")]);
             merge.Add(await extra(Text(c,"sourceFile")));
         }
         await tools.CheckedAsync("mkvmerge",merge,directory,ct); return new(file,[]);

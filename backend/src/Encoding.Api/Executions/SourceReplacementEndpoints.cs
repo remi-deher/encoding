@@ -10,7 +10,8 @@ public static class SourceReplacementEndpoints
             await repository.GetPolicyAsync(library,ct) is {} policy?(IResult)Results.Ok(policy):Results.NotFound());
         app.MapPut("/api/v1/libraries/{library:guid}/replacement-policy",async(Guid library,SaveLibraryReplacementPolicy request,SourceReplacementRepository repository,CancellationToken ct)=>
         {
-            try{return await repository.SavePolicyAsync(library,request,ct)?(IResult)Results.NoContent():Results.Conflict(new{title="La politique a changé ou la bibliothèque est introuvable. Actualisez la bibliothèque."});}
+            try{return await repository.SavePolicyAsync(library,request,
+                ct)?(IResult)Results.NoContent():Results.Conflict(new{title="La politique a changé ou la bibliothèque est introuvable. Actualisez la bibliothèque."});}
             catch(ArgumentException e){return Results.BadRequest(new{title=e.Message});}
         });
         app.MapGet("/api/v1/executions/{id:guid}/replacement",async(Guid id,SourceReplacementRepository repository,CancellationToken ct)=>

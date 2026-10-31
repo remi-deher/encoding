@@ -152,7 +152,8 @@ public sealed partial class ClusterEntityReconciliation
             {
                 var nodeId = payload["nodeId"]!.GetValue<string>();
                 var lastSeenAt = payload["lastSeenAt"]!.GetValue<string>();
-                await using var update = Sql.Command("UPDATE cluster_nodes SET last_seen_at = CASE WHEN last_seen_at < @last_seen_at THEN @last_seen_at ELSE last_seen_at END WHERE id = @id", connection, transaction);
+                await using var update = Sql.Command("UPDATE cluster_nodes SET last_seen_at = CASE WHEN last_seen_at < @last_seen_at THEN @last_seen_at ELSE last_seen_at END WHERE id = @id",
+                    connection, transaction);
                 update.Parameters.AddWithValue("last_seen_at", lastSeenAt);
                 update.Parameters.AddWithValue("id", Guid.Parse(nodeId));
                 if (await update.ExecuteNonQueryAsync(ct) == 0) return false;

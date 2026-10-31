@@ -13,7 +13,8 @@ public sealed record AiAssistantForwardConfirmResponse(bool Applied, string? Err
 
 /// <summary>A stable session coordinator owns writes; inference may move between connected peers without moving secrets.</summary>
 public sealed class AiClusterService(AiClusterTransport transport, AiClusterStore store, DeviceCodeAuthService auth,
-    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration, LocalNodeRegistry localNode, AiQuotaService? quotaService = null, AiModelCatalogService? modelCatalog = null, IServiceProvider? services = null,
+    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration, LocalNodeRegistry localNode, AiQuotaService? quotaService = null,
+        AiModelCatalogService? modelCatalog = null, IServiceProvider? services = null,
     AiCredentialSyncService? credentialSync = null)
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new();
@@ -232,7 +233,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         "assistant-message" => await ForwardAssistantAsync(value.Deserialize<AiAssistantForwardRequest>()!, ct),
         "assistant-business-operation" => await ForwardBusinessOperationAsync(value.Deserialize<AiAssistantForwardConfirm>()!, ct),
         "models" => await LocalModelsAsync(value.TryGetProperty("Refresh", out var refresh) && refresh.GetBoolean(), ct),
-        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct, allowModelChanges: value.Deserialize<AiGenerateRequest>()!.AllowModelChanges),
+        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct,
+            allowModelChanges: value.Deserialize<AiGenerateRequest>()!.AllowModelChanges),
         "execute" => await ExecuteAsync(value.Deserialize<AiExecuteRequest>()!, ct),
         _ => throw new ArgumentException("Opération IA inconnue.")
     };
@@ -344,7 +346,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
                 providers, Totals(total, nodeCosts.Length == 0 ? null : nodeCosts.Sum()));
         }).OrderByDescending(node => node.Total.InputTokens + node.Total.OutputTokens).ThenBy(node => node.Name, StringComparer.Ordinal).ToArray();
         var grand = new long[5];
-        foreach (var node in nodes) { grand[0] += node.Total.Turns; grand[1] += node.Total.InputTokens; grand[2] += node.Total.OutputTokens; grand[3] += node.Total.CachedInputTokens; grand[4] += node.Total.TurnsWithoutUsage; }
+        foreach (var node in nodes) { grand[0] += node.Total.Turns; grand[1] += node.Total.InputTokens; grand[2] += node.Total.OutputTokens;
+            grand[3] += node.Total.CachedInputTokens; grand[4] += node.Total.TurnsWithoutUsage; }
         var allCosts = nodes.Select(node => node.Total.CostUsd).Where(c => c is not null).ToArray();
         return new(days, since, nodes, Totals(grand, allCosts.Length == 0 ? null : allCosts.Sum()), truncated);
     }
@@ -385,7 +388,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
                     var node = await transport.CallAsync<AiNodeAvailability>(url, "availability", new { }, TimeSpan.FromSeconds(15), ct);
                     if (node.NodeId != owner) continue;
                     ownerSeen = true;
-                    return await transport.CallAsync<AiCompletionResult>(url, "generate", new AiGenerateRequest(provider, prompt with { SessionId = id, RequestId = requestId }, allowModelChanges), TimeSpan.FromMinutes(35), ct);
+                    return await transport.CallAsync<AiCompletionResult>(url, "generate", new AiGenerateRequest(provider, prompt with { SessionId = id,
+                        RequestId = requestId }, allowModelChanges), TimeSpan.FromMinutes(35), ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { }
             }
@@ -420,7 +424,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             var context = string.Join("\n\n", session.Turns.Select(t => "Utilisateur :\n" + t.UserPrompt + "\nAssistant :\n" + t.Content));
             var executionPrompt = prompt with { UserPrompt = context + "\n\nUtilisateur :\n" + prompt.UserPrompt, SessionId = null, RequestId = null };
             if (executionPrompt.UserPrompt.Length > 240000) return new(false, "", "Contexte maximal atteint. Ouvrez une nouvelle session.", SessionId: id, RequestId: requestId);
-            session = session with { Provider = provider, Model = prompt.Model, ReasoningEffort = prompt.ReasoningEffort, PendingRequest = requestId, PendingPrompt = prompt with { SessionId = id, RequestId = requestId }, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
+            session = session with { Provider = provider, Model = prompt.Model, ReasoningEffort = prompt.ReasoningEffort, PendingRequest = requestId,
+                PendingPrompt = prompt with { SessionId = id, RequestId = requestId }, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
             await store.SaveAsync("session/" + id, session, ct);
             var candidates = new List<(string? Url, AiNodeAvailability Node)> { (null, await LocalAsync(ct)) };
             foreach (var url in await transport.PeersAsync(ct))
@@ -449,7 +454,9 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
                 { ambiguous = true; result = new(false, "", "Le nœud d’exécution n’a pas confirmé de résultat."); }
                 if (result.Success)
                 {
-                    session = session with { Turns = [.. session.Turns, new(requestId, prompt.UserPrompt, result.Content, result.Usage, DateTimeOffset.UtcNow, selection, result.ExecutorNodeId)], PendingRequest = null, PendingPrompt = null, AttemptDeadline = null, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
+                    session = session with { Turns = [.. session.Turns, new(requestId, prompt.UserPrompt, result.Content, result.Usage, DateTimeOffset.UtcNow,
+                        selection, result.ExecutorNodeId)], PendingRequest = null, PendingPrompt = null, AttemptDeadline = null,
+                        UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
                     await store.SaveAsync("session/" + id, session, ct);
                     return result with { SessionId = id, RequestId = requestId };
                 }
@@ -504,7 +511,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var saved = await GetSessionAsync(id, ct) ?? throw new ArgumentException("Checkpoint encore indisponible sur ce nœud. Réessayez après réconciliation.");
         if (saved.AttemptDeadline is { } deadline && deadline.AddSeconds(5) > DateTimeOffset.UtcNow)
             throw new InvalidOperationException("Attendez la fin du bail de la tentative précédente avant de créer une nouvelle session.");
-        var fork = saved with { Id = $"{transport.LocalId:N}.{Guid.NewGuid():N}", PendingRequest = null, PendingPrompt = null, AttemptDeadline = null, Attempt = 0, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
+        var fork = saved with { Id = $"{transport.LocalId:N}.{Guid.NewGuid():N}", PendingRequest = null, PendingPrompt = null, AttemptDeadline = null,
+            Attempt = 0, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
         await store.SaveAsync("session/" + fork.Id, fork, ct);
         return fork;
     }

@@ -42,7 +42,8 @@ public sealed class ClusterTaskPeerClient(ClusterPeerIdentityStore identity,IHtt
             var received=await ReadAsync(response.Content,ct);if(received is null) return false;
             string? Header(string name)=>response.Headers.TryGetValues(name,out var values)?values.FirstOrDefault():null;
             if(!Guid.TryParse(Header(ClusterReconciliationSignature.PeerHeader),out var signer) || signer!=peer
-                || !ClusterReconciliationSignature.Verify(publicKey,peer,Header(ClusterReconciliationSignature.TimeHeader),Header(ClusterReconciliationSignature.SignatureHeader),received)) return false;
+                || !ClusterReconciliationSignature.Verify(publicKey,peer,Header(ClusterReconciliationSignature.TimeHeader),
+                    Header(ClusterReconciliationSignature.SignatureHeader),received)) return false;
             var proof=JsonSerializer.Deserialize<ClusterTaskProbeResponse>(received,Json);
             return proof is { ProtocolVersion:Version } && proof.ClusterId==cluster && proof.Nonce==nonce && proof.PeerId==peer
                 && proof.Capabilities?.Contains(SourceWriteProtocol.Capability,StringComparer.Ordinal)==true;

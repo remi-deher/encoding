@@ -18,7 +18,8 @@ public sealed class MediaScanner(ProcessToolRunner tools)
         if(!File.Exists(candidate) || new FileInfo(candidate).Length==0) throw new IOException("Le résultat média est vide.");
         var metadata=await ScanAsync(candidate,ct);
         var expected=mediaType=="music"?"audio":mediaType=="image"?"video":mediaType=="subtitles"?"subtitle":"video";
-        if(!metadata.GetProperty("streams").EnumerateArray().Any(stream=>stream.TryGetProperty("codec_type",out var type) && type.GetString()==expected)) throw new IOException("Le résultat ne contient pas le média attendu.");
+        if(!metadata.GetProperty("streams").EnumerateArray().Any(stream=>stream.TryGetProperty("codec_type",out var type)
+            && type.GetString()==expected)) throw new IOException("Le résultat ne contient pas le média attendu.");
         if(mediaType is "video" or "music")
         {
             static double? Duration(JsonElement? value)=>value is { } json && json.TryGetProperty("format",out var format) && format.TryGetProperty("duration",out var duration)

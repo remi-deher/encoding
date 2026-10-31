@@ -11,7 +11,9 @@ using Encoding.Contracts.Nodes;
 
 namespace Encoding.Api.Executions;
 
-public sealed partial class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null,FlowPlacementPlanner? placementPlanner=null,ILogger<RuntimeRepository>? logger=null)
+public sealed partial class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,
+    NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,
+    TaskOwnershipRepository? ownership=null,FlowPlacementPlanner? placementPlanner=null,ILogger<RuntimeRepository>? logger=null)
 {
     private readonly FlowPlacementPlanner planner = placementPlanner ?? new FlowPlacementPlanner(components);
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
@@ -101,7 +103,8 @@ public sealed partial class RuntimeRepository(DbDataSource dataSource,RuntimeEli
         await using var library=Sql.Command("SELECT name FROM libraries WHERE id=@id AND is_active FOR UPDATE",c,tx);
         library.Parameters.AddWithValue("id",request.LibraryId);
         if(await library.ExecuteScalarAsync(ct) is not string name) return false;
-        await using var duplicate=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.library_id=@library AND w.media_key=@key AND e.state IN ('queued','running','cancelling')) OR EXISTS(SELECT 1 FROM task_ownership o LEFT JOIN executions e ON e.id=o.execution_id WHERE o.cluster_id=(SELECT id FROM cluster_identity WHERE singleton=true) AND o.library_id=@library AND o.media_key=@key AND o.state IN ('active','frozen','received','transferred') AND (e.id IS NULL OR e.state IN ('queued','running','cancelling')))",c,tx);
+        await using var duplicate=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.library_id=@library AND w.media_key=@key AND e.state IN ('queued','running','cancelling')) OR EXISTS(SELECT 1 FROM task_ownership o LEFT JOIN executions e ON e.id=o.execution_id WHERE o.cluster_id=(SELECT id FROM cluster_identity WHERE singleton=true) AND o.library_id=@library AND o.media_key=@key AND o.state IN ('active','frozen','received','transferred') AND (e.id IS NULL OR e.state IN ('queued','running','cancelling')))",
+            c,tx);
         duplicate.Parameters.AddWithValue("library",request.LibraryId); duplicate.Parameters.AddWithValue("key",path.ToUpperInvariant());
         if((await duplicate.ScalarBoolAsync(ct))) return false;
         var creation=new CreateExecutionRequest(request.Id,path,name,flow.Name,flow.Version,JsonSerializer.SerializeToElement(flow,Json));

@@ -125,7 +125,8 @@ public static class PluginPackage
                 output.Write(buffer, 0, read);
             }
             if (entry.Name.EndsWith(".py", StringComparison.Ordinal) || entry.Name.EndsWith(".mjs", StringComparison.Ordinal) || entry.Name.EndsWith(".js", StringComparison.Ordinal))
-                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
         }
     }
 

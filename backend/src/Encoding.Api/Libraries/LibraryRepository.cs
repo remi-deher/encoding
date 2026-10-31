@@ -130,7 +130,8 @@ public sealed class LibraryRepository(DbDataSource dataSource)
     private static LibraryResponse Read(DbDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1),
         new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc)),
-        reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetBoolean(6), reader.FieldCount>7 && !reader.IsDBNull(7)?reader.GetString(7):null, reader.FieldCount>8 && !reader.IsDBNull(8)?reader.GetInt32(8):null);
+        reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetBoolean(6), reader.FieldCount>7 && !reader.IsDBNull(7)?reader.GetString(7):null,
+            reader.FieldCount>8 && !reader.IsDBNull(8)?reader.GetInt32(8):null);
 
     public async Task<IReadOnlyList<LibraryOverviewResponse>> OverviewAsync(CancellationToken cancellationToken)
     {

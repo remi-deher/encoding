@@ -82,7 +82,8 @@ public sealed class LibraryDiscoveryService(NodeAgentOptions options,WorkerIdent
             }
             catch(OperationCanceledException) {throw;}
             catch(InvalidDataException e) {files=[];error=e.Message;}
-            catch(Exception e) when(e is IOException or UnauthorizedAccessException or ArgumentException) {files=[];error="Découverte impossible : vérifiez le montage et les droits du nœud. L’inventaire précédent est conservé.";}
+            catch(Exception e) when(e is IOException or UnauthorizedAccessException or ArgumentException) {files=[];
+                error="Découverte impossible : vérifiez le montage et les droits du nœud. L’inventaire précédent est conservé.";}
             using var completeTimeout=CancellationTokenSource.CreateLinkedTokenSource(job.Token); completeTimeout.CancelAfter(TimeSpan.FromSeconds(45));
             await client.PostAsync<object>($"library-scans/{lease.Id}/complete",new CompleteLibraryScan(lease.Epoch,files,error),completeTimeout.Token);
         }

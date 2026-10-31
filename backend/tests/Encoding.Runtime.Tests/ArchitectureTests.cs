@@ -128,6 +128,18 @@ public sealed class ArchitectureTests
         Assert.True(stale.Length == 0, "Retirer de OversizedFileCeilings : " + string.Join(", ", stale));
     }
 
+    // Les lignes restantes sont des littéraux longs (SQL, textes) ; le total ne doit pas augmenter.
+    private const int MaxLongLines = 227;
+
+    [Fact]
+    public void LongCodeLinesDoNotGrow()
+    {
+        var count = new[] { "Encoding.Api", "Encoding.NodeAgent", "Encoding.Contracts", "Encoding.Core", "Encoding.Launcher" }
+            .SelectMany(SourceFiles).SelectMany(File.ReadLines)
+            .Count(line => line.Length > 200 && !line.TrimStart().StartsWith("//"));
+        Assert.True(count <= MaxLongLines, $"{count} lignes de code dépassent 200 caractères (max {MaxLongLines}) : les couper.");
+    }
+
     private static IEnumerable<string> SourceFiles(string project) =>
         Directory.EnumerateFiles(Path.Combine(SourceRoot, project), "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")

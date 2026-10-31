@@ -56,7 +56,8 @@ public sealed class RuntimeEligibility(
             && (c.Version==node.Component.PluginVersion || c.Version==registry.RuntimePluginVersion(node.Component)));
     }
 
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null,IReadOnlyDictionary<string,Guid>? placements=null)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,
+        RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null,IReadOnlyDictionary<string,Guid>? placements=null)
     {
         if (MediaIntegrityPolicy.IsExplicit(flow) && !capabilities.Any(c => c.ToolId == MediaIntegrityPolicy.Capability)) return false;
         if(context?.DirectSource is not null && !capabilities.Any(capability=>capability.ToolId==RuntimeSourceObservation.Capability)) return false;
@@ -90,7 +91,10 @@ public sealed class RuntimeEligibility(
             var component=registry.Resolve(node.Component);
 
             var matches = capabilities.Any(c =>
-                (!isAliased && c.ToolId == "plugin/" + pluginId && registry.FingerprintMatches(pluginId, c.ManifestFingerprint) && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component) || (pluginId is "audio" or "video" or "subtitles") && component?.CompatiblePluginVersions?.Contains(c.Version, StringComparer.Ordinal) == true))
+                (!isAliased && c.ToolId == "plugin/" + pluginId && registry.FingerprintMatches(pluginId, c.ManifestFingerprint)
+                    && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component)
+                    || (pluginId is "audio" or "video" or "subtitles") && component?.CompatiblePluginVersions?.Contains(c.Version,
+                    StringComparer.Ordinal) == true))
                 || (pluginId == "ai" && (componentId is "ai-translate-subtitles" or "ai-metadata-enricher") && c.ToolId == "ai-runtime" && c.Version == "1.0.0")
                 || (isAliased && c.ToolId == "plugin/" + targetPluginId)
                 || (isAliased && c.ToolId == "plugin/base" && IsBaseVersionSatisfied(c.Version, componentId))
@@ -140,7 +144,8 @@ public sealed class RuntimeEligibility(
                     // Type d'encodage : « matériel » exclut le CPU, « cpu » exclut tout accélérateur.
                     bool KindMatches(string acceleration) => kind switch { "hardware" => acceleration != "cpu", "cpu" => acceleration == "cpu", _ => true };
                     var matching = Encoding.Contracts.Flows.VideoEncoderCatalog.All
-                        .Where(desc => (sought.Length == 0 || string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id, sought, StringComparison.OrdinalIgnoreCase)) && KindMatches(desc.Acceleration))
+                        .Where(desc => (sought.Length == 0 || string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id,
+                            sought, StringComparison.OrdinalIgnoreCase)) && KindMatches(desc.Acceleration))
                         .ToList();
                     if (sought.Length == 0 && matching.Count == 0) return false;
                     var usable = ffmpeg.EncoderChecks?.Where(c => c.Status == "usable").Select(c => c.EncoderId) ?? [];
@@ -158,7 +163,8 @@ public sealed class RuntimeEligibility(
             if(node.Component.PluginId=="base" && node.Component.ComponentId=="base-execute-processing"
                 && !capabilities.Any(c=>c.ToolId=="ffmpeg" || c.ToolId=="mkvtoolnix")) return false;
             foreach(var tool in component.RequiredTools)
-                if(!capabilities.Any(c=>c.ToolId==tool.ToolId && (tool.MinimumVersion is null || Version.TryParse(c.Version,out var actual) && Version.TryParse(tool.MinimumVersion,out var minimum) && actual>=minimum)
+                if(!capabilities.Any(c=>c.ToolId==tool.ToolId && (tool.MinimumVersion is null || Version.TryParse(c.Version,out var actual)
+                    && Version.TryParse(tool.MinimumVersion,out var minimum) && actual>=minimum)
                     && tool.RequiredCapabilities.All(feature=>c.AccelerationTypes.Contains(feature)))) return false;
             var retryWithCpu=node.Configuration.TryGetValue("retryWithCpu",out var retryValue)&&retryValue.ValueKind==System.Text.Json.JsonValueKind.True;
             if(node.Configuration.TryGetValue("hardwareAcceleration",out var acceleration) && acceleration.GetString() is { } name && name!="cpu"&&!retryWithCpu
@@ -196,8 +202,10 @@ public sealed class RuntimeEligibility(
                 }
             }
             if (node.Component.ComponentId == "audio-convert-by-rules" && node.Configuration.TryGetValue("rules", out var audioRules) && audioRules.ValueKind == JsonValueKind.Array
-                && audioRules.EnumerateArray().Any(rule => MediaTrackSelection.Text(rule, "action") != "copy" && MediaCodecPolicy.AudioEncoder(MediaTrackSelection.Text(rule, "codec"), encoders) is null)) return false;
-            if((node.Component.ComponentId is "base-audio-rules" or "audio-rules") && (MediaCodecPolicy.AudioEncoder("aac",encoders) is null || MediaCodecPolicy.AudioEncoder("ac3",encoders) is null)) return false;
+                && audioRules.EnumerateArray().Any(rule => MediaTrackSelection.Text(rule, "action") != "copy"
+                    && MediaCodecPolicy.AudioEncoder(MediaTrackSelection.Text(rule, "codec"), encoders) is null)) return false;
+            if((node.Component.ComponentId is "base-audio-rules" or "audio-rules") && (MediaCodecPolicy.AudioEncoder("aac",encoders) is null
+                || MediaCodecPolicy.AudioEncoder("ac3",encoders) is null)) return false;
             if((node.Component.ComponentId is "base-transcode-audio" or "audio-transcode") && node.Configuration.TryGetValue("audioCodec",out var audio)
                 && MediaCodecPolicy.AudioEncoder(audio.GetString()!,encoders) is null) return false;
         }

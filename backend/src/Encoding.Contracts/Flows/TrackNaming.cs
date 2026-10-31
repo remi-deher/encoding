@@ -11,9 +11,11 @@ public sealed record TrackNameOptions(string AudioTemplate, string SubtitleTempl
 
     public static TrackNameOptions From(IReadOnlyDictionary<string, JsonElement> configuration)
     {
-        string Text(string key, string fallback) => configuration.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()) ? value.GetString()!.Trim() : fallback;
+        string Text(string key, string fallback) => configuration.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(value.GetString()) ? value.GetString()!.Trim() : fallback;
         var single = !configuration.TryGetValue("singleDefaultAudio", out var flag) || flag.ValueKind != JsonValueKind.False;
-        return new(Text("audioTemplate", DefaultAudioTemplate), Text("subtitleTemplate", DefaultSubtitleTemplate), single, Text("defaultAudioLanguage", ""), !configuration.TryGetValue("renameTracks", out var rename) || rename.ValueKind != JsonValueKind.False);
+        return new(Text("audioTemplate", DefaultAudioTemplate), Text("subtitleTemplate", DefaultSubtitleTemplate), single, Text("defaultAudioLanguage", ""),
+            !configuration.TryGetValue("renameTracks", out var rename) || rename.ValueKind != JsonValueKind.False);
     }
 }
 
@@ -96,7 +98,8 @@ public static class TrackNaming
             var name = options.RenameTracks ? Render(track.Type == "audio" ? options.AudioTemplate : options.SubtitleTemplate, tokens) : track.Name;
             var defaultChange = track.Type == "audio" ? defaults[Array.IndexOf(audio, track)] : null;
             if (name != track.Name || defaultChange is not null)
-                edits.Add(new(track.Uid, track.Type, track.Ordinal, name, defaultChange, $"{track.Type} {track.Ordinal} : « {track.Name} » vers « {name} »" + (defaultChange is { } d ? (d ? ", piste par défaut" : ", plus par défaut") : "")));
+                edits.Add(new(track.Uid, track.Type, track.Ordinal, name, defaultChange,
+                    $"{track.Type} {track.Ordinal} : « {track.Name} » vers « {name} »" + (defaultChange is { } d ? (d ? ", piste par défaut" : ", plus par défaut") : "")));
         }
         return edits;
     }
@@ -159,7 +162,8 @@ public static class TrackNaming
             string Text(string key) => item.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
             bool Flag(string key) => item.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
             if (!item.TryGetProperty("ordinal", out var ordinal) || ordinal.ValueKind != JsonValueKind.Number) continue;
-            result[(Text("type"), ordinal.GetInt32())] = new(0, Text("type"), ordinal.GetInt32(), 0, Text("language"), Text("name"), Flag("forced"), Flag("hearingImpaired"), Flag("commentary"), Flag("default"), 0);
+            result[(Text("type"), ordinal.GetInt32())] = new(0, Text("type"), ordinal.GetInt32(), 0, Text("language"), Text("name"), Flag("forced"),
+                Flag("hearingImpaired"), Flag("commentary"), Flag("default"), 0);
         }
         return result;
     }

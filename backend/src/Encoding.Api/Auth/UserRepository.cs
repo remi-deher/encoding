@@ -113,7 +113,8 @@ public sealed class UserRepository(DbDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using var update = Sql.Command("UPDATE users SET password_hash = @hash, failed_attempts = 0, locked_until = NULL, updated_at = clock_timestamp() WHERE id = @id", connection, transaction);
+        await using var update = Sql.Command("UPDATE users SET password_hash = @hash, failed_attempts = 0, locked_until = NULL, updated_at = clock_timestamp() WHERE id = @id",
+            connection, transaction);
         update.Parameters.AddWithValue("id", id);
         update.Parameters.AddWithValue("hash", passwordHash);
         if (await update.ExecuteNonQueryAsync(ct) == 0) return false;
@@ -176,7 +177,8 @@ public sealed class UserRepository(DbDataSource dataSource)
             """);
         command.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
         command.Parameters.AddWithValue("user", userId);
-        command.Parameters.AddWithValue("expires", DateTimeOffset.UtcNow + (options.SessionIdleTimeout < options.SessionAbsoluteLifetime ? options.SessionIdleTimeout : options.SessionAbsoluteLifetime));
+        command.Parameters.AddWithValue("expires",
+            DateTimeOffset.UtcNow + (options.SessionIdleTimeout < options.SessionAbsoluteLifetime ? options.SessionIdleTimeout : options.SessionAbsoluteLifetime));
         await command.ExecuteNonQueryAsync(ct);
     }
 

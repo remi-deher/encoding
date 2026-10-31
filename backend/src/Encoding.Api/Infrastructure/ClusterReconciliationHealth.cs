@@ -136,7 +136,9 @@ public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
             var peer = GetOrAdd(url);
             peer.LastAttemptAt = DateTimeOffset.UtcNow;
             peer.LastError = error;
-            foreach(var id in authenticated.Where(item=>string.Equals(item.Value.Url,url,StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray()) {caughtUp.Remove(id);authenticated.Remove(id);sourceWriteSupport.Remove(id);}
+            foreach(var id in authenticated.Where(item=>string.Equals(item.Value.Url,url,
+                StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray()) {caughtUp.Remove(id);authenticated.Remove(id);
+                sourceWriteSupport.Remove(id);}
         }
     }
 

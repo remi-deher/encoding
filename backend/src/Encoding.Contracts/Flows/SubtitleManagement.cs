@@ -16,7 +16,9 @@ public sealed record SubtitleOptions(bool ApplyProfile = true, bool ConvertSrt =
     {
         bool Flag(string key) => !configuration.TryGetValue(key, out var value) || value.ValueKind != JsonValueKind.False;
         var profile = configuration.TryGetValue("styleProfile", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : "crunchyroll";
-        return new(profile != "none", Flag("convertSrt"), Flag("upgradeAss"), Flag("removeDuplicates"), Flag("inferForced"), Flag("setTitles"), Flag("frenchDefault"), configuration.TryGetValue("operation", out var operation) ? operation.GetString() : null, profile == "custom" ? AssStyleSettings.From(configuration) : null);
+        return new(profile != "none", Flag("convertSrt"), Flag("upgradeAss"), Flag("removeDuplicates"), Flag("inferForced"), Flag("setTitles"),
+            Flag("frenchDefault"), configuration.TryGetValue("operation", out var operation) ? operation.GetString() : null,
+            profile == "custom" ? AssStyleSettings.From(configuration) : null);
     }
 }
 
@@ -40,12 +42,15 @@ public static class AssProfile
     /// <summary>Dimensions affichées de la vidéo (rapport d'affichage, anamorphose et rotation pris en compte).</summary>
     public static (int Width, int Height) Canvas(JsonElement video)
     {
-        double Number(string name) => video.TryGetProperty(name, out var value) && (value.ValueKind == JsonValueKind.Number ? value.TryGetDouble(out var n) : double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out n)) ? n : 0;
+        double Number(string name) => video.TryGetProperty(name, out var value)
+            && (value.ValueKind == JsonValueKind.Number ? value.TryGetDouble(out var n) : double.TryParse(value.GetString(), NumberStyles.Float,
+            CultureInfo.InvariantCulture, out n)) ? n : 0;
         double Ratio(string name)
         {
             if (!video.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String) return 0;
             var parts = value.GetString()!.Split(':', '/');
-            return parts.Length == 2 && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var a) && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var b) && a > 0 && b > 0 ? a / b : 0;
+            return parts.Length == 2 && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var a) && double.TryParse(parts[1],
+                NumberStyles.Float, CultureInfo.InvariantCulture, out var b) && a > 0 && b > 0 ? a / b : 0;
         }
         double width = Number("width"), height = Number("height");
         if (width <= 0 || height <= 0) throw new SubtitleException("Dimensions vidéo invalides : profil adaptatif impossible. Original non remplacé.");
@@ -100,12 +105,14 @@ public static class AssProfile
         var styles = Styles(width, height, settings);
         string[] required = ["SubtitleProfileVersion: " + Version, "PlayResX: " + width, "PlayResY: " + height, "LayoutResX: " + width, "LayoutResY: " + height,
             "ScaledBorderAndShadow: yes", "YCbCr Matrix: TV.601", styles[0], styles[1], styles[2], styles[3]];
-        return required.All(lines.Contains) && text.Contains(StyleFormat, StringComparison.Ordinal) && text.IndexOf(StyleFormat, StringComparison.Ordinal) < text.IndexOf(styles[0], StringComparison.Ordinal);
+        return required.All(lines.Contains) && text.Contains(StyleFormat, StringComparison.Ordinal) && text.IndexOf(StyleFormat,
+            StringComparison.Ordinal) < text.IndexOf(styles[0], StringComparison.Ordinal);
     }
 
     /// <summary>Styles propres au typesetting ou balises de placement : un tel ASS n'est jamais recalibré.</summary>
     public static bool IsCustom(string text) =>
-        Positioned.IsMatch(text) || text.Replace("\r", "").Split('\n').Any(line => Regex.Match(line, @"^Style:\s*([^,]+),", RegexOptions.IgnoreCase) is { Success: true } match && !StyleNames.Contains(match.Groups[1].Value.Trim()));
+        Positioned.IsMatch(text) || text.Replace("\r", "").Split('\n').Any(line => Regex.Match(line, @"^Style:\s*([^,]+),",
+            RegexOptions.IgnoreCase) is { Success: true } match && !StyleNames.Contains(match.Groups[1].Value.Trim()));
 
     private static string SetScriptInfo(string text, string key, string value)
     {
@@ -120,7 +127,8 @@ public static class AssProfile
     {
         text = text.TrimStart('\uFEFF');
         var original = text;
-        foreach (var (key, value) in new[] { ("SubtitleProfileVersion", Version), ("PlayResX", width.ToString(CultureInfo.InvariantCulture)), ("PlayResY", height.ToString(CultureInfo.InvariantCulture)),
+        foreach (var (key, value) in new[] { ("SubtitleProfileVersion", Version), ("PlayResX", width.ToString(CultureInfo.InvariantCulture)), ("PlayResY",
+            height.ToString(CultureInfo.InvariantCulture)),
             ("ScaledBorderAndShadow", "yes"), ("YCbCr Matrix", "TV.601"), ("LayoutResX", width.ToString(CultureInfo.InvariantCulture)), ("LayoutResY", height.ToString(CultureInfo.InvariantCulture)) })
             text = SetScriptInfo(text, key, value);
         var start = Regex.Match(text, @"^\[V4\+ Styles\]\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
@@ -135,9 +143,11 @@ public static class AssProfile
 /// <summary>Classement et planification des sous-titres : conversion, mise à niveau, doublons, forcés, titres et piste par défaut (architecture 0057).</summary>
 public static class SubtitlePlanner
 {
-    private static readonly string[] TextCodecs = ["subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text", "microdvd", "subviewer", "subviewer1", "sami", "jacosub", "mpl2", "vplayer", "pjs", "realtext", "stl", "ttml"];
+    private static readonly string[] TextCodecs = ["subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text", "microdvd", "subviewer", "subviewer1", "sami",
+        "jacosub", "mpl2", "vplayer", "pjs", "realtext", "stl", "ttml"];
     private static readonly Regex ForcedTitle = new(@"(^|[^a-z])(forced|forcee?s?|fcd|signs?)([^a-z]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex SdhTitle = new(@"(^|[^a-z])(s[. _-]*d[. _-]*h|cc|hoh|sme|closed[ _-]*captions?|hearing[ _-]*impaired|hard[ _-]*of[ _-]*hearing|sourds?|malentendants?)([^a-z]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex SdhTitle = new(@"(^|[^a-z])(s[. _-]*d[. _-]*h|cc|hoh|sme|closed[ _-]*captions?|hearing[ _-]*impaired|hard[ _-]*of[ _-]*hearing|sourds?|malentendants?)([^a-z]|$)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SignsTitle = new(@"(signs?.*songs?|songs?.*signs?|signes?.*chansons?|chansons?.*signes?|karaoke)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex FullTitle = new(@"(^|[^a-z])(full|complete|complet(?:e|es|s)?|vostfr|dialogues?)([^a-z]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Dictionary<string, string> Labels = new()
@@ -195,7 +205,8 @@ public static class SubtitlePlanner
     private static double Seconds(string value)
     {
         var parts = value.Trim().Split(':');
-        return parts.Length == 3 && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var h) && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var m)
+        return parts.Length == 3 && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var h) && double.TryParse(parts[1],
+            NumberStyles.Float, CultureInfo.InvariantCulture, out var m)
             && double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var s) ? h * 3600 + m * 60 + s : double.NaN;
     }
 
@@ -254,7 +265,8 @@ public static class SubtitlePlanner
             state.Events = state.Rows.Select(row => row.Text).ToList();
             state.Custom = AssProfile.IsCustom(state.Track.AssText!);
             if (state.Events.Count > 0) { notes.Add($"Sous-titres piste {state.Track.Ordinal} ({state.Track.Language}) : {state.Events.Count} répliques."); continue; }
-            if (AssIsEmpty(state.Track)) { state.Dropped = options.Operation is null or "subtitles-remove-duplicates"; notes.Add($"Piste {state.Track.Ordinal} vide confirmée : {(state.Dropped ? "retirée" : "conservée") }."); }
+            if (AssIsEmpty(state.Track)) { state.Dropped = options.Operation is null or "subtitles-remove-duplicates";
+                notes.Add($"Piste {state.Track.Ordinal} vide confirmée : {(state.Dropped ? "retirée" : "conservée") }."); }
             else throw new SubtitleException($"Piste {state.Track.Ordinal} sans répliques, mais piste source non confirmée vide ({state.Track.Codec}). Source conservée ; vérifier l'extraction.");
         }
         var live = states.Where(item => !item.Dropped).ToList();
@@ -270,7 +282,8 @@ public static class SubtitlePlanner
             {
                 var key = LangKey(state.Track.Language);
                 if (key.Length == 0 || key == "und" || Forced(state.Track) || FullByTitle(state.Track) || Sdh(state.Track) || Signs(state.Track) || state.Events.Count == 0) continue;
-                var candidates = live.Where(item => item != state && item.Track.AssText is not null && LangKey(item.Track.Language) == key && item.Events.Count >= 200 && !Forced(item.Track) && !Signs(item.Track)).ToList();
+                var candidates = live.Where(item => item != state && item.Track.AssText is not null && LangKey(item.Track.Language) == key
+                    && item.Events.Count >= 200 && !Forced(item.Track) && !Signs(item.Track)).ToList();
                 if (candidates.Count == 0) continue;
                 var largest = candidates.OrderByDescending(item => item.Events.Count).First();
                 var ratio = (double)state.Events.Count / largest.Events.Count;
@@ -332,7 +345,8 @@ public static class SubtitlePlanner
                     var events = text.IndexOf("[Events]", StringComparison.Ordinal);
                     if (events < 0) throw new SubtitleException($"Section [Events] absente après conversion de la piste {state.Track.Ordinal}.");
                     state.Replacement = options.ApplyProfile ? AssProfile.Header(canvas.Width, canvas.Height, options.Style) + text[events..] : text;
-                    if (options.ApplyProfile && !AssProfile.HasCurrent(state.Replacement, canvas.Width, canvas.Height, options.Style)) throw new SubtitleException($"Validation du profil de style échouée, piste {state.Track.Ordinal}.");
+                    if (options.ApplyProfile && !AssProfile.HasCurrent(state.Replacement, canvas.Width, canvas.Height,
+                        options.Style)) throw new SubtitleException($"Validation du profil de style échouée, piste {state.Track.Ordinal}.");
                     state.Kind = "converti";
                 }
                 else if (AssProfile.HasCurrent(text, canvas.Width, canvas.Height, options.Style)) state.Kind = "à jour";

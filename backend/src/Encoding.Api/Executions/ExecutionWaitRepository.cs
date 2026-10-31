@@ -80,7 +80,8 @@ public sealed class ExecutionWaitRepository(DbDataSource dataSource,NodePresence
             await update.ExecuteNonQueryAsync(ct);
         }
         if(met && actor is not null)
-            await ExecutionRepository.RecordInTransactionAsync(id,new(Guid.NewGuid(),revision,"running",actor,null,$"Attente terminée : la condition du bloc est remplie ({request.OutputId})."),c,tx,ct);
+            await ExecutionRepository.RecordInTransactionAsync(id,new(Guid.NewGuid(),revision,"running",actor,null,
+                $"Attente terminée : la condition du bloc est remplie ({request.OutputId})."),c,tx,ct);
         await tx.CommitAsync(ct); return true;
     }
 

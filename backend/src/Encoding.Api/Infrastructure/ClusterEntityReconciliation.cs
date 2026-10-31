@@ -34,10 +34,17 @@ public sealed partial class ClusterEntityReconciliation(
     };
     private static readonly EntityTable[] Tables =
     [
-        new("cluster_nodes", ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "last_seen_at", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"], ["id"], ["capabilities", "labels", "inventory"], ["roles", "desired_roles"], ["node_token_hash"], ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"]),
-        new("node_enrollment_requests", ["node_id", "pairing_key_hash", "node_token_hash", "peer_id", "peer_public_key", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "expires_at", "inventory", "display_name"], ["node_id"], ["capabilities", "inventory"], ["roles"], ["pairing_key_hash", "node_token_hash"]),
+        new("cluster_nodes", ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "last_seen_at", "created_at", "deleted_at", "display_name",
+            "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"], ["id"],
+            ["capabilities", "labels", "inventory"], ["roles", "desired_roles"], ["node_token_hash"], ["id", "name", "roles", "max_concurrent_tasks",
+            "capabilities", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined",
+            "incompatible_reason", "protocol_version", "node_token_hash"]),
+        new("node_enrollment_requests", ["node_id", "pairing_key_hash", "node_token_hash", "peer_id", "peer_public_key", "name", "roles",
+            "max_concurrent_tasks", "capabilities", "created_at", "expires_at", "inventory", "display_name"], ["node_id"], ["capabilities", "inventory"],
+            ["roles"], ["pairing_key_hash", "node_token_hash"]),
         new("node_peer_reconciliation_urls", ["node_id", "peer_id", "url", "approved"], ["node_id"]),
-        new("cluster_peer_admissions", ["cluster_id", "peer_id", "node_id", "public_key", "approved_by_peer_id", "wrapped_data_key", "key_fingerprint", "issued_at", "revoked_at", "signature"], ["cluster_id", "peer_id"], immutable: false, detectDeletes: false),
+        new("cluster_peer_admissions", ["cluster_id", "peer_id", "node_id", "public_key", "approved_by_peer_id", "wrapped_data_key", "key_fingerprint",
+            "issued_at", "revoked_at", "signature"], ["cluster_id", "peer_id"], immutable: false, detectDeletes: false),
         new("node_groups", ["id", "name", "description", "mode", "criteria", "labels", "created_at", "updated_at"], ["id"], ["criteria", "labels"]),
         new("node_directory_browse_requests", ["id", "node_id", "path", "state", "entries", "has_more", "error", "created_at", "updated_at", "expires_at", "claim_until"], ["id"], ["entries"]),
         new("libraries", ["id", "name", "created_at", "is_active", "flow_assignment_revision"], ["id"]),
@@ -64,22 +71,31 @@ public sealed partial class ClusterEntityReconciliation(
         new("encoding_profile_versions", ["profile_id", "version", "name", "description", "targets", "created_at"], ["profile_id", "version"], ["targets"], immutable: true),
         new("flow_resources", ["id", "kind", "name", "description", "created_at", "updated_at"], ["id"]),
         new("flow_resource_versions", ["resource_id", "version", "files", "total_bytes", "created_at"], ["resource_id", "version"], ["files"], immutable: true),
-        new("flow_templates", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "definition", "created_at", "configuration", "revision"], ["id"], ["definition", "configuration"]),
-        new("flow_component_packs", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "input_node_id", "definition", "outputs", "created_at"], ["id"], ["definition", "outputs"]),
+        new("flow_templates", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "definition", "created_at",
+            "configuration", "revision"], ["id"], ["definition", "configuration"]),
+        new("flow_component_packs", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "input_node_id",
+            "definition", "outputs", "created_at"], ["id"], ["definition", "outputs"]),
         new("library_flow_assignments", ["library_id", "flow_id", "flow_version", "revision"], ["library_id"]),
         new("library_node_accesses", ["library_id", "node_id", "mode", "local_path", "can_read", "can_write", "transfer_source_node_id", "updated_at", "is_enabled"], ["library_id", "node_id"]),
         new("library_node_processing_limits", ["library_id", "node_id", "max_concurrent_tasks"], ["library_id", "node_id"]),
         new("library_processing_settings", ["library_id", "watch_enabled", "scan_interval_seconds", "max_concurrent_tasks", "revision"], ["library_id"]),
         new("library_replacement_policies", ["library_id", "enabled", "grace_period_hours", "revision"], ["library_id"]),
-        new("executions", ["id", "media", "library_name", "flow_name", "flow_version", "flow_definition", "state", "node_id", "progress", "detail", "attempt", "retry_of", "revision", "queued_at", "started_at", "finished_at", "updated_at"], ["id"], ["flow_definition"], orderBy: ["queued_at", "id"], detectDeletes: false, deltaColumn: "updated_at"),
+        new("executions", ["id", "media", "library_name", "flow_name", "flow_version", "flow_definition", "state", "node_id", "progress", "detail", "attempt",
+            "retry_of", "revision", "queued_at", "started_at", "finished_at", "updated_at"], ["id"], ["flow_definition"], orderBy: ["queued_at", "id"],
+            detectDeletes: false, deltaColumn: "updated_at"),
         new("execution_events", ["id", "execution_id", "revision", "state", "detail", "created_at"], ["id"], immutable: true, detectDeletes: false, deltaColumn: "created_at"),
-        new("execution_steps", ["execution_id", "node_id", "invocation_id", "started_at", "completed_at", "completed_revision", "idempotent", "checkpoint", "completed_epoch", "completed_worker_node_id", "command_logs"], ["execution_id", "node_id"], ["checkpoint", "command_logs"]),
+        new("execution_steps", ["execution_id", "node_id", "invocation_id", "started_at", "completed_at", "completed_revision", "idempotent", "checkpoint",
+            "completed_epoch", "completed_worker_node_id", "command_logs"], ["execution_id", "node_id"], ["checkpoint", "command_logs"]),
         new("execution_artifacts", ["execution_id", "sha256", "byte_length"], ["execution_id", "sha256"], immutable: true),
         new("execution_inputs", ["execution_id", "input_path", "sha256"], ["execution_id", "input_path"], immutable: true),
-        new("library_scans", ["id", "library_id", "media_type", "state", "node_id", "created_at", "completed_at", "detail"], ["id"], filter: "state = 'completed' AND id = (SELECT latest.id FROM library_scans latest WHERE latest.library_id=library_scans.library_id AND latest.state='completed' ORDER BY latest.completed_at DESC,latest.id DESC LIMIT 1)", immutable: true, detectDeletes: false),
+        new("library_scans", ["id", "library_id", "media_type", "state", "node_id", "created_at", "completed_at", "detail"], ["id"],
+            filter: "state = 'completed' AND id = (SELECT latest.id FROM library_scans latest WHERE latest.library_id=library_scans.library_id AND latest.state='completed' ORDER BY latest.completed_at DESC,latest.id DESC LIMIT 1)",
+            immutable: true, detectDeletes: false),
         new("media_replacement_marks", ["library_id", "relative_path", "byte_length", "modified_at", "execution_id"], ["library_id", "relative_path", "byte_length", "modified_at"], immutable: true)
     ];
-    private static readonly EntityTable MediaTable = new("library_media", ["id", "library_id", "relative_path", "byte_length", "modified_at", "scan_id", "stable_since"], ["library_id", "relative_path"], fingerprintColumns: ["library_id", "relative_path", "byte_length", "modified_at", "stable_since"], preserveColumnsOnUpdate: ["id", "scan_id"]);
+    private static readonly EntityTable MediaTable = new("library_media", ["id", "library_id", "relative_path", "byte_length", "modified_at", "scan_id",
+        "stable_since"], ["library_id", "relative_path"], fingerprintColumns: ["library_id", "relative_path", "byte_length", "modified_at", "stable_since"],
+        preserveColumnsOnUpdate: ["id", "scan_id"]);
     // Receipts use the media path as their cross-node identity. SQLite nodes may assign different
     // library_media IDs when they scan the same file independently.
     private static readonly EntityTable ProcessingReceiptTable = new("library_processing_receipts",
@@ -114,7 +130,8 @@ public sealed partial class ClusterEntityReconciliation(
                 if (table.Filter is not null) predicates.Add(table.Filter);
                 if (!selection.FullScan) predicates.Add(SelectedKeysPredicate(table));
                 var where = predicates.Count == 0 ? "" : " WHERE " + string.Join(" AND ", predicates);
-                await using var command = Sql.Command($"SELECT {string.Join(",", table.Columns)} FROM {table.Name}{where}{(table.OrderBy.Length == 0 ? "" : " ORDER BY " + string.Join(",", table.OrderBy))}", readConnection);
+                await using var command = Sql.Command($"SELECT {string.Join(",", table.Columns)} FROM {table.Name}{where}{(table.OrderBy.Length == 0 ? "" : " ORDER BY " + string.Join(",", table.OrderBy))}",
+                    readConnection);
                 BindSelectedKeys(command, selection);
                 await using var reader = await command.ExecuteReaderAsync(ct);
                 while (await reader.ReadAsync(ct))
@@ -168,7 +185,8 @@ public sealed partial class ClusterEntityReconciliation(
                 var scanId = scan.Row["id"]!.GetValue<string>();
                 if (await ReadTableCursorAsync(readConnection, MediaInventoryCursor(scanId), ct) is not null) continue;
                 var mediaRows = new List<EntitySnapshot>();
-                await using var media = Sql.Command($"SELECT {string.Join(",", MediaTable.Columns)} FROM library_media WHERE library_id=@library AND scan_id=@scan ORDER BY relative_path", readConnection);
+                await using var media = Sql.Command($"SELECT {string.Join(",", MediaTable.Columns)} FROM library_media WHERE library_id=@library AND scan_id=@scan ORDER BY relative_path",
+                    readConnection);
                 media.Parameters.AddWithValue("library", Guid.Parse(libraryId));
                 media.Parameters.AddWithValue("scan", Guid.Parse(scanId));
                 await using var reader = await media.ExecuteReaderAsync(ct);
@@ -238,7 +256,8 @@ public sealed partial class ClusterEntityReconciliation(
             if (!await CanCaptureAsync(snapshot, connection, capture.Transaction, ct)) continue;
             var occurredAt = DateTimeOffset.UtcNow;
             var sequence = ++capture.NextSequence;
-            await InsertLocalEventAsync(connection, capture.Transaction, local.ClusterId, local.OriginId, sequence, EntitySetType, CreateSetPayload(snapshot, occurredAt, local.ClusterId), occurredAt, ct);
+            await InsertLocalEventAsync(connection, capture.Transaction, local.ClusterId, local.OriginId, sequence, EntitySetType, CreateSetPayload(snapshot,
+                occurredAt, local.ClusterId), occurredAt, ct);
             await UpsertEntityStateAsync(connection, capture.Transaction, ProcessingReceiptTable.Name, snapshot.Key, snapshot.Fingerprint, occurredAt, local.OriginId, sequence, false, ct);
             captured++;
             await capture.AdvanceAsync(ct);

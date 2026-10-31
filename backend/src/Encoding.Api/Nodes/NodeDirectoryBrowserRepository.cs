@@ -27,7 +27,8 @@ public sealed class NodeDirectoryBrowserRepository(DbDataSource dataSource)
         }
         var id = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        await using (var insert = Sql.Command("INSERT INTO node_directory_browse_requests(id,node_id,path,state,entries,error,created_at,updated_at,expires_at,claim_until) VALUES(@id,@node,@path,'queued','[]',NULL,@now,@now,@expires,NULL)", connection, transaction))
+        await using (var insert = Sql.Command("INSERT INTO node_directory_browse_requests(id,node_id,path,state,entries,error,created_at,updated_at,expires_at,claim_until) VALUES(@id,@node,@path,'queued','[]',NULL,@now,@now,@expires,NULL)",
+            connection, transaction))
         {
             insert.Parameters.AddWithValue("id", id);
             insert.Parameters.AddWithValue("node", nodeId);
@@ -70,7 +71,8 @@ public sealed class NodeDirectoryBrowserRepository(DbDataSource dataSource)
         // La plupart des sondages ne trouvent aucune demande : ne prennent alors aucun verrou d’écriture SQLite.
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var update = Sql.Command("UPDATE node_directory_browse_requests SET state='claimed',claim_until=@until,updated_at=@now WHERE id=@id AND node_id=@node AND expires_at>@now AND (state='queued' OR (state='claimed' AND claim_until<@now))", connection, transaction))
+        await using (var update = Sql.Command("UPDATE node_directory_browse_requests SET state='claimed',claim_until=@until,updated_at=@now WHERE id=@id AND node_id=@node AND expires_at>@now AND (state='queued' OR (state='claimed' AND claim_until<@now))",
+            connection, transaction))
         {
             update.Parameters.AddWithValue("until", now.AddSeconds(30));
             update.Parameters.AddWithValue("now", now);

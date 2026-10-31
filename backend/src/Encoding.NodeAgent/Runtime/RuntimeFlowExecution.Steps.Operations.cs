@@ -27,7 +27,8 @@ internal sealed partial class RuntimeFlowExecution
                 localPublicationArtifacts.Register(lease.ExecutionId, lease.Epoch, context.CurrentSha256, current);
             if (!already.Requested)
                 await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish", new FinishRuntimeExecution(lease.Epoch, Guid.NewGuid(), Volatile.Read(ref revision), "succeeded",
-                    "Résultat validé ; publication demandée par le flow.", context.CurrentSha256, context.Extension, context.BeforeMetadata, context.CurrentMetadata, null, commandCapture.Pending(), true), job.Token);
+                    "Résultat validé ; publication demandée par le flow.", context.CurrentSha256, context.Extension, context.BeforeMetadata,
+                        context.CurrentMetadata, null, commandCapture.Pending(), true), job.Token);
             RuntimePublicationState published;
             while (!(published = await client.PublicationStateAsync(lease.ExecutionId, lease.Epoch, job.Token)).Published) await Task.Delay(TimeSpan.FromSeconds(2), job.Token);
             publicationConfirmed = true;
@@ -55,8 +56,10 @@ internal sealed partial class RuntimeFlowExecution
             edit.Arguments, edit.AlreadyApplied, edit.Verify, directory, MediaActions.Flag(c, "keepBackup"), () => !job.IsCancellationRequested, job.Token,
             async token =>
             {
-                if (lease.SourceWriteGuardsSupported) await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source-write/authorize", new SourceWriteAuthorization(lease.Epoch, lease.SourceRoot), token);
-                return (await guards.CheckForStepAsync(lease.ExecutionId, lease.Epoch, lease.MediaPath, lease.LibraryId, lease.Guards, false, token)) is { Allowed: false } last ? last.Detail ?? "Lecture en cours." : null;
+                if (lease.SourceWriteGuardsSupported) await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source-write/authorize",
+                    new SourceWriteAuthorization(lease.Epoch, lease.SourceRoot), token);
+                return (await guards.CheckForStepAsync(lease.ExecutionId, lease.Epoch, lease.MediaPath, lease.LibraryId, lease.Guards, false,
+                    token)) is { Allowed: false } last ? last.Detail ?? "Lecture en cours." : null;
             });
         logger.LogInformation("Modification sur place {Node} : {Detail}", node.Id, result.Detail);
         if (result.Status == "unchanged") ctx.Output = "unchanged";
@@ -110,9 +113,11 @@ internal sealed partial class RuntimeFlowExecution
             catch (Exception exception) when (exception is HttpRequestException or IOException) { throw new SubtitleException("Ressource de polices indisponible : " + exception.Message); }
         }
         var outcome = id == "base-assemble-media"
-            ? await actions.AssembleAsync(c, context.CurrentMetadata!.Value, variables.TryGetValue("tracks.origin", out var origin) ? origin : null, current, directory, node.Id, job.Token, resourceFolder)
+            ? await actions.AssembleAsync(c, context.CurrentMetadata!.Value, variables.TryGetValue("tracks.origin", out var origin) ? origin : null, current,
+                directory, node.Id, job.Token, resourceFolder)
             : await actions.AddFontsAsync(c, current, directory, node.Id, job.Token, resourceFolder);
-        if (outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach (var note in added.EnumerateArray()) if (note.GetString() is { Length: > 0 } text) logger.LogInformation(id == "base-assemble-media" ? "Assemblage média : {Note}" : "{Note}", text);
+        if (outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach (var note in added.EnumerateArray()) if (note.GetString() is { Length: > 0 } text) logger.LogInformation(id == "base-assemble-media" ? "Assemblage média : {Note}" : "{Note}",
+            text);
         if (outcome.Primary is null) ctx.Output = "unchanged";
         else await ApplyOutcomeAsync(outcome with { Value = null }, node.Id);
 
@@ -141,7 +146,8 @@ internal sealed partial class RuntimeFlowExecution
         var node = ctx.Node; var id = ctx.Id; var c = ctx.Config;
         await EnsureScanAsync();
         var duration = 0.0;
-        if (context.CurrentMetadata is { } meta && meta.TryGetProperty("format", out var fmt) && fmt.TryGetProperty("duration", out var durProp) && durProp.ValueKind == JsonValueKind.String && double.TryParse(durProp.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var d))
+        if (context.CurrentMetadata is { } meta && meta.TryGetProperty("format", out var fmt) && fmt.TryGetProperty("duration", out var durProp)
+            && durProp.ValueKind == JsonValueKind.String && double.TryParse(durProp.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var d))
             duration = d;
 
         var (w, h) = (0, 0);
@@ -184,7 +190,8 @@ internal sealed partial class RuntimeFlowExecution
             else
             {
                 var stepCfg = new Dictionary<string, JsonElement>(c) { ["cropFilter"] = JsonSerializer.SerializeToElement(crop.ToFilter()) };
-                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id, stepCfg, node.Id)], current, directory, node.Id, client.NodeId, job.Token, knownMetadata: context.CurrentMetadata), node.Id);
+                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id, stepCfg, node.Id)], current, directory, node.Id, client.NodeId, job.Token,
+                    knownMetadata: context.CurrentMetadata), node.Id);
             }
         }
         else ctx.Output = "no-crop";
@@ -286,7 +293,8 @@ internal sealed partial class RuntimeFlowExecution
         else
         {
             var plan = context.Plan.ToList();
-            if (plan.Count == 0 && variables.TryGetValue("plan.tool", out var selectedTool) && selectedTool.GetString() == "mkvtoolnix") plan.Add(new("base-remux-matroska", new Dictionary<string, JsonElement>()));
+            if (plan.Count == 0 && variables.TryGetValue("plan.tool", out var selectedTool)
+                && selectedTool.GetString() == "mkvtoolnix") plan.Add(new("base-remux-matroska", new Dictionary<string, JsonElement>()));
             if (plan.Count == 0) plan.Add(new("video-remux-media", new Dictionary<string, JsonElement> { ["container"] = JsonSerializer.SerializeToElement(context.Extension.TrimStart('.')) }));
             var index = 0;
             while (index < plan.Count)
@@ -294,10 +302,13 @@ internal sealed partial class RuntimeFlowExecution
                 if (IsFfmpegPlan(plan[index].ComponentId))
                 {
                     var batch = new List<RuntimePlanStep>(); while (index < plan.Count && IsFfmpegPlan(plan[index].ComponentId)) batch.Add(plan[index++]);
-                    var outcome = await actions.FfmpegPlanAsync(batch, current, directory, node.Id + index, client.NodeId, job.Token, !variables.TryGetValue("plan.preserveUnchangedTracks", out var preserve) || preserve.GetBoolean(), knownMetadata: context.CurrentMetadata);
+                    var outcome = await actions.FfmpegPlanAsync(batch, current, directory, node.Id + index, client.NodeId, job.Token,
+                        !variables.TryGetValue("plan.preserveUnchangedTracks", out var preserve) || preserve.GetBoolean(),
+                        knownMetadata: context.CurrentMetadata);
                     await ApplyOutcomeAsync(outcome, node.Id);
                 }
-                else { var step = plan[index++]; await ApplyOutcomeAsync(await actions.ExecuteAsync(step.ComponentId, step.Configuration, current, directory, node.Id + index, ExtraAsync, client.NodeId, job.Token), node.Id); }
+                else { var step = plan[index++]; await ApplyOutcomeAsync(await actions.ExecuteAsync(step.ComponentId, step.Configuration, current, directory,
+                    node.Id + index, ExtraAsync, client.NodeId, job.Token), node.Id); }
             }
             context = context with { Plan = [] };
         }

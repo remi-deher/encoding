@@ -9,7 +9,8 @@ namespace Encoding.NodeAgent.Runtime.Media;
 
 public sealed partial class MediaActions
 {
-    public async Task<CropCoordinates?> DetectCropAsync(string current,string directory,int samplePoints,int sampleDurationSeconds,int threshold,int roundMultiple,double durationSeconds,CancellationToken ct)
+    public async Task<CropCoordinates?> DetectCropAsync(string current,string directory,int samplePoints,int sampleDurationSeconds,int threshold,
+        int roundMultiple,double durationSeconds,CancellationToken ct)
     {
         var points=new List<double>();
         if(durationSeconds>10) points.AddRange([durationSeconds*0.1,durationSeconds*0.25,durationSeconds*0.5,durationSeconds*0.75,durationSeconds*0.9]);
@@ -18,7 +19,8 @@ public sealed partial class MediaActions
         var lines=new List<string>();
         foreach(var p in points.Take(Math.Max(1,samplePoints)))
         {
-            var args=new List<string> { "-nostdin","-v","error","-ss",p.ToString("F2",CultureInfo.InvariantCulture),"-i",current,"-frames:v","25","-vf",$"cropdetect={threshold}:16:0","-f","null","-" };
+            var args=new List<string> { "-nostdin","-v","error","-ss",p.ToString("F2",CultureInfo.InvariantCulture),"-i",current,"-frames:v","25","-vf",
+                $"cropdetect={threshold}:16:0","-f","null","-" };
             var res=await tools.CheckedWithResultAsync("ffmpeg",args,directory,ct);
             if(!string.IsNullOrWhiteSpace(res.Error))
                 lines.AddRange(res.Error.Split('\n',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries));
@@ -123,7 +125,8 @@ public sealed partial class MediaActions
         return new(file,[],JsonSerializer.SerializeToElement(new { removed=true,removedTracks=toRemove.ToArray() }));
     }
 
-    public async Task<JsonElement> ValidateOutputAsync(string current,string original,JsonElement before,JsonElement after,IReadOnlyDictionary<string,JsonElement> config,string directory,CancellationToken ct)
+    public async Task<JsonElement> ValidateOutputAsync(string current,string original,JsonElement before,JsonElement after,IReadOnlyDictionary<string,
+        JsonElement> config,string directory,CancellationToken ct)
     {
         var issues=new List<string>();
         var sourceStreams=Streams(before).Where(stream=>!IsAttachedPicture(stream)).ToArray();
@@ -278,7 +281,8 @@ public sealed partial class MediaActions
     }
     private static string CodecType(JsonElement stream)=>stream.TryGetProperty("codec_type",out var type)?type.GetString()??"":"";
     private static string CodecName(JsonElement stream)=>stream.TryGetProperty("codec_name",out var codec)?codec.GetString()??"":"";
-    private static bool IsAttachedPicture(JsonElement stream)=>stream.TryGetProperty("disposition",out var disposition)&&disposition.TryGetProperty("attached_pic",out var cover)&&cover.ValueKind==JsonValueKind.Number&&cover.GetInt32()!=0;
+    private static bool IsAttachedPicture(JsonElement stream)=>stream.TryGetProperty("disposition",
+        out var disposition)&&disposition.TryGetProperty("attached_pic",out var cover)&&cover.ValueKind==JsonValueKind.Number&&cover.GetInt32()!=0;
     private static int? MetadataInt(JsonElement source,string name)=>source.TryGetProperty(name,out var value)&&value.TryGetInt32(out var number)?number:null;
     private static double? MetadataNumber(JsonElement source,string parent,string name)
     {
@@ -289,15 +293,19 @@ public sealed partial class MediaActions
     }
     private static int? ChapterCount(JsonElement metadata)=>metadata.TryGetProperty("chapters",out var chapters)&&chapters.ValueKind==JsonValueKind.Array?chapters.GetArrayLength():null;
     private static string Tag(JsonElement stream,string name)=>stream.TryGetProperty("tags",out var tags)&&tags.TryGetProperty(name,out var value)?value.GetString()??"":"";
-    private static bool Disposition(JsonElement stream,string name)=>stream.TryGetProperty("disposition",out var disposition)&&disposition.TryGetProperty(name,out var value)&&value.ValueKind==JsonValueKind.Number&&value.GetInt32()!=0;
+    private static bool Disposition(JsonElement stream,string name)=>stream.TryGetProperty("disposition",out var disposition)&&disposition.TryGetProperty(name,
+        out var value)&&value.ValueKind==JsonValueKind.Number&&value.GetInt32()!=0;
     private static string AudioLayout(JsonElement stream)=>stream.TryGetProperty("channel_layout",out var layout)?layout.GetString()??"":"";
     private static string NormalizeLayout(string value)=>value.ToLowerInvariant().Replace("(side)","").Replace("sl","bl",StringComparison.Ordinal).Replace("sr","br",StringComparison.Ordinal);
-    private static bool HasLfe(string value)=>value.Contains("lfe",StringComparison.OrdinalIgnoreCase)||System.Text.RegularExpressions.Regex.IsMatch(value,@"\.1(?:\(|$)",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static bool HasLfe(string value)=>value.Contains("lfe",StringComparison.OrdinalIgnoreCase)||System.Text.RegularExpressions.Regex.IsMatch(value,
+        @"\.1(?:\(|$)",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static string[] Csv(IReadOnlyDictionary<string,JsonElement> config,string key)=>Text(config,key).Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
     private static bool IsTextSubtitle(JsonElement stream)=>new[]{"ass","ssa","subrip","srt","webvtt","mov_text","text"}.Contains(CodecName(stream),StringComparer.OrdinalIgnoreCase);
     private static string[] Attachments(JsonElement identify)=>identify.TryGetProperty("attachments",out var attachments)&&attachments.ValueKind==JsonValueKind.Array
-        ?attachments.EnumerateArray().Select(item=>string.Join('|',AttachmentField(item,"file_name","name"),AttachmentField(item,"content_type","mime_type"),AttachmentField(item,"size"))).ToArray():[];
-    private static string AttachmentField(JsonElement item,string primary,string? alternate=null)=>item.TryGetProperty(primary,out var value)?value.ToString():alternate is not null&&item.TryGetProperty(alternate,out value)?value.ToString():"";
+        ?attachments.EnumerateArray().Select(item=>string.Join('|',AttachmentField(item,"file_name","name"),AttachmentField(item,"content_type","mime_type"),
+            AttachmentField(item,"size"))).ToArray():[];
+    private static string AttachmentField(JsonElement item,string primary,string? alternate=null)=>item.TryGetProperty(primary,
+        out var value)?value.ToString():alternate is not null&&item.TryGetProperty(alternate,out value)?value.ToString():"";
     private static async Task<string[]> ExtractAssEventsAsync(ProcessToolRunner tools,string media,JsonElement subtitle,string directory,CancellationToken ct)
     {
         var index=MetadataInt(subtitle,"index")??throw new MediaToolException("index de piste de sous-titres",1);

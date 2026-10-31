@@ -55,13 +55,15 @@ public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration co
         }
         var status="ready";
         try {
-            if(draft) { using var json=JsonDocument.Parse(document); document=JsonSerializer.Serialize(new {kind="draft",draftRevision=version,definition=json.RootElement},FlowRepository.JsonOptions); }
+            if(draft) { using var json=JsonDocument.Parse(document); document=JsonSerializer.Serialize(new {kind="draft",draftRevision=version,
+                definition=json.RootElement},FlowRepository.JsonOptions); }
             await WriteSnapshotAsync(id,version,document,ct,draft);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         { status="failed"; logger.LogWarning(exception,"Sauvegarde impossible pour le flow {FlowId}, version {Version}.",id,version); }
         var table=draft?"flow_draft_backups":"flow_backup_jobs"; var number=draft?"revision":"version";
-        await using var update=Sql.Command($"UPDATE {table} SET status=@status,checked_at=clock_timestamp(),next_attempt_at=clock_timestamp()+@delay WHERE flow_id=@id AND {number}=@version",connection,tx);
+        await using var update=Sql.Command($"UPDATE {table} SET status=@status,checked_at=clock_timestamp(),next_attempt_at=clock_timestamp()+@delay WHERE flow_id=@id AND {number}=@version",
+            connection,tx);
         update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("version",version);
         update.Parameters.AddWithValue("status",status); update.Parameters.AddWithValue("delay",status=="ready" ? TimeSpan.FromMinutes(10) : TimeSpan.FromSeconds(30));
         await update.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return true;

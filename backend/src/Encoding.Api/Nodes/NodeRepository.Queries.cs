@@ -95,7 +95,8 @@ public sealed partial class NodeRepository
     /// </summary>
     public async Task<ModeRequestResult> RequestModeAsync(Guid nodeId, bool server, bool worker, TimeSpan offlineAfter, CancellationToken ct,bool persist=true)
     {
-        await using(var exists=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL)")) {exists.Parameters.AddWithValue("id",nodeId);if(!await exists.ScalarBoolAsync(ct)) return ModeRequestResult.NotFound;}
+        await using(var exists=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL)")) {exists.Parameters.AddWithValue("id",
+            nodeId);if(!await exists.ScalarBoolAsync(ct)) return ModeRequestResult.NotFound;}
         if(!await CanCoordinateAsync(ct)) return ModeRequestResult.CoordinationUnavailable;
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
@@ -109,7 +110,8 @@ public sealed partial class NodeRepository
 
         if (roles.Contains("server") && !server)
         {
-            await using(var queue=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id WHERE o.state IN ('active','frozen','received') AND e.state IN ('queued','running','cancelling'))",c,tx)) if(await queue.ScalarBoolAsync(ct)) return ModeRequestResult.CoordinationUnavailable;
+            await using(var queue=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id WHERE o.state IN ('active','frozen','received') AND e.state IN ('queued','running','cancelling'))",
+                c,tx)) if(await queue.ScalarBoolAsync(ct)) return ModeRequestResult.CoordinationUnavailable;
             await using var others = Sql.Command("""
                 SELECT count(*) FROM cluster_nodes
                 WHERE id <> @id AND deleted_at IS NULL AND 'server' = ANY(roles) AND 'server' = ANY(COALESCE(desired_roles, roles))
@@ -146,19 +148,22 @@ public sealed partial class NodeRepository
     public async Task<string> DeleteAsync(Guid id,CancellationToken ct)
     {
         bool server;
-        await using(var read=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))")) {read.Parameters.AddWithValue("id",id);server=await read.ScalarBoolAsync(ct);}
+        await using(var read=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))")) {read.Parameters.AddWithValue("id",
+            id);server=await read.ScalarBoolAsync(ct);}
         if(server && !await CanCoordinateAsync(ct)) return "coordination";
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         await using var node=Sql.Command("SELECT id FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE",c,tx);
         node.Parameters.AddWithValue("id",id); if(await node.ExecuteScalarAsync(ct) is null) return "missing";
-        if(!server) {await using var changed=Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))",c,tx);changed.Parameters.AddWithValue("id",id);if(await changed.ScalarBoolAsync(ct)) return "coordination";}
+        if(!server) {await using var changed=Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))",c,tx);
+            changed.Parameters.AddWithValue("id",id);if(await changed.ScalarBoolAsync(ct)) return "coordination";}
         await using var active=Sql.Command("""
           SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id
             WHERE (w.worker_node_id=@id OR w.source_node_id=@id) AND (w.lease_until>clock_timestamp() OR w.handoff_pending) AND e.state IN ('running','cancelling'))
           OR EXISTS(SELECT 1 FROM library_scans WHERE node_id=@id AND state='running' AND lease_until>clock_timestamp())
           """,c,tx);
         active.Parameters.AddWithValue("id",id); if((await active.ScalarBoolAsync(ct))) return "busy";
-        await using(var queues=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id WHERE o.state IN ('active','frozen','received') AND e.state IN ('queued','running','cancelling')) AND EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))",c,tx))
+        await using(var queues=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id WHERE o.state IN ('active','frozen','received') AND e.state IN ('queued','running','cancelling')) AND EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))",
+            c,tx))
         {queues.Parameters.AddWithValue("id",id);if(await queues.ScalarBoolAsync(ct)) return "busy";}
         if (peerAdmissions is not null) await peerAdmissions.RevokeNodeAdmissionAsync(c, tx, id, ct);
         await using var remove=Sql.Command("""

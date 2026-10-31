@@ -46,7 +46,8 @@ public sealed class AiSettingsService
             (defaultProvider, UpdateOptional(update.DefaultModel, current.DefaultModel), UpdateOptional(update.DefaultReasoningEffort, current.DefaultReasoningEffort), false), catalog);
         ValidateSelection("assistant",
             (current.AssistantProvider ?? current.DefaultProvider, current.AssistantModel, current.AssistantReasoningEffort, current.AssistantLocalOnly),
-            (assistantProvider ?? defaultProvider, UpdateOptional(update.AssistantModel, current.AssistantModel), UpdateOptional(update.AssistantReasoningEffort, current.AssistantReasoningEffort), assistantLocalOnly), catalog);
+            (assistantProvider ?? defaultProvider, UpdateOptional(update.AssistantModel, current.AssistantModel),
+                UpdateOptional(update.AssistantReasoningEffort, current.AssistantReasoningEffort), assistantLocalOnly), catalog);
         ValidateSelection("flows",
             (current.FlowProvider ?? current.DefaultProvider, current.FlowModel, current.FlowReasoningEffort, current.FlowLocalOnly),
             (flowProvider ?? defaultProvider, UpdateOptional(update.FlowModel, current.FlowModel), UpdateOptional(update.FlowReasoningEffort, current.FlowReasoningEffort), flowLocalOnly), catalog);
@@ -222,7 +223,8 @@ public sealed class AiSettingsService
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        var json = JsonSerializer.Serialize(settings with { OpenAiApiKey = Protect(settings.OpenAiApiKey), AnthropicApiKey = Protect(settings.AnthropicApiKey) }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        var json = JsonSerializer.Serialize(settings with { OpenAiApiKey = Protect(settings.OpenAiApiKey),
+            AnthropicApiKey = Protect(settings.AnthropicApiKey) }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             WriteIndented = true
         });

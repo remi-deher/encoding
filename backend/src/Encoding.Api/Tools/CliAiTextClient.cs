@@ -29,8 +29,11 @@ public sealed class CliAiTextClient(string toolId, AiCliRuntime runtime, int tim
         {
             var text = prompt.UserPrompt;
             string[] args = toolId == "claude-cli"
-                ? ["-p", "--system-prompt", prompt.SystemPrompt, "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands"]
-                : ["exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--disable", "shell_tool", "--disable", "unified_exec", "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "-c", "approval_policy=\"never\"", "-c", $"developer_instructions={JsonSerializer.Serialize(prompt.SystemPrompt)}", "-"];
+                ? ["-p", "--system-prompt", prompt.SystemPrompt, "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "",
+                    "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands"]
+                : ["exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--disable", "shell_tool", "--disable", "unified_exec",
+                    "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "-c", "approval_policy=\"never\"", "-c",
+                    $"developer_instructions={JsonSerializer.Serialize(prompt.SystemPrompt)}", "-"];
             if (prompt.Model is { Length: > 0 }) args = [.. args[..^ (toolId == "codex-cli" ? 1 : 0)], "--model", prompt.Model, .. (toolId == "codex-cli" ? new[] { "-" } : Array.Empty<string>())];
             if (prompt.ReasoningEffort is { Length: > 0 } effort)
             {

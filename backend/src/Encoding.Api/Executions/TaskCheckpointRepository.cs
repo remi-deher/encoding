@@ -55,7 +55,10 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
           """,c,tx))
         {
             read.Parameters.AddWithValue("id",id);read.Parameters.AddWithValue("peer",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct)) return null;
-            snapshot=new(id,r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),JsonSerializer.Deserialize<FlowDefinition>(r.GetString(4),Json)!,r.GetInt32(5),r.GetInt32(6),r.GetFieldValue<DateTimeOffset>(7),r.GetInt64(8),r.IsDBNull(9)?null:r.GetString(9),r.IsDBNull(10)?null:JsonSerializer.Deserialize<JsonElement>(r.GetString(10)),[],[],new Dictionary<string,string>(),r.IsDBNull(11)?new Dictionary<string,IReadOnlyDictionary<string,JsonElement>>():settings.ReadSnapshot((byte[])r[11]),r.GetString(12));
+            snapshot=new(id,r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),JsonSerializer.Deserialize<FlowDefinition>(r.GetString(4),Json)!,
+                r.GetInt32(5),r.GetInt32(6),r.GetFieldValue<DateTimeOffset>(7),r.GetInt64(8),r.IsDBNull(9)?null:r.GetString(9),
+                r.IsDBNull(10)?null:JsonSerializer.Deserialize<JsonElement>(r.GetString(10)),[],[],new Dictionary<string,string>(),
+                r.IsDBNull(11)?new Dictionary<string,IReadOnlyDictionary<string,JsonElement>>():settings.ReadSnapshot((byte[])r[11]),r.GetString(12));
             freezeSettings=r.IsDBNull(11);cluster=r.GetGuid(13);previous=r.GetGuid(14);epoch=r.GetInt64(15);
         }
         if(!keys.HasKey(cluster))
@@ -66,11 +69,15 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
         if(freezeSettings)
         {
             var frozen=await settings.ResolveEffectiveAsync(snapshot.Flow.Id,snapshot.Flow.Nodes.Select(n=>n.Component.PluginId).Where(p=>p!="base"),c,tx,ct);
-            await using var store=Sql.Command("UPDATE execution_work SET plugin_configuration_snapshot=@settings WHERE execution_id=@id AND plugin_configuration_snapshot IS NULL",c,tx);store.Parameters.AddWithValue("settings",SqlKind.Bytes,settings.ProtectSnapshot(frozen));store.Parameters.AddWithValue("id",id);await store.ExecuteNonQueryAsync(ct);snapshot=snapshot with {PluginConfigurations=frozen};
+            await using var store=Sql.Command("UPDATE execution_work SET plugin_configuration_snapshot=@settings WHERE execution_id=@id AND plugin_configuration_snapshot IS NULL",
+                c,tx);store.Parameters.AddWithValue("settings",SqlKind.Bytes,settings.ProtectSnapshot(frozen));store.Parameters.AddWithValue("id",id);
+                await store.ExecuteNonQueryAsync(ct);snapshot=snapshot with {PluginConfigurations=frozen};
         }
         var steps=new List<ClusterTaskStep>();
-        await using(var read=Sql.Command("SELECT node_id,invocation_id,completed_revision,started_at,checkpoint,idempotent FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision LIMIT 1001",c,tx))
-        {read.Parameters.AddWithValue("id",id);await using var r=await read.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)) steps.Add(new(r.GetString(0),r.GetGuid(1),r.GetInt32(2),r.GetFieldValue<DateTimeOffset>(3),JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(4),Json)!,r.GetBoolean(5)));}
+        await using(var read=Sql.Command("SELECT node_id,invocation_id,completed_revision,started_at,checkpoint,idempotent FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision LIMIT 1001",
+            c,tx))
+        {read.Parameters.AddWithValue("id",id);await using var r=await read.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)) steps.Add(new(r.GetString(0),
+            r.GetGuid(1),r.GetInt32(2),r.GetFieldValue<DateTimeOffset>(3),JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(4),Json)!,r.GetBoolean(5)));}
         if(steps.Count>1000 || steps.LastOrDefault()?.Checkpoint.Context.DirectSource is not null) return null;
         var blobs=new List<ClusterTaskArtifact>();var inputs=new Dictionary<string,string>();
         await using(var read=Sql.Command("SELECT sha256,byte_length FROM execution_artifacts WHERE execution_id=@id LIMIT 1001",c,tx))
@@ -86,7 +93,8 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
     {
         if(!keys.HasKey(cluster)) keys.GetOrCreate(cluster);
         var plain=JsonSerializer.SerializeToUtf8Bytes(snapshot,Json);
-        return new(2,Guid.NewGuid(),cluster,identity.PeerId,"checkpoint",id,epoch,previous,Snapshot:ClusterPayloadProtection.Protect(keys.GetRequired(cluster),plain,"task-checkpoint/"+id.ToString("D")),Revision:snapshot.Revision);
+        return new(2,Guid.NewGuid(),cluster,identity.PeerId,"checkpoint",id,epoch,previous,Snapshot:ClusterPayloadProtection.Protect(keys.GetRequired(cluster),
+            plain,"task-checkpoint/"+id.ToString("D")),Revision:snapshot.Revision);
     }
     public ClusterTaskSnapshot Decode(ClusterTaskEvent e)
     {
@@ -95,23 +103,29 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
         if(value.ExecutionId!=e.ExecutionId || value.Revision!=e.Revision || value.Artifacts.Count>1000 || value.Steps.Count>1000
             || value.Artifacts.Any(a=>!RuntimeArtifactStore.ValidDigest(a.Sha256)||a.Bytes<=0) || value.Artifacts.Select(a=>a.Sha256).Distinct().Count()!=value.Artifacts.Count
             || value.SourceSha256 is not null && !value.Artifacts.Any(a=>a.Sha256==value.SourceSha256)
-            || value.Steps.Any(s=>s.Checkpoint.Context.DirectSource is not null || !value.Artifacts.Any(a=>a.Sha256==s.Checkpoint.Context.CurrentSha256))) throw new InvalidDataException("Checkpoint incomplet.");
+            || value.Steps.Any(s=>s.Checkpoint.Context.DirectSource is not null
+                || !value.Artifacts.Any(a=>a.Sha256==s.Checkpoint.Context.CurrentSha256))) throw new InvalidDataException("Checkpoint incomplet.");
         return value;
     }
     internal async Task MarkDirtyAsync(Guid[] ids,DbConnection c,DbTransaction tx,CancellationToken ct)
-    {await using var cmd=Sql.Command("INSERT INTO task_checkpoint_dirty(execution_id) SELECT execution_id FROM execution_work WHERE execution_id=ANY(@ids) ON CONFLICT DO NOTHING",c,tx);cmd.Parameters.AddWithValue("ids",ids);await cmd.ExecuteNonQueryAsync(ct);}
+    {await using var cmd=Sql.Command("INSERT INTO task_checkpoint_dirty(execution_id) SELECT execution_id FROM execution_work WHERE execution_id=ANY(@ids) ON CONFLICT DO NOTHING",
+        c,tx);cmd.Parameters.AddWithValue("ids",ids);await cmd.ExecuteNonQueryAsync(ct);}
     internal async Task SaveAsync(Guid id,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
         var e=await CaptureAsync(id,c,tx,ct);if(e is null) return;
         var body=Sign(e);await ClusterReconciliationRepository.SetRegisterInTransactionAsync(Prefix+e.EventId.ToString("N"),body,c,tx,ct);
         await StoreAsync(e,body,c,tx,ct);
         await using var clean=Sql.Command("DELETE FROM task_checkpoint_dirty WHERE execution_id=@id",c,tx);clean.Parameters.AddWithValue("id",id);await clean.ExecuteNonQueryAsync(ct);
-        await using var applied=Sql.Command("DELETE FROM task_coordination_inbox WHERE register_key=@key AND body=@body",c,tx);applied.Parameters.AddWithValue("key",Prefix+e.EventId.ToString("N"));applied.Parameters.AddWithValue("body",body);await applied.ExecuteNonQueryAsync(ct);
+        await using var applied=Sql.Command("DELETE FROM task_coordination_inbox WHERE register_key=@key AND body=@body",c,tx);
+            applied.Parameters.AddWithValue("key",Prefix+e.EventId.ToString("N"));applied.Parameters.AddWithValue("body",body);
+            await applied.ExecuteNonQueryAsync(ct);
     }
     internal static async Task StoreAsync(ClusterTaskEvent e,string body,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var cmd=Sql.Command("INSERT INTO task_checkpoints(execution_id,epoch,revision,author_peer_id,body) VALUES(@id,@epoch,@revision,@peer,@body) ON CONFLICT(execution_id,epoch) DO UPDATE SET revision=excluded.revision,author_peer_id=excluded.author_peer_id,body=excluded.body WHERE excluded.revision>=task_checkpoints.revision",c,tx);
-        cmd.Parameters.AddWithValue("id",e.ExecutionId);cmd.Parameters.AddWithValue("epoch",e.Epoch);cmd.Parameters.AddWithValue("revision",e.Revision);cmd.Parameters.AddWithValue("peer",e.AuthorPeerId);cmd.Parameters.AddWithValue("body",body);await cmd.ExecuteNonQueryAsync(ct);
+        await using var cmd=Sql.Command("INSERT INTO task_checkpoints(execution_id,epoch,revision,author_peer_id,body) VALUES(@id,@epoch,@revision,@peer,@body) ON CONFLICT(execution_id,epoch) DO UPDATE SET revision=excluded.revision,author_peer_id=excluded.author_peer_id,body=excluded.body WHERE excluded.revision>=task_checkpoints.revision",
+            c,tx);
+        cmd.Parameters.AddWithValue("id",e.ExecutionId);cmd.Parameters.AddWithValue("epoch",e.Epoch);cmd.Parameters.AddWithValue("revision",e.Revision);
+            cmd.Parameters.AddWithValue("peer",e.AuthorPeerId);cmd.Parameters.AddWithValue("body",body);await cmd.ExecuteNonQueryAsync(ct);
     }
     internal async Task<bool> HasFilesAsync(ClusterTaskSnapshot value,CancellationToken ct)
     {
@@ -133,20 +147,38 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
           DELETE FROM execution_steps WHERE execution_id=@id AND completed_at IS NULL; DELETE FROM execution_inputs WHERE execution_id=@id;
           """,c,tx))
         {
-            execution.Parameters.AddWithValue("id",value.ExecutionId);execution.Parameters.AddWithValue("path",RuntimeRepository.NormalizePath(value.MediaPath));execution.Parameters.AddWithValue("libraryName",value.LibraryName);execution.Parameters.AddWithValue("flowName",value.Flow.Name);execution.Parameters.AddWithValue("version",value.Flow.Version);execution.Parameters.AddWithValue("flow",SqlKind.Json,JsonSerializer.Serialize(value.Flow,Json));
-            execution.Parameters.AddWithValue("attempt",value.Attempt);execution.Parameters.AddWithValue("revision",value.Revision);execution.Parameters.AddWithValue("queued",value.QueuedAt);execution.Parameters.AddWithValue("library",value.LibraryId);execution.Parameters.AddWithValue("key",value.MediaKey);execution.Parameters.AddWithValue("source",sourceNode);execution.Parameters.AddWithValue("epoch",value.LeaseEpoch+1);execution.Parameters.AddWithValue("sha",(object?)value.SourceSha256??DBNull.Value);execution.Parameters.AddWithValue("before",SqlKind.Json,(object?)value.BeforeMetadata?.GetRawText()??DBNull.Value);execution.Parameters.AddWithValue("settings",SqlKind.Bytes,settings.ProtectSnapshot(value.PluginConfigurations));execution.Parameters.AddWithValue("policy",value.MediaPolicy);await execution.ExecuteNonQueryAsync(ct);
+            execution.Parameters.AddWithValue("id",value.ExecutionId);execution.Parameters.AddWithValue("path",
+                RuntimeRepository.NormalizePath(value.MediaPath));execution.Parameters.AddWithValue("libraryName",value.LibraryName);
+                execution.Parameters.AddWithValue("flowName",value.Flow.Name);execution.Parameters.AddWithValue("version",value.Flow.Version);
+                execution.Parameters.AddWithValue("flow",SqlKind.Json,JsonSerializer.Serialize(value.Flow,Json));
+            execution.Parameters.AddWithValue("attempt",value.Attempt);execution.Parameters.AddWithValue("revision",value.Revision);
+                execution.Parameters.AddWithValue("queued",value.QueuedAt);execution.Parameters.AddWithValue("library",value.LibraryId);
+                execution.Parameters.AddWithValue("key",value.MediaKey);execution.Parameters.AddWithValue("source",sourceNode);
+                execution.Parameters.AddWithValue("epoch",value.LeaseEpoch+1);execution.Parameters.AddWithValue("sha",
+                (object?)value.SourceSha256??DBNull.Value);execution.Parameters.AddWithValue("before",SqlKind.Json,
+                (object?)value.BeforeMetadata?.GetRawText()??DBNull.Value);execution.Parameters.AddWithValue("settings",SqlKind.Bytes,
+                settings.ProtectSnapshot(value.PluginConfigurations));execution.Parameters.AddWithValue("policy",value.MediaPolicy);
+                await execution.ExecuteNonQueryAsync(ct);
         }
         foreach(var a in value.Artifacts)
         {
-            await using var cmd=Sql.Command("INSERT INTO execution_artifacts(execution_id,sha256,byte_length) VALUES(@id,@sha,@bytes) ON CONFLICT DO NOTHING",c,tx);cmd.Parameters.AddWithValue("id",value.ExecutionId);cmd.Parameters.AddWithValue("sha",a.Sha256);cmd.Parameters.AddWithValue("bytes",a.Bytes);await cmd.ExecuteNonQueryAsync(ct);
+            await using var cmd=Sql.Command("INSERT INTO execution_artifacts(execution_id,sha256,byte_length) VALUES(@id,@sha,@bytes) ON CONFLICT DO NOTHING",c,
+                tx);cmd.Parameters.AddWithValue("id",value.ExecutionId);cmd.Parameters.AddWithValue("sha",a.Sha256);cmd.Parameters.AddWithValue("bytes",
+                a.Bytes);await cmd.ExecuteNonQueryAsync(ct);
         }
         foreach(var step in value.Steps)
         {
-            await using var cmd=Sql.Command("INSERT INTO execution_steps(execution_id,node_id,invocation_id,started_at,completed_at,completed_revision,idempotent,checkpoint) VALUES(@id,@node,@invocation,@started,@started,@revision,@safe,@checkpoint) ON CONFLICT(execution_id,node_id) DO UPDATE SET invocation_id=excluded.invocation_id,started_at=excluded.started_at,completed_at=excluded.completed_at,completed_revision=excluded.completed_revision,idempotent=excluded.idempotent,checkpoint=excluded.checkpoint,command_logs=CASE WHEN execution_steps.invocation_id=excluded.invocation_id THEN execution_steps.command_logs ELSE '[]' END",c,tx);cmd.Parameters.AddWithValue("id",value.ExecutionId);cmd.Parameters.AddWithValue("node",step.NodeId);cmd.Parameters.AddWithValue("invocation",step.InvocationId);cmd.Parameters.AddWithValue("started",step.StartedAt);cmd.Parameters.AddWithValue("revision",step.Revision);cmd.Parameters.AddWithValue("safe",step.Idempotent);cmd.Parameters.AddWithValue("checkpoint",SqlKind.Json,JsonSerializer.Serialize(step.Checkpoint,Json));await cmd.ExecuteNonQueryAsync(ct);
+            await using var cmd=Sql.Command("INSERT INTO execution_steps(execution_id,node_id,invocation_id,started_at,completed_at,completed_revision,idempotent,checkpoint) VALUES(@id,@node,@invocation,@started,@started,@revision,@safe,@checkpoint) ON CONFLICT(execution_id,node_id) DO UPDATE SET invocation_id=excluded.invocation_id,started_at=excluded.started_at,completed_at=excluded.completed_at,completed_revision=excluded.completed_revision,idempotent=excluded.idempotent,checkpoint=excluded.checkpoint,command_logs=CASE WHEN execution_steps.invocation_id=excluded.invocation_id THEN execution_steps.command_logs ELSE '[]' END",
+                c,tx);cmd.Parameters.AddWithValue("id",value.ExecutionId);cmd.Parameters.AddWithValue("node",step.NodeId);
+                cmd.Parameters.AddWithValue("invocation",step.InvocationId);cmd.Parameters.AddWithValue("started",step.StartedAt);
+                cmd.Parameters.AddWithValue("revision",step.Revision);cmd.Parameters.AddWithValue("safe",step.Idempotent);
+                cmd.Parameters.AddWithValue("checkpoint",SqlKind.Json,JsonSerializer.Serialize(step.Checkpoint,Json));await cmd.ExecuteNonQueryAsync(ct);
         }
         foreach(var input in value.Inputs)
         {
-            await using var cmd=Sql.Command("INSERT INTO execution_inputs(execution_id,input_path,sha256) VALUES(@id,@path,@sha)",c,tx);cmd.Parameters.AddWithValue("id",value.ExecutionId);cmd.Parameters.AddWithValue("path",RuntimeRepository.NormalizePath(input.Key));cmd.Parameters.AddWithValue("sha",input.Value);await cmd.ExecuteNonQueryAsync(ct);
+            await using var cmd=Sql.Command("INSERT INTO execution_inputs(execution_id,input_path,sha256) VALUES(@id,@path,@sha)",c,tx);
+                cmd.Parameters.AddWithValue("id",value.ExecutionId);cmd.Parameters.AddWithValue("path",RuntimeRepository.NormalizePath(input.Key));
+                cmd.Parameters.AddWithValue("sha",input.Value);await cmd.ExecuteNonQueryAsync(ct);
         }
     }
 }

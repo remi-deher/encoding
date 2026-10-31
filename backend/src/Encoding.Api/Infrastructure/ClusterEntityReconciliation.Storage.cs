@@ -21,7 +21,8 @@ public sealed partial class ClusterEntityReconciliation
             var id=row[table.Name=="executions"?"id":"execution_id"]?.GetValue<string>();
             if(id is not null)
             {
-                await using var owned=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN task_ownership o ON o.execution_id=w.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id WHERE w.execution_id=@id AND o.state IN ('active','frozen'))",connection,transaction);
+                await using var owned=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN task_ownership o ON o.execution_id=w.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id WHERE w.execution_id=@id AND o.state IN ('active','frozen'))",
+                    connection,transaction);
                 owned.Parameters.AddWithValue("id",Guid.Parse(id));
                 if(await owned.ScalarBoolAsync(ct))
                 {
@@ -29,8 +30,13 @@ public sealed partial class ClusterEntityReconciliation
                     // It may fill missing command logs, never replace current checkpoints or runtime state.
                     if(table.Name=="execution_steps" && row["completed_at"] is not null && row["checkpoint"] is not null && row["command_logs"] is not null)
                     {
-                        await using var audit=Sql.Command("UPDATE execution_steps SET command_logs=@logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NOT NULL AND checkpoint=@checkpoint AND length(command_logs)<length(@logs)",connection,transaction);
-                        audit.Parameters.AddWithValue("id",Guid.Parse(id));audit.Parameters.AddWithValue("node",row["node_id"]!.GetValue<string>());audit.Parameters.AddWithValue("invocation",Guid.Parse(row["invocation_id"]!.GetValue<string>()));audit.Parameters.AddWithValue("checkpoint",SqlKind.Json,row["checkpoint"]!.ToJsonString(JsonOptions));audit.Parameters.AddWithValue("logs",SqlKind.Json,row["command_logs"]!.ToJsonString(JsonOptions));await audit.ExecuteNonQueryAsync(ct);
+                        await using var audit=Sql.Command("UPDATE execution_steps SET command_logs=@logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NOT NULL AND checkpoint=@checkpoint AND length(command_logs)<length(@logs)",
+                            connection,transaction);
+                        audit.Parameters.AddWithValue("id",Guid.Parse(id));audit.Parameters.AddWithValue("node",row["node_id"]!.GetValue<string>());
+                            audit.Parameters.AddWithValue("invocation",Guid.Parse(row["invocation_id"]!.GetValue<string>()));
+                            audit.Parameters.AddWithValue("checkpoint",SqlKind.Json,row["checkpoint"]!.ToJsonString(JsonOptions));
+                            audit.Parameters.AddWithValue("logs",SqlKind.Json,row["command_logs"]!.ToJsonString(JsonOptions));
+                            await audit.ExecuteNonQueryAsync(ct);
                     }
                     return;
                 }
@@ -38,7 +44,9 @@ public sealed partial class ClusterEntityReconciliation
         }
         var localRow = PrepareRowForLocalStorage(table, row);
         var expressions = table.Columns.Select(column => table.BinaryColumns.Contains(column, StringComparer.Ordinal) ? "@binary_" + column : "json_extract(@row, '$." + column + "')").ToArray();
-        var updates = table.Columns.Where(column => !table.KeyColumns.Contains(column, StringComparer.Ordinal) && !table.PreserveColumnsOnUpdate.Contains(column, StringComparer.Ordinal)).Select(column => column == "last_seen_at" && table.Name == "cluster_nodes"
+        var updates = table.Columns.Where(column => !table.KeyColumns.Contains(column, StringComparer.Ordinal)
+            && !table.PreserveColumnsOnUpdate.Contains(column, StringComparer.Ordinal)).Select(column => column == "last_seen_at"
+            && table.Name == "cluster_nodes"
             ? "last_seen_at = CASE WHEN cluster_nodes.last_seen_at < excluded.last_seen_at THEN excluded.last_seen_at ELSE cluster_nodes.last_seen_at END"
             : $"{column}=excluded.{column}");
         var onConflict = table.Immutable ? "DO NOTHING" : "DO UPDATE SET " + string.Join(",", updates);
@@ -130,7 +138,8 @@ public sealed partial class ClusterEntityReconciliation
 
     private static async Task UpsertTableCursorAsync(DbConnection connection, DbTransaction transaction, string table, DateTimeOffset cursor, CancellationToken ct)
     {
-        await using var command = Sql.Command("INSERT INTO cluster_sync_table_cursors(entity_type,cursor_value) VALUES(@type,@cursor) ON CONFLICT(entity_type) DO UPDATE SET cursor_value=EXCLUDED.cursor_value WHERE cluster_sync_table_cursors.cursor_value < EXCLUDED.cursor_value", connection, transaction);
+        await using var command = Sql.Command("INSERT INTO cluster_sync_table_cursors(entity_type,cursor_value) VALUES(@type,@cursor) ON CONFLICT(entity_type) DO UPDATE SET cursor_value=EXCLUDED.cursor_value WHERE cluster_sync_table_cursors.cursor_value < EXCLUDED.cursor_value",
+            connection, transaction);
         command.Parameters.AddWithValue("type", table);
         command.Parameters.AddWithValue("cursor", cursor);
         await command.ExecuteNonQueryAsync(ct);
@@ -170,15 +179,18 @@ public sealed partial class ClusterEntityReconciliation
 
     private async Task<LocalIdentity> ReadLocalIdentityAsync(DbConnection connection, DbTransaction transaction, CancellationToken ct)
     {
-        await using var command = Sql.Command("SELECT c.id,s.origin_id,s.next_sequence FROM cluster_identity c CROSS JOIN cluster_sync_identity s WHERE c.singleton=true AND s.singleton=true FOR UPDATE", connection, transaction);
+        await using var command = Sql.Command("SELECT c.id,s.origin_id,s.next_sequence FROM cluster_identity c CROSS JOIN cluster_sync_identity s WHERE c.singleton=true AND s.singleton=true FOR UPDATE",
+            connection, transaction);
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) throw new InvalidOperationException("Identité du cluster ou du journal absente.");
         return new(ReadGuid(reader, 0), ReadGuid(reader, 1), Convert.ToInt64(reader.GetValue(2), CultureInfo.InvariantCulture));
     }
 
-    private async Task InsertLocalEventAsync(DbConnection connection, DbTransaction transaction, Guid clusterId, Guid originId, long sequence, string eventType, string payload, DateTimeOffset occurredAt, CancellationToken ct)
+    private async Task InsertLocalEventAsync(DbConnection connection, DbTransaction transaction, Guid clusterId, Guid originId, long sequence, string eventType,
+        string payload, DateTimeOffset occurredAt, CancellationToken ct)
     {
-        await using var command = Sql.Command("INSERT INTO cluster_change_log(event_id,cluster_id,origin_id,sequence,event_type,payload,occurred_at) VALUES(@id,@cluster,@origin,@sequence,@type,@payload,@time)", connection, transaction);
+        await using var command = Sql.Command("INSERT INTO cluster_change_log(event_id,cluster_id,origin_id,sequence,event_type,payload,occurred_at) VALUES(@id,@cluster,@origin,@sequence,@type,@payload,@time)",
+            connection, transaction);
         command.Parameters.AddWithValue("id", Guid.NewGuid());
         command.Parameters.AddWithValue("cluster", clusterId);
         command.Parameters.AddWithValue("origin", originId);
@@ -189,30 +201,37 @@ public sealed partial class ClusterEntityReconciliation
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    private async Task<Dictionary<string, EntityState>> ReadEntityStatesAsync(DbConnection connection, DbTransaction transaction, string type, CancellationToken ct, IReadOnlyCollection<string>? keys = null)
+    private async Task<Dictionary<string, EntityState>> ReadEntityStatesAsync(DbConnection connection, DbTransaction transaction, string type,
+        CancellationToken ct, IReadOnlyCollection<string>? keys = null)
     {
         var states = new Dictionary<string, EntityState>(StringComparer.Ordinal);
         var filter = keys is null ? "" : " AND entity_key IN(SELECT value FROM json_each(@keys))";
-        await using var command = Sql.Command("SELECT entity_key,fingerprint,occurred_at,origin_id,sequence,is_deleted FROM cluster_sync_entities WHERE entity_type=@type" + filter, connection, transaction);
+        await using var command = Sql.Command("SELECT entity_key,fingerprint,occurred_at,origin_id,sequence,is_deleted FROM cluster_sync_entities WHERE entity_type=@type" + filter,
+            connection, transaction);
         command.Parameters.AddWithValue("type", type);
         if (keys is not null) command.Parameters.AddWithValue("keys", JsonSerializer.Serialize(keys, JsonOptions));
         await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct)) states[reader.GetString(0)] = new(reader.GetString(1), ReadInstant(reader.GetValue(2)), ReadGuid(reader, 3), Convert.ToInt64(reader.GetValue(4), CultureInfo.InvariantCulture), Convert.ToBoolean(reader.GetValue(5), CultureInfo.InvariantCulture));
+        while (await reader.ReadAsync(ct)) states[reader.GetString(0)] = new(reader.GetString(1), ReadInstant(reader.GetValue(2)), ReadGuid(reader, 3),
+            Convert.ToInt64(reader.GetValue(4), CultureInfo.InvariantCulture), Convert.ToBoolean(reader.GetValue(5), CultureInfo.InvariantCulture));
         return states;
     }
 
     private async Task<EntityState?> ReadEntityStateAsync(DbConnection connection, DbTransaction transaction, string type, string key, CancellationToken ct)
     {
-        await using var command = Sql.Command("SELECT fingerprint,occurred_at,origin_id,sequence,is_deleted FROM cluster_sync_entities WHERE entity_type=@type AND entity_key=@key", connection, transaction);
+        await using var command = Sql.Command("SELECT fingerprint,occurred_at,origin_id,sequence,is_deleted FROM cluster_sync_entities WHERE entity_type=@type AND entity_key=@key",
+            connection, transaction);
         command.Parameters.AddWithValue("type", type);
         command.Parameters.AddWithValue("key", key);
         await using var reader = await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? new(reader.GetString(0), ReadInstant(reader.GetValue(1)), ReadGuid(reader, 2), Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture), Convert.ToBoolean(reader.GetValue(4), CultureInfo.InvariantCulture)) : null;
+        return await reader.ReadAsync(ct) ? new(reader.GetString(0), ReadInstant(reader.GetValue(1)), ReadGuid(reader, 2), Convert.ToInt64(reader.GetValue(3),
+            CultureInfo.InvariantCulture), Convert.ToBoolean(reader.GetValue(4), CultureInfo.InvariantCulture)) : null;
     }
 
-    private async Task UpsertEntityStateAsync(DbConnection connection, DbTransaction transaction, string type, string key, string fingerprint, DateTimeOffset occurredAt, Guid originId, long sequence, bool deleted, CancellationToken ct)
+    private async Task UpsertEntityStateAsync(DbConnection connection, DbTransaction transaction, string type, string key, string fingerprint,
+        DateTimeOffset occurredAt, Guid originId, long sequence, bool deleted, CancellationToken ct)
     {
-        await using var command = Sql.Command("INSERT INTO cluster_sync_entities(entity_type,entity_key,fingerprint,occurred_at,origin_id,sequence,is_deleted) VALUES(@type,@key,@fingerprint,@time,@origin,@sequence,@deleted) ON CONFLICT(entity_type,entity_key) DO UPDATE SET fingerprint=EXCLUDED.fingerprint,occurred_at=EXCLUDED.occurred_at,origin_id=EXCLUDED.origin_id,sequence=EXCLUDED.sequence,is_deleted=EXCLUDED.is_deleted", connection, transaction);
+        await using var command = Sql.Command("INSERT INTO cluster_sync_entities(entity_type,entity_key,fingerprint,occurred_at,origin_id,sequence,is_deleted) VALUES(@type,@key,@fingerprint,@time,@origin,@sequence,@deleted) ON CONFLICT(entity_type,entity_key) DO UPDATE SET fingerprint=EXCLUDED.fingerprint,occurred_at=EXCLUDED.occurred_at,origin_id=EXCLUDED.origin_id,sequence=EXCLUDED.sequence,is_deleted=EXCLUDED.is_deleted",
+            connection, transaction);
         command.Parameters.AddWithValue("type", type);
         command.Parameters.AddWithValue("key", key);
         command.Parameters.AddWithValue("fingerprint", fingerprint);
@@ -263,7 +282,8 @@ public sealed partial class ClusterEntityReconciliation
         return string.CompareOrdinal(leftOrigin.ToString("N"), rightOrigin.ToString("N"));
     }
 
-    private static Guid ReadGuid(DbDataReader reader, int ordinal) => reader.GetValue(ordinal) is Guid value ? value : Guid.Parse(Convert.ToString(reader.GetValue(ordinal), CultureInfo.InvariantCulture)!);
+    private static Guid ReadGuid(DbDataReader reader,
+        int ordinal) => reader.GetValue(ordinal) is Guid value ? value : Guid.Parse(Convert.ToString(reader.GetValue(ordinal), CultureInfo.InvariantCulture)!);
     private static DateTimeOffset ReadInstant(object value) => value switch
     {
         DateTimeOffset instant => instant.ToUniversalTime(),
@@ -273,7 +293,9 @@ public sealed partial class ClusterEntityReconciliation
 
     private sealed class EntityTable
     {
-        public EntityTable(string name, string[] columns, string[] keyColumns, string[]? jsonColumns = null, string[]? arrayColumns = null, string[]? binaryColumns = null, string[]? fingerprintColumns = null, string[]? orderBy = null, string? filter = null, bool immutable = false, bool detectDeletes = true, string[]? preserveColumnsOnUpdate = null, string? deltaColumn = null)
+        public EntityTable(string name, string[] columns, string[] keyColumns, string[]? jsonColumns = null, string[]? arrayColumns = null,
+            string[]? binaryColumns = null, string[]? fingerprintColumns = null, string[]? orderBy = null, string? filter = null, bool immutable = false,
+            bool detectDeletes = true, string[]? preserveColumnsOnUpdate = null, string? deltaColumn = null)
         {
             Name = name; Columns = columns; KeyColumns = keyColumns; JsonColumns = jsonColumns ?? []; ArrayColumns = arrayColumns ?? [];
             BinaryColumns = binaryColumns ?? []; FingerprintColumns = fingerprintColumns; OrderBy = orderBy ?? []; Filter = filter; Immutable = immutable;

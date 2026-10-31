@@ -97,7 +97,8 @@ public sealed partial class McpService
         try
         {
             var saved = await libraryProcessing.SaveAsync(id, request, ct);
-            return saved ? McpCallToolResult.Text(JsonSerializer.Serialize(await libraryProcessing.GetAsync(id, ct), JsonOptions)) : Invalid("La bibliothèque ou sa révision de configuration a changé.");
+            return saved ? McpCallToolResult.Text(JsonSerializer.Serialize(await libraryProcessing.GetAsync(id, ct),
+                JsonOptions)) : Invalid("La bibliothèque ou sa révision de configuration a changé.");
         }
         catch (ArgumentException exception) { return Invalid(exception.Message); }
     }
@@ -146,7 +147,8 @@ public sealed partial class McpService
             return Invalid("Le paramètre 'version' nécessite un 'flowId'.");
         }
         var updated = await libraryWorkflows.AssignAsync(id, new(flowId, version, revision), ct);
-        return updated ? McpCallToolResult.Text(JsonSerializer.Serialize(await libraryWorkflows.GetAsync(id, ct), JsonOptions)) : Invalid("L’affectation a changé ou la version du flow n’est pas publiable.");
+        return updated ? McpCallToolResult.Text(JsonSerializer.Serialize(await libraryWorkflows.GetAsync(id, ct),
+            JsonOptions)) : Invalid("L’affectation a changé ou la version du flow n’est pas publiable.");
     }
 
     private async Task<McpCallToolResult> ToolRequestLibraryDiscoveryAsync(JsonElement args, bool isAdmin, CancellationToken ct)
@@ -154,7 +156,8 @@ public sealed partial class McpService
         if (!isAdmin) return Denied("La découverte de fichiers exige le rôle administrateur.");
         if (!TryGuid(args, "libraryId", out var id)) return Invalid("Paramètre 'libraryId' (UUID) requis.");
         var scan = await libraryWorkflows.RequestScanAsync(id, ct);
-        return scan is null ? Invalid("Activez la bibliothèque et affectez-lui un flow publié avant la découverte.") : McpCallToolResult.Text(JsonSerializer.Serialize(new { scanId = scan }, JsonOptions));
+        return scan is null ? Invalid("Activez la bibliothèque et affectez-lui un flow publié avant la découverte.") : McpCallToolResult.Text(JsonSerializer.Serialize(new { scanId = scan },
+            JsonOptions));
     }
 
     private async Task<McpCallToolResult> ToolListNodeGroupsAsync(CancellationToken ct) =>

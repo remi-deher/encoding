@@ -82,7 +82,8 @@ public static class FlowEndpoints
         flows.MapGet("/{id:guid}/export", async (Guid id, FlowRepository repository, CancellationToken ct) =>
         {
             if (await repository.DraftAsync(id, ct) is { } draft)
-                return (IResult)Results.File(JsonSerializer.SerializeToUtf8Bytes(new { kind = "draft", draftRevision = draft.DraftRevision, definition = draft.Definition }, FlowRepository.JsonOptions), "application/json", $"{id:D}.draft.json");
+                return (IResult)Results.File(JsonSerializer.SerializeToUtf8Bytes(new { kind = "draft", draftRevision = draft.DraftRevision,
+                    definition = draft.Definition }, FlowRepository.JsonOptions), "application/json", $"{id:D}.draft.json");
             return await repository.GetAsync(id, null, ct) is { } saved
                 ? Results.File(JsonSerializer.SerializeToUtf8Bytes(saved.Definition, FlowRepository.JsonOptions), "application/json", $"{id:D}.v{saved.Definition.Version}.json")
                 : ApiProblem.NotFound();
@@ -173,7 +174,8 @@ public static class FlowEndpoints
                 : ApiProblem.NotFound("Le flow source est introuvable."))
             .WithName("CloneFlow");
 
-        flows.MapPost("/from-template/{templateId:guid}", async (Guid templateId, CreateFlowFromTemplateRequest? request, FlowRepository repository, FlowTemplateRepository templates, FlowDefinitionValidator validator, CancellationToken ct) =>
+        flows.MapPost("/from-template/{templateId:guid}", async (Guid templateId, CreateFlowFromTemplateRequest? request, FlowRepository repository,
+            FlowTemplateRepository templates, FlowDefinitionValidator validator, CancellationToken ct) =>
         {
             try
             {
@@ -377,7 +379,9 @@ public static class FlowEndpoints
                     }
                     else if (comp.ValueKind == JsonValueKind.Object)
                     {
-                        if (comp.TryGetProperty("componentId", out var cid) && comp.TryGetProperty("pluginId", out var pid) && comp.TryGetProperty("pluginVersion", out var pv) && comp.TryGetProperty("componentVersion", out var cv) && comp.TryGetProperty("configurationSchemaVersion", out var csv))
+                        if (comp.TryGetProperty("componentId", out var cid) && comp.TryGetProperty("pluginId", out var pid)
+                            && comp.TryGetProperty("pluginVersion", out var pv) && comp.TryGetProperty("componentVersion", out var cv)
+                            && comp.TryGetProperty("configurationSchemaVersion", out var csv))
                         {
                             componentRef = new FlowComponentReference(pid.GetString()!, pv.GetString()!, cid.GetString()!, cv.GetString()!, csv.GetInt32());
                         }
@@ -385,7 +389,8 @@ public static class FlowEndpoints
                         {
                             var compId = comp.TryGetProperty("componentId", out var cid2) ? cid2.GetString() : (comp.TryGetProperty("id", out var idComp) ? idComp.GetString() : null);
                             var pluginId = comp.TryGetProperty("pluginId", out var pEl) ? pEl.GetString() : null;
-                            componentRef = compId is not null ? (registry.FindReference(compId, pluginId) ?? new FlowComponentReference(pluginId ?? "base", "1.0.0", compId, "1.0.0", 1)) : new FlowComponentReference("base", "1.0.0", "unknown", "1.0.0", 1);
+                            componentRef = compId is not null ? (registry.FindReference(compId, pluginId) ?? new FlowComponentReference(pluginId ?? "base",
+                                "1.0.0", compId, "1.0.0", 1)) : new FlowComponentReference("base", "1.0.0", "unknown", "1.0.0", 1);
                         }
                     }
                     else

@@ -56,7 +56,8 @@ internal sealed partial class RuntimeFlowExecution
                 && !(await SourceAlreadyConformsAsync(node.Id, id, c)))
             {
                 var launch = plugins.Installed.SingleOrDefault(plugin => plugin.Id == node.Component.PluginId && plugin.Version == node.Component.PluginVersion);
-                var descriptor = launch is null ? null : (await plugins.DescribeAsync(launch, job.Token)).Components.SingleOrDefault(component => component.Id == id && component.Version == node.Component.ComponentVersion);
+                var descriptor = launch is null ? null : (await plugins.DescribeAsync(launch,
+                    job.Token)).Components.SingleOrDefault(component => component.Id == id && component.Version == node.Component.ComponentVersion);
                 if (!DirectMediaInspection.AllowsMetadataOnly(descriptor)) await EnsureFilesAsync();
             }
             if (id.StartsWith("base-input-", StringComparison.Ordinal)) { if (id != "base-input-file") await EnsureScanAsync(); }
@@ -68,7 +69,9 @@ internal sealed partial class RuntimeFlowExecution
             else if (id == FfmpegBuilderPolicy.Execute) await ExecuteFfmpegBuilderAsync(ctx);
             else if (id == "base-prepare-processing") await PrepareProcessingAsync(ctx);
             else if (id == "base-complete-flow") { await EnsureScanAsync(); ctx.Output = null; terminal = MediaActions.Text(c, "result", "unchanged"); }
-            else if (id == "base-defer-processing") { await EnsureScanAsync(); ctx.Output = null; terminal = "deferred"; variables["runtime.deferMinutes"] = JsonSerializer.SerializeToElement(int.Parse(MediaActions.Number(c, "delayMinutes", 2))); }
+            else if (id == "base-defer-processing") { await EnsureScanAsync(); ctx.Output = null; terminal = "deferred";
+                variables["runtime.deferMinutes"] = JsonSerializer.SerializeToElement(int.Parse(MediaActions.Number(c,
+                "delayMinutes", 2))); }
             else if (id is "base-disk-lock" or "base-disk-unlock") await DiskLockAsync(ctx);
             else if (id is "base-script" or "base-condition") await RunScriptAsync(ctx);
             else if (node.Component.PluginId == "conditions" && node.Component.ComponentId == "conditions-match") await MatchConditionsAsync(ctx);
@@ -79,7 +82,8 @@ internal sealed partial class RuntimeFlowExecution
             }
             else if (node.Component.PluginId == "probe" && id == MediaIntegrityPolicy.Component) await CheckMediaIntegrityAsync(ctx);
             else if (node.Component.PluginId is "base" or "probe" && id != "probe-validate-output"
-                && (id.StartsWith("base-probe-", StringComparison.Ordinal) || id.StartsWith("probe-", StringComparison.Ordinal) && !id.StartsWith("probe-inspect-", StringComparison.Ordinal) && id != "probe-export-report"))
+                && (id.StartsWith("base-probe-", StringComparison.Ordinal) || id.StartsWith("probe-", StringComparison.Ordinal)
+                    && !id.StartsWith("probe-inspect-", StringComparison.Ordinal) && id != "probe-export-report"))
             {
                 await EnsureScanAsync();
                 variables[MediaActions.Text(c, "resultVariable", "result")] = FlowMediaValues.Probe(id, context.CurrentMetadata!.Value, int.Parse(MediaActions.Number(c, "trackId")));
@@ -200,7 +204,8 @@ internal sealed partial class RuntimeFlowExecution
             }
             if (ctx.Handoff is not null || ctx.Wait is not null)
             {
-                logger.LogInformation(ctx.Wait is not null ? "Exécution {ExecutionId} mise en attente par le bloc {Node}." : "Exécution {ExecutionId} cédée après le bloc {Node}.", lease.ExecutionId, node.Id);
+                logger.LogInformation(ctx.Wait is not null ? "Exécution {ExecutionId} mise en attente par le bloc {Node}." : "Exécution {ExecutionId} cédée après le bloc {Node}.",
+                    lease.ExecutionId, node.Id);
                 job.Cancel(); return true;
             }
         }
@@ -282,7 +287,8 @@ internal sealed partial class RuntimeFlowExecution
         var node = ctx.Node; var id = ctx.Id; var c = ctx.Config;
         await EnsureFilesAsync();
         if (id == "base-condition") await EnsureScanAsync();
-        var result = await ScriptAsync(id, c, new { variables, metadata = context.CurrentMetadata, sourceMetadata = context.BeforeMetadata, currentFile = Path.GetFileName(current) }, directory, job.Token);
+        var result = await ScriptAsync(id, c, new { variables, metadata = context.CurrentMetadata, sourceMetadata = context.BeforeMetadata,
+            currentFile = Path.GetFileName(current) }, directory, job.Token);
         ctx.Output = result.TryGetProperty("outputId", out var selected) ? selected.GetString() : "success";
         if (result.TryGetProperty("variables", out var changes)) foreach (var change in changes.EnumerateObject()) variables[change.Name] = change.Value.Clone();
         if (result.TryGetProperty("candidate", out var candidate)) { await EnsureScanAsync(); await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory, candidate.GetString()!), []), node.Id); }
@@ -405,7 +411,8 @@ internal sealed partial class RuntimeFlowExecution
         var node = ctx.Node; var c = ctx.Config; var started = ctx.Started;
         await EnsureScanAsync();
         var invocation = new FlowStepInvocation(1, started.InvocationId, lease.ExecutionId, lease.Attempt, client.NodeId, lease.Epoch, node.Id, node.Component, c,
-            new(sourceSha, directRead ? null : Path.GetFileName(current), context.BeforeMetadata, context.CurrentMetadata, variables, lease.MediaPath, lease.LibraryId), DateTimeOffset.UtcNow.AddHours(6),
+            new(sourceSha, directRead ? null : Path.GetFileName(current), context.BeforeMetadata, context.CurrentMetadata, variables, lease.MediaPath,
+                lease.LibraryId), DateTimeOffset.UtcNow.AddHours(6),
             lease.PluginConfigurations?.GetValueOrDefault(node.Component.PluginId));
         var response = await plugins.ExecuteAsync(invocation, directory, job.Token);
         ctx.Output = response.OutputId; terminal = response.TerminalResult?.ToString().ToLowerInvariant();

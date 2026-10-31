@@ -101,7 +101,8 @@ public static partial class ToolPackageArchive
 
         if (!OperatingSystem.IsWindows())
             foreach (var executable in manifest.Executables)
-                File.SetUnixFileMode(Path.Combine(root, executable.Path), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+                File.SetUnixFileMode(Path.Combine(root, executable.Path),
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
     }
 
     public static string SafeRelativePath(string name)

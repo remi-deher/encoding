@@ -101,7 +101,8 @@ app.MapDelete("/api/v1/worker/clusters/{clusterId:guid}", (Guid clusterId, Worke
     discovery.Forget(clusterId)
         ? Results.NoContent()
         : Results.NotFound(new { title = "Seule une adresse ajoutée à la main peut être oubliée ; ce cluster est détecté automatiquement." })).WithName("ForgetWorkerCluster");
-app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, WorkerEnrollmentService enrollment, CancellationToken cancellationToken) =>
+app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe,
+    WorkerEnrollmentService enrollment, CancellationToken cancellationToken) =>
 {
     var identity = await identityStore.GetAsync(cancellationToken);
     var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);

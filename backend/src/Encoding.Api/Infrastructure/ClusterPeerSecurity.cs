@@ -410,7 +410,8 @@ public sealed class ClusterPeerAdmissionRepository(
 
     private static async Task<ClusterPeerAdmissionGrant?> FindAsync(DbConnection connection, DbTransaction? transaction, Guid clusterId, Guid peerId, CancellationToken ct)
     {
-        await using var command = Sql.Command("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id AND peer_id = @peer_id", connection, transaction);
+        await using var command = Sql.Command("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id AND peer_id = @peer_id",
+            connection, transaction);
         command.Parameters.AddWithValue("cluster_id", clusterId);
         command.Parameters.AddWithValue("peer_id", peerId);
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -426,7 +427,8 @@ public sealed class ClusterPeerAdmissionRepository(
     private static async Task<IReadOnlyList<ClusterPeerAdmissionGrant>> ListGrantsAsync(DbConnection connection, DbTransaction? transaction, Guid clusterId, CancellationToken ct)
     {
         var grants = new List<ClusterPeerAdmissionGrant>();
-        await using var command = Sql.Command("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id ORDER BY issued_at, peer_id", connection, transaction);
+        await using var command = Sql.Command("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id ORDER BY issued_at, peer_id",
+            connection, transaction);
         command.Parameters.AddWithValue("cluster_id", clusterId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) grants.Add(ReadGrant(reader));
@@ -485,6 +487,7 @@ public sealed class ClusterPeerAdmissionRepository(
     private static DateTimeOffset ReadDate(object value) => value switch
     {
         DateTime date => new DateTimeOffset(DateTime.SpecifyKind(date, DateTimeKind.Utc)),
-        _ => DateTimeOffset.Parse(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal)
+        _ => DateTimeOffset.Parse(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!,
+            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal)
     };
 }

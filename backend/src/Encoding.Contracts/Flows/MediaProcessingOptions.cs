@@ -30,7 +30,8 @@ public static class AudioNormalizationPolicy
 {
     public static string Filter(IReadOnlyDictionary<string, JsonElement> values)
     {
-        string Number(string key, decimal fallback) => (values.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number) ? number : fallback).ToString(CultureInfo.InvariantCulture);
+        string Number(string key, decimal fallback) => (values.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.Number
+            && value.TryGetDecimal(out var number) ? number : fallback).ToString(CultureInfo.InvariantCulture);
         var profile = values.TryGetValue("normalizationProfile", out var selected) ? selected.GetString() : "custom";
         var target = profile switch { "broadcast" => "-23", "streaming" => "-16", "night" => "-18", _ => Number("targetLoudness", -16) };
         var range = profile == "night" ? "4" : Number("loudnessRange", 7);

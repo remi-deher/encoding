@@ -19,7 +19,8 @@ public static partial class SystemLogSanitizer
     [GeneratedRegex(@"-----BEGIN [A-Z0-9_\- ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9_\- ]+PRIVATE KEY-----", RegexOptions.Compiled)]
     private static partial Regex PrivateKeyRegex();
 
-    [GeneratedRegex(@"(?i)(?:[""']?\b(password|passwd|pwd|secret|api[_-]?key|apikey|token|access_token|refresh_token|x-plex-token)\b[""']?)\s*([:=])\s*(""(?:\\""|[^""])*""|'[^']*'|[^\s""',;{}]+)", RegexOptions.Compiled)]
+    [GeneratedRegex(@"(?i)(?:[""']?\b(password|passwd|pwd|secret|api[_-]?key|apikey|token|access_token|refresh_token|x-plex-token)\b[""']?)\s*([:=])\s*(""(?:\\""|[^""])*""|'[^']*'|[^\s""',;{}]+)",
+        RegexOptions.Compiled)]
     private static partial Regex KeyValueSecretRegex();
 
     public static string Sanitize(string? text)

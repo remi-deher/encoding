@@ -11,7 +11,8 @@ namespace Encoding.Api.Nodes;
 
 public enum PairingRequestResult { Created, Conflict, TooMany }
 
-public sealed partial class NodeRepository(DbDataSource dataSource, ClusterPeerAdmissionRepository? peerAdmissions = null,ClusterSourceWriteBarrier? coordination=null,TaskOwnershipRepository? ownership=null)
+public sealed partial class NodeRepository(DbDataSource dataSource,
+    ClusterPeerAdmissionRepository? peerAdmissions = null,ClusterSourceWriteBarrier? coordination=null,TaskOwnershipRepository? ownership=null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

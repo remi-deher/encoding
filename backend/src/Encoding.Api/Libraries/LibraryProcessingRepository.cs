@@ -36,7 +36,8 @@ public sealed class LibraryProcessingRepository(DbDataSource dataSource)
         revision.Parameters.AddWithValue("id",library);if((await revision.ScalarInt32Async(ct) ?? 0)!=request.ExpectedRevision)return false;
         foreach(var limit in request.NodeLimits)
         {
-            await using var eligible=Sql.Command("SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id WHERE a.library_id=@library AND a.node_id=@node AND a.mode<>'unsupported' AND n.deleted_at IS NULL AND 'worker'=ANY(n.roles))",c,tx);
+            await using var eligible=Sql.Command("SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id WHERE a.library_id=@library AND a.node_id=@node AND a.mode<>'unsupported' AND n.deleted_at IS NULL AND 'worker'=ANY(n.roles))",
+                c,tx);
             eligible.Parameters.AddWithValue("library",library);eligible.Parameters.AddWithValue("node",limit.NodeId);
             if(!(await eligible.ScalarBoolAsync(ct)))throw new ArgumentException("Les limites par nœud exigent un worker disposant d’un accès à cette bibliothèque.");
         }
@@ -52,7 +53,8 @@ public sealed class LibraryProcessingRepository(DbDataSource dataSource)
         foreach(var limit in request.NodeLimits)
         {
             await using var insert=Sql.Command("INSERT INTO library_node_processing_limits(library_id,node_id,max_concurrent_tasks) VALUES(@library,@node,@maximum)",c,tx);
-            insert.Parameters.AddWithValue("library",library);insert.Parameters.AddWithValue("node",limit.NodeId);insert.Parameters.AddWithValue("maximum",limit.MaxConcurrentTasks);await insert.ExecuteNonQueryAsync(ct);
+            insert.Parameters.AddWithValue("library",library);insert.Parameters.AddWithValue("node",limit.NodeId);insert.Parameters.AddWithValue("maximum",
+                limit.MaxConcurrentTasks);await insert.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);return true;
     }
@@ -71,8 +73,11 @@ public sealed class LibraryProcessingRepository(DbDataSource dataSource)
         locked.Parameters.AddWithValue("id",node);if(await locked.ExecuteScalarAsync(ct) is null)return false;
         await using var current=Sql.Command("SELECT revision FROM node_processing_settings WHERE node_id=@id",c,tx);current.Parameters.AddWithValue("id",node);
         if((await current.ScalarInt32Async(ct) ?? 0)!=request.ExpectedRevision)return false;
-        await using var save=Sql.Command("INSERT INTO node_processing_settings(node_id,max_concurrent_tasks,revision,schedule_enabled,schedule_timezone,schedule_slots) VALUES(@id,@max,@revision,@enabled,@zone,@slots) ON CONFLICT(node_id) DO UPDATE SET max_concurrent_tasks=@max,revision=@revision,schedule_enabled=@enabled,schedule_timezone=@zone,schedule_slots=@slots",c,tx);
-        save.Parameters.AddWithValue("id",node);save.Parameters.AddWithValue("max",SqlKind.Integer,(object?)request.MaxConcurrentTasks??DBNull.Value);save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);save.Parameters.AddWithValue("enabled",schedule.Enabled);save.Parameters.AddWithValue("zone",schedule.TimeZone);save.Parameters.AddWithValue("slots",schedule.Slots);
+        await using var save=Sql.Command("INSERT INTO node_processing_settings(node_id,max_concurrent_tasks,revision,schedule_enabled,schedule_timezone,schedule_slots) VALUES(@id,@max,@revision,@enabled,@zone,@slots) ON CONFLICT(node_id) DO UPDATE SET max_concurrent_tasks=@max,revision=@revision,schedule_enabled=@enabled,schedule_timezone=@zone,schedule_slots=@slots",
+            c,tx);
+        save.Parameters.AddWithValue("id",node);save.Parameters.AddWithValue("max",SqlKind.Integer,(object?)request.MaxConcurrentTasks??DBNull.Value);
+            save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);save.Parameters.AddWithValue("enabled",schedule.Enabled);
+            save.Parameters.AddWithValue("zone",schedule.TimeZone);save.Parameters.AddWithValue("slots",schedule.Slots);
         await save.ExecuteNonQueryAsync(ct);await tx.CommitAsync(ct);return true;
     }
 }

@@ -67,8 +67,10 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
             await using var version=Sql.Command("SELECT definition::text FROM flow_versions WHERE flow_id=@flow AND version=@version",c,tx);
             version.Parameters.AddWithValue("flow",flow); version.Parameters.AddWithValue("version",request.Version!.Value);
             if(await version.ExecuteScalarAsync(ct) is not string document || !validator.Validate(JsonSerializer.Deserialize<FlowDefinition>(document,Json)!).IsValid) return false;
-            await using var save=Sql.Command("INSERT INTO library_flow_assignments(library_id,flow_id,flow_version,revision) VALUES(@id,@flow,@version,@revision) ON CONFLICT(library_id) DO UPDATE SET flow_id=@flow,flow_version=@version,revision=@revision",c,tx);
-            save.Parameters.AddWithValue("id",library); save.Parameters.AddWithValue("flow",flow); save.Parameters.AddWithValue("version",request.Version.Value); save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);
+            await using var save=Sql.Command("INSERT INTO library_flow_assignments(library_id,flow_id,flow_version,revision) VALUES(@id,@flow,@version,@revision) ON CONFLICT(library_id) DO UPDATE SET flow_id=@flow,flow_version=@version,revision=@revision",
+                c,tx);
+            save.Parameters.AddWithValue("id",library); save.Parameters.AddWithValue("flow",flow); save.Parameters.AddWithValue("version",
+                request.Version.Value); save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);
             await save.ExecuteNonQueryAsync(ct);
             retargeted=await RetargetPendingAsync(library,JsonSerializer.Deserialize<FlowDefinition>(document,Json)!,document,c,tx,ct);
         }
@@ -90,14 +92,17 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     private async Task<bool> RetargetPendingAsync(Guid library,FlowDefinition flow,string document,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
         var moved=new List<(Guid Id,int Revision)>();
-        await using(var update=Sql.Command($"UPDATE executions SET flow_name=@name,flow_version=@version,flow_definition=@definition,detail=@detail,updated_at=clock_timestamp(),revision=revision+1 WHERE state='queued' AND (flow_name<>@name OR flow_version<>@version) AND flow_definition->>'mediaType'=@mediaType AND id IN(SELECT execution_id FROM execution_work WHERE library_id=@library) AND NOT EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=executions.id) AND {TaskOwnershipRepository.ActiveSql("executions.id")} RETURNING id,revision",c,tx))
+        await using(var update=Sql.Command($"UPDATE executions SET flow_name=@name,flow_version=@version,flow_definition=@definition,detail=@detail,updated_at=clock_timestamp(),revision=revision+1 WHERE state='queued' AND (flow_name<>@name OR flow_version<>@version) AND flow_definition->>'mediaType'=@mediaType AND id IN(SELECT execution_id FROM execution_work WHERE library_id=@library) AND NOT EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=executions.id) AND {TaskOwnershipRepository.ActiveSql("executions.id")} RETURNING id,revision",
+            c,tx))
         {
             update.Parameters.AddWithValue("name",flow.Name); update.Parameters.AddWithValue("version",flow.Version); update.Parameters.AddWithValue("definition",SqlKind.Json,document);
-            update.Parameters.AddWithValue("detail","Flow de la bibliothèque modifié : "+flow.Name+" v"+flow.Version+"."); update.Parameters.AddWithValue("mediaType",flow.MediaType); update.Parameters.AddWithValue("library",library);
+            update.Parameters.AddWithValue("detail","Flow de la bibliothèque modifié : "+flow.Name+" v"+flow.Version+".");
+                update.Parameters.AddWithValue("mediaType",flow.MediaType); update.Parameters.AddWithValue("library",library);
             await using var r=await update.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) moved.Add((r.GetGuid(0),r.GetInt32(1)));
         }
         foreach(var (id,revision) in moved) await ExecutionRepository.AddEvent(c,tx,id,Guid.NewGuid(),revision,"queued","Flow de la bibliothèque modifié : "+flow.Name+" v"+flow.Version+".",ct);
-        await using var inherit=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) SELECT DISTINCT r.library_id,r.file_id,@flow,@version,r.byte_length,r.modified_at,r.execution_id FROM library_processing_receipts r JOIN library_media m ON m.id=r.file_id AND m.byte_length=r.byte_length AND m.modified_at=r.modified_at WHERE r.library_id=@library AND NOT EXISTS(SELECT 1 FROM library_processing_receipts n WHERE n.library_id=r.library_id AND n.file_id=r.file_id AND n.flow_id=@flow AND n.flow_version=@version AND n.byte_length=r.byte_length AND n.modified_at=r.modified_at) ON CONFLICT DO NOTHING",c,tx);
+        await using var inherit=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) SELECT DISTINCT r.library_id,r.file_id,@flow,@version,r.byte_length,r.modified_at,r.execution_id FROM library_processing_receipts r JOIN library_media m ON m.id=r.file_id AND m.byte_length=r.byte_length AND m.modified_at=r.modified_at WHERE r.library_id=@library AND NOT EXISTS(SELECT 1 FROM library_processing_receipts n WHERE n.library_id=r.library_id AND n.file_id=r.file_id AND n.flow_id=@flow AND n.flow_version=@version AND n.byte_length=r.byte_length AND n.modified_at=r.modified_at) ON CONFLICT DO NOTHING",
+            c,tx);
         inherit.Parameters.AddWithValue("flow",flow.Id); inherit.Parameters.AddWithValue("version",flow.Version); inherit.Parameters.AddWithValue("library",library);
         await inherit.ExecuteNonQueryAsync(ct);
         return moved.Count>0;
@@ -111,7 +116,8 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await LockLibraryAsync(library,c,tx,ct)) return null;
-        await using var type=Sql.Command("SELECT v.definition->>'mediaType' FROM library_flow_assignments a JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version JOIN libraries l ON l.id=a.library_id WHERE a.library_id=@id AND l.is_active",c,tx);
+        await using var type=Sql.Command("SELECT v.definition->>'mediaType' FROM library_flow_assignments a JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version JOIN libraries l ON l.id=a.library_id WHERE a.library_id=@id AND l.is_active",
+            c,tx);
         type.Parameters.AddWithValue("id",library); if(await type.ExecuteScalarAsync(ct) is not string mediaType) return null;
         await using var active=Sql.Command("SELECT id FROM library_scans WHERE library_id=@id AND state IN ('queued','running')",c,tx);
         active.Parameters.AddWithValue("id",library);
@@ -135,8 +141,10 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("offline",presence.OfflineAfter);
         await using var r=await cmd.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) return null;
         var lease=new LibraryScanLease(r.GetGuid(0),r.GetGuid(1),checked(r.GetInt64(2)+1),r.GetString(3),r.GetString(4)); await r.DisposeAsync();
-        await using var update=Sql.Command("UPDATE library_scans SET node_id=@node,source_root=@root,epoch=@epoch,state='running',lease_until=clock_timestamp()+interval '180 seconds',detail='Découverte des fichiers en cours.' WHERE id=@id",c,tx);
-        update.Parameters.AddWithValue("root",lease.Root); update.Parameters.AddWithValue("id",lease.Id); update.Parameters.AddWithValue("node",node); update.Parameters.AddWithValue("epoch",lease.Epoch);
+        await using var update=Sql.Command("UPDATE library_scans SET node_id=@node,source_root=@root,epoch=@epoch,state='running',lease_until=clock_timestamp()+interval '180 seconds',detail='Découverte des fichiers en cours.' WHERE id=@id",
+            c,tx);
+        update.Parameters.AddWithValue("root",lease.Root); update.Parameters.AddWithValue("id",lease.Id); update.Parameters.AddWithValue("node",node);
+            update.Parameters.AddWithValue("epoch",lease.Epoch);
         await update.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return lease;
     }
     public async Task<bool> RenewScanAsync(Guid id,Guid node,long epoch,CancellationToken ct)
@@ -212,12 +220,14 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     public async Task EnqueueAutomaticallyAsync(Guid library,CancellationToken ct)=>await QueueAsync(library,[],null,true,ct);
     /// <summary>Mise en file déclenchée par un service externe : fichiers choisis, flow actuellement attribué, sans retraiter une empreinte déjà reçue.</summary>
     public Task<(int Queued,int Skipped)?> EnqueueTriggeredAsync(Guid library,IReadOnlyList<Guid> ids,CancellationToken ct)=>QueueAsync(library,ids,null,false,ct,true);
-    private async Task<(int Queued,int Skipped)?> QueueAsync(Guid library,IReadOnlyList<Guid> ids,int? assignmentRevision,bool automatic,CancellationToken ct,bool skipReceipted=false,Guid? actionId=null)
+    private async Task<(int Queued,int Skipped)?> QueueAsync(Guid library,IReadOnlyList<Guid> ids,int? assignmentRevision,bool automatic,CancellationToken ct,
+        bool skipReceipted=false,Guid? actionId=null)
     {
         if(!automatic && (ids.Count is <1 or >10000 || ids.Distinct().Count()!=ids.Count)) return null;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await LockLibraryAsync(library,c,tx,ct)) return null;
-        await using var assignment=Sql.Command("SELECT v.definition::text FROM library_flow_assignments a JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version WHERE a.library_id=@id AND (@revision IS NULL OR a.revision=@revision) AND EXISTS(SELECT 1 FROM libraries l WHERE l.id=a.library_id AND l.is_active)",c,tx);
+        await using var assignment=Sql.Command("SELECT v.definition::text FROM library_flow_assignments a JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version WHERE a.library_id=@id AND (@revision IS NULL OR a.revision=@revision) AND EXISTS(SELECT 1 FROM libraries l WHERE l.id=a.library_id AND l.is_active)",
+            c,tx);
         assignment.Parameters.AddWithValue("id",library); assignment.Parameters.AddWithValue("revision",SqlKind.Integer,(object?)assignmentRevision??DBNull.Value);
         if(await assignment.ExecuteScalarAsync(ct) is not string json) return null;
         var flow=JsonSerializer.Deserialize<FlowDefinition>(json,Json)!; if(!validator.Validate(flow).IsValid) return null;
@@ -228,9 +238,12 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
             if(!await ServesLibraryAutomaticallyAsync(library,c,tx,ct))return null;
         }
         var files=new List<(Guid Id,string Path,long Bytes,DateTimeOffset Modified)>();
-        await using(var select=Sql.Command("SELECT m.id,m.relative_path,m.byte_length,m.modified_at FROM library_media m WHERE m.library_id=@library           AND (NOT @automatic AND m.id=ANY(@ids) AND (NOT @skipReceipted OR NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at)) OR @automatic AND m.stable_since<=clock_timestamp()-interval '30 seconds' AND m.modified_at<=clock_timestamp()-interval '30 seconds'           AND NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at) AND NOT EXISTS(SELECT 1 FROM media_replacement_marks k WHERE k.library_id=m.library_id AND k.relative_path=m.relative_path AND k.byte_length=m.byte_length AND k.modified_at=m.modified_at))           ORDER BY m.relative_path LIMIT 10000",c,tx))
+        await using(var select=Sql.Command("SELECT m.id,m.relative_path,m.byte_length,m.modified_at FROM library_media m WHERE m.library_id=@library           AND (NOT @automatic AND m.id=ANY(@ids) AND (NOT @skipReceipted OR NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at)) OR @automatic AND m.stable_since<=clock_timestamp()-interval '30 seconds' AND m.modified_at<=clock_timestamp()-interval '30 seconds'           AND NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at) AND NOT EXISTS(SELECT 1 FROM media_replacement_marks k WHERE k.library_id=m.library_id AND k.relative_path=m.relative_path AND k.byte_length=m.byte_length AND k.modified_at=m.modified_at))           ORDER BY m.relative_path LIMIT 10000",
+            c,tx))
         {
-            select.Parameters.AddWithValue("automatic",automatic);select.Parameters.AddWithValue("skipReceipted",skipReceipted);select.Parameters.AddWithValue("flow",flow.Id);select.Parameters.AddWithValue("version",flow.Version);select.Parameters.AddWithValue("library",library); select.Parameters.AddWithValue("ids",ids.ToArray());
+            select.Parameters.AddWithValue("automatic",automatic);select.Parameters.AddWithValue("skipReceipted",skipReceipted);
+                select.Parameters.AddWithValue("flow",flow.Id);select.Parameters.AddWithValue("version",flow.Version);select.Parameters.AddWithValue("library",
+                library); select.Parameters.AddWithValue("ids",ids.ToArray());
             await using var r=await select.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) files.Add((r.GetGuid(0),r.GetString(1),r.GetInt64(2),r.GetFieldValue<DateTimeOffset>(3)));
         }
         if(!automatic && files.Count!=ids.Count || files.Any(file=>!LibraryMediaTypes.Matches(file.Path,flow.MediaType))) return null;
@@ -238,11 +251,15 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         foreach(var file in files)
         {
             var execution=actionId is { } confirmedAction ? ConfirmedExecutionId(confirmedAction,file.Id) : Guid.NewGuid();
-            if(!await RuntimeRepository.EnqueueInTransactionAsync(new(execution,library,file.Path,flow.Id,flow.Version),flow,c,tx,ct,automatic ? "surveillance" : skipReceipted ? "trigger" : "manual"))continue;
+            if(!await RuntimeRepository.EnqueueInTransactionAsync(new(execution,library,file.Path,flow.Id,flow.Version),flow,c,tx,ct,
+                automatic ? "surveillance" : skipReceipted ? "trigger" : "manual"))continue;
             queued++;assignments.Add(execution);
-            await using var receipt=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) VALUES(@library,@file,@flow,@version,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
-            receipt.Parameters.AddWithValue("library",library);receipt.Parameters.AddWithValue("file",file.Id);receipt.Parameters.AddWithValue("flow",flow.Id);receipt.Parameters.AddWithValue("version",flow.Version);
-            receipt.Parameters.AddWithValue("bytes",file.Bytes);receipt.Parameters.AddWithValue("modified",file.Modified.ToUniversalTime());receipt.Parameters.AddWithValue("execution",execution);await receipt.ExecuteNonQueryAsync(ct);
+            await using var receipt=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) VALUES(@library,@file,@flow,@version,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",
+                c,tx);
+            receipt.Parameters.AddWithValue("library",library);receipt.Parameters.AddWithValue("file",file.Id);receipt.Parameters.AddWithValue("flow",flow.Id);
+                receipt.Parameters.AddWithValue("version",flow.Version);
+            receipt.Parameters.AddWithValue("bytes",file.Bytes);receipt.Parameters.AddWithValue("modified",file.Modified.ToUniversalTime());
+                receipt.Parameters.AddWithValue("execution",execution);await receipt.ExecuteNonQueryAsync(ct);
         }
         if(ownership is not null) await ownership.CreateAsync(assignments,c,tx,ct);
         await tx.CommitAsync(ct);
@@ -260,12 +277,14 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         var node=localNode?.NodeId;
         if(node is null)
         {
-            await using var cmd=Sql.Command("SELECT a.node_id FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id=a.peer_id WHERE a.revoked_at IS NULL AND a.node_id IS NOT NULL LIMIT 1",c,tx);
+            await using var cmd=Sql.Command("SELECT a.node_id FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id=a.peer_id WHERE a.revoked_at IS NULL AND a.node_id IS NOT NULL LIMIT 1",
+                c,tx);
             node=await cmd.ScalarGuidAsync(ct);
         }
         if(node is null)
         {
-            await using var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id<>a.peer_id WHERE a.node_id=n.id AND a.revoked_at IS NULL) ORDER BY n.created_at LIMIT 2",c,tx);
+            await using var cmd=Sql.Command("SELECT n.id FROM cluster_nodes n WHERE n.deleted_at IS NULL AND 'server'=ANY(n.roles) AND NOT EXISTS(SELECT 1 FROM cluster_peer_admissions a JOIN task_server_identity s ON s.peer_id<>a.peer_id WHERE a.node_id=n.id AND a.revoked_at IS NULL) ORDER BY n.created_at LIMIT 2",
+                c,tx);
             var candidates=new List<Guid>();
             await using var cr=await cmd.ExecuteReaderAsync(ct);
             while(await cr.ReadAsync(ct)) candidates.Add(cr.GetGuid(0));

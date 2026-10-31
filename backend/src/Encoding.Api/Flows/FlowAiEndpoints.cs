@@ -16,7 +16,8 @@ public static class FlowAiEndpoints
     {
         var group = app.MapGroup("/api/v1/flows/ai").WithTags("Flow AI Assistant");
 
-        group.MapPost("/generate", async (FlowAiGenerateRequest request, FlowAiGeneratorService service, AiAssistantService activity, AiClusterService cluster, ClaimsPrincipal user, CancellationToken ct) =>
+        group.MapPost("/generate", async (FlowAiGenerateRequest request, FlowAiGeneratorService service, AiAssistantService activity, AiClusterService cluster,
+            ClaimsPrincipal user, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.UserPrompt))
             {
@@ -43,7 +44,8 @@ public static class FlowAiEndpoints
             }
         }).WithName("GenerateFlowWithAi");
 
-        group.MapPost("/refactor", async (FlowAiRefactorRequest request, FlowAiGeneratorService service, AiAssistantService activity, AiClusterService cluster, ClaimsPrincipal user, CancellationToken ct) =>
+        group.MapPost("/refactor", async (FlowAiRefactorRequest request, FlowAiGeneratorService service, AiAssistantService activity, AiClusterService cluster,
+            ClaimsPrincipal user, CancellationToken ct) =>
         {
             if (request.CurrentFlow is null || string.IsNullOrWhiteSpace(request.UserPrompt))
             {
@@ -108,7 +110,8 @@ public static class FlowAiEndpoints
             }
         }).WithName("ProposeFlowDraftRefactor");
 
-        group.MapPost("/explain", async (FlowAiExplainRequest request, FlowAiGeneratorService service, AiAssistantService activity, AiClusterService cluster, ClaimsPrincipal user, CancellationToken ct) =>
+        group.MapPost("/explain", async (FlowAiExplainRequest request, FlowAiGeneratorService service, AiAssistantService activity, AiClusterService cluster,
+            ClaimsPrincipal user, CancellationToken ct) =>
         {
             if (request.Flow is null)
             {

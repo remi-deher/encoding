@@ -57,7 +57,8 @@ public sealed partial class McpService
         if (!isAdmin) return Denied("La relance d’une exécution exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
         var next = await executions.RetryAsync(id, ct);
-        return next is null ? Invalid("La relance est réservée aux exécutions en échec et ne peut être enregistrée qu’une fois.") : McpCallToolResult.Text(JsonSerializer.Serialize(new { id = next }, JsonOptions));
+        return next is null ? Invalid("La relance est réservée aux exécutions en échec et ne peut être enregistrée qu’une fois.") : McpCallToolResult.Text(JsonSerializer.Serialize(new { id = next },
+            JsonOptions));
     }
 
     private async Task<McpCallToolResult> ToolResumeExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)

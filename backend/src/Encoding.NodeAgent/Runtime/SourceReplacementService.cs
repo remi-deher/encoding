@@ -51,7 +51,9 @@ public sealed class SourceReplacementService(NodeAgentOptions options,WorkerIden
             if(task.SourceWriteGuardsSupported) await client.PostAsync<object>($"replacements/{task.ExecutionId:D}/authorize",new SourceWriteLocation(task.Root),ct);
             if(task.Action=="rollback")
             {
-                var result=await SourceReplacer.RollbackAsync(task.Root,task,ct,async token=> { if(!task.SourceWriteGuardsSupported) return true;try { await client.PostAsync<object>($"replacements/{task.ExecutionId:D}/authorize",new SourceWriteLocation(task.Root),token);return true; } catch(HttpRequestException) { return false; } });
+                var result=await SourceReplacer.RollbackAsync(task.Root,task,ct,async token=> { if(!task.SourceWriteGuardsSupported) return true;
+                    try { await client.PostAsync<object>($"replacements/{task.ExecutionId:D}/authorize",new SourceWriteLocation(task.Root),token);return true;
+                    } catch(HttpRequestException) { return false; } });
                 report=result.Status=="restored"?new("rolled_back",null,result.ByteLength,result.ModifiedAt):new("failed",result.Detail);
             }
             else
@@ -63,7 +65,8 @@ public sealed class SourceReplacementService(NodeAgentOptions options,WorkerIden
         catch(HttpRequestException) { return; }
         catch(SafeMediaPaths.MediaLockBusyException) { return; }
         catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
-        catch(Exception exception) { logger.LogWarning("Remplacement {ExecutionId} : {Type}.",task.ExecutionId,exception.GetType().Name); report=new("failed","Opération impossible ("+exception.GetType().Name+") ; la sauvegarde est conservée."); }
+        catch(Exception exception) { logger.LogWarning("Remplacement {ExecutionId} : {Type}.",task.ExecutionId,exception.GetType().Name); report=new("failed",
+            "Opération impossible ("+exception.GetType().Name+") ; la sauvegarde est conservée."); }
         await client.PostAsync<object>($"replacements/{task.ExecutionId:D}/report",report,ct);
     }
 }

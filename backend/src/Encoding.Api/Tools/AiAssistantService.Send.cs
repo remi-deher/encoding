@@ -305,7 +305,8 @@ public sealed partial class AiAssistantService
                 await cluster.AdoptSessionAsync(plannerSessionId, requestCancellation.Token);
                 var planner = await cluster.GenerateAsync(
                     conversation.Provider,
-                    new AiPrompt(BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
+                    new AiPrompt(BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId,
+                        RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
                     requestCancellation.Token,
                     localOnly: policy.AssistantLocalOnly);
                 if (!planner.Success)
@@ -380,11 +381,13 @@ public sealed partial class AiAssistantService
                     turnToolCalls, modelPlans);
             }
             activity = activity with { Tools = modelTools.Select(tool => tool.Name).ToArray() };
-            activity = activity with { Progress = actionProposal is null ? "generating" : "confirmation", ProgressDetail = actionProposal is null ? "Rédaction de la réponse" : "Action prête à vérifier", UpdatedAt = DateTimeOffset.UtcNow };
+            activity = activity with { Progress = actionProposal is null ? "generating" : "confirmation",
+                ProgressDetail = actionProposal is null ? "Rédaction de la réponse" : "Action prête à vérifier", UpdatedAt = DateTimeOffset.UtcNow };
             await SaveActivityAsync(ownerId, activity, ct);
             result = await cluster.GenerateAsync(
                 conversation.Provider,
-                new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
+                new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId,
+                    ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
                 requestCancellation.Token,
                 localOnly: policy.AssistantLocalOnly,
                 allowModelChanges: true);

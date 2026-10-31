@@ -10,7 +10,10 @@ namespace Encoding.NodeAgent.Runtime;
 /// Exécute un flow pour un bail donné : renouvellement du bail, préparation de la source, enchaînement des blocs,
 /// puis clôture. L'état d'une exécution vit dans cette instance, jamais dans le singleton <see cref="RuntimeFlowRunner"/>.
 /// </summary>
-internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, MediaScanner scanner, MediaActions actions, ProcessToolRunner tools, PluginProcessHost plugins, PublicationGuardRunner guards, Encoding.NodeAgent.Services.IToolCapabilityProbe capabilities, LocalPublicationArtifactStore localPublicationArtifacts, ILogger logger, RuntimeLease lease, RuntimeClient client, CancellationToken stoppingToken) : IDisposable
+internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, MediaScanner scanner, MediaActions actions, ProcessToolRunner tools,
+    PluginProcessHost plugins, PublicationGuardRunner guards, Encoding.NodeAgent.Services.IToolCapabilityProbe capabilities,
+    LocalPublicationArtifactStore localPublicationArtifacts, ILogger logger, RuntimeLease lease, RuntimeClient client,
+    CancellationToken stoppingToken) : IDisposable
 {
     private readonly RuntimeCommandCapture commandCapture = RuntimeCommandCapture.Begin(lease.ExecutionId);
     private readonly CancellationTokenSource job = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
@@ -299,7 +302,8 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
             context = context with { BeforeMetadata = await scanner.ScanAsync(original, job.Token) };
             await ReportSourceMetadataAsync();
         }
-        if (context.CurrentMetadata is null) context = context with { CurrentMetadata = current == original || context.CurrentSha256 == sourceSha ? context.BeforeMetadata : await scanner.ScanAsync(current, job.Token) };
+        if (context.CurrentMetadata is null) context = context with { CurrentMetadata = current == original
+            || context.CurrentSha256 == sourceSha ? context.BeforeMetadata : await scanner.ScanAsync(current, job.Token) };
         if (directRead) observed!.Verify(original);
     }
     private async Task<string> ExtraAsync(string path)
@@ -392,8 +396,11 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         if (changed) await EnsurePublicationIntegrityAsync();
         if (changed && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null)
             localPublicationArtifacts.Register(lease.ExecutionId, lease.Epoch, context.CurrentSha256, current);
-        await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish", new FinishRuntimeExecution(lease.Epoch, Guid.NewGuid(), Volatile.Read(ref revision), failed ? "failed" : terminal == "deferred" ? "deferred" : "succeeded",
-            failed ? "Le flow a atteint une fin en échec." : "Flow terminé ; scans média réalisés.", changed ? context.CurrentSha256 : null, changed ? context.Extension : null, context.BeforeMetadata, context.CurrentMetadata, terminal == "deferred" ? (variables.TryGetValue("runtime.deferMinutes", out var delay) ? delay.GetInt32() : 2) : null,
+        await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish", new FinishRuntimeExecution(lease.Epoch, Guid.NewGuid(),
+            Volatile.Read(ref revision), failed ? "failed" : terminal == "deferred" ? "deferred" : "succeeded",
+            failed ? "Le flow a atteint une fin en échec." : "Flow terminé ; scans média réalisés.", changed ? context.CurrentSha256 : null,
+                changed ? context.Extension : null, context.BeforeMetadata, context.CurrentMetadata,
+                terminal == "deferred" ? (variables.TryGetValue("runtime.deferMinutes", out var delay) ? delay.GetInt32() : 2) : null,
             commandCapture.Pending()), job.Token);
         if (changed)
         {
@@ -415,7 +422,8 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
             var node = lease.Flow.Nodes.Single(item => item.Id == probe.BlockNodeId);
             var context = lease.Checkpoint?.Context ?? throw new InvalidOperationException("Sonde sans checkpoint.");
             var invocation = new FlowStepInvocation(1, Guid.NewGuid(), lease.ExecutionId, lease.Attempt, client.NodeId, lease.Epoch, node.Id, node.Component, node.Configuration,
-                new(lease.SourceSha256, "current" + context.Extension, context.BeforeMetadata, context.CurrentMetadata, new Dictionary<string, JsonElement>(context.Variables), lease.MediaPath, lease.LibraryId),
+                new(lease.SourceSha256, "current" + context.Extension, context.BeforeMetadata, context.CurrentMetadata, new Dictionary<string,
+                    JsonElement>(context.Variables), lease.MediaPath, lease.LibraryId),
                 DateTimeOffset.UtcNow.AddSeconds(45), lease.PluginConfigurations?.GetValueOrDefault(node.Component.PluginId));
             var response = await plugins.ExecuteAsync(invocation, directory, ct);
             output = response.OutputId;
@@ -441,7 +449,8 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         var code = MediaActions.Text(config, "code");
         if (id == "base-condition")
         {
-            var expression = "(function(){ const context=JSON.parse(" + JsonSerializer.Serialize(JsonSerializer.Serialize(context)) + "); const variables=context.variables; return (" + MediaActions.Text(config, "expression") + "); })()";
+            var expression = "(function(){ const context=JSON.parse(" + JsonSerializer.Serialize(JsonSerializer.Serialize(context)) + "); const variables=context.variables; return (" + MediaActions.Text(config,
+                "expression") + "); })()";
             code = "const vm=require('vm'); return {outputId: vm.runInNewContext(" + JsonSerializer.Serialize(expression) + ",Object.create(null),{timeout:5000,contextCodeGeneration:{strings:false,wasm:false}})?'yes':'no'};";
         }
         var file = Path.Combine(directory, "script-" + Guid.NewGuid().ToString("N") + (python ? ".py" : ".js"));
@@ -450,7 +459,9 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         try
         {
             var executable = ProcessToolRunner.Find(python ? "python3" : "node") ?? throw new IOException("Interpréteur indisponible.");
-            var result = await tools.RunAsync(executable, [file], directory, TimeSpan.FromSeconds(id == "base-condition" ? 30 : int.Parse(MediaActions.Number(config, "timeoutSeconds", 60))), ct, JsonSerializer.Serialize(context), 1048576, true);
+            var result = await tools.RunAsync(executable, [file], directory,
+                TimeSpan.FromSeconds(id == "base-condition" ? 30 : int.Parse(MediaActions.Number(config, "timeoutSeconds", 60))), ct,
+                JsonSerializer.Serialize(context), 1048576, true);
             if (result.ExitCode == 79) throw new IOException("Isolation du processus indisponible.");
             if (result.ExitCode != 0) throw new MediaToolException(python ? "python" : "javascript", result.ExitCode, LastErrorLine(result.Error));
             using var document = JsonDocument.Parse(result.Output); return document.RootElement.Clone();

@@ -19,7 +19,8 @@ public sealed partial class ClusterEntityReconciliation
     private static async Task<Dictionary<string, CaptureSelection>> ReadCaptureSelectionsAsync(DbConnection connection, DbTransaction transaction, CancellationToken ct)
     {
         var selections = new Dictionary<string, CaptureSelection>(StringComparer.Ordinal);
-        await using (var tables = Sql.Command("SELECT entity_type,revision,captured_revision,full_scan_revision FROM cluster_sync_capture_tables WHERE revision>captured_revision", connection, transaction))
+        await using (var tables = Sql.Command("SELECT entity_type,revision,captured_revision,full_scan_revision FROM cluster_sync_capture_tables WHERE revision>captured_revision",
+            connection, transaction))
         await using (var rows = await tables.ExecuteReaderAsync(ct))
             while (await rows.ReadAsync(ct))
                 selections.Add(rows.GetString(0), new(rows.GetString(0), rows.GetInt64(1), rows.GetInt64(2) == 0 || rows.GetInt64(3) > rows.GetInt64(2), new(StringComparer.Ordinal)));

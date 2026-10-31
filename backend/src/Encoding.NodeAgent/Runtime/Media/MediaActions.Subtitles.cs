@@ -10,7 +10,8 @@ namespace Encoding.NodeAgent.Runtime.Media;
 public sealed partial class MediaActions
 {
     /// <summary>Nomenclature des pistes (0056). Mode « snapshot » : retourne les titres d'origine sans toucher au fichier. Mode « apply » : mkvpropedit sur une copie de travail ; aucun fichier n'est produit quand rien ne change ou que le conteneur n'est pas Matroska.</summary>
-    public async Task<MediaActionOutcome> TrackNamesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,JsonElement? origin,string current,string directory,string node,CancellationToken ct,bool editWorkingCopy=false,bool planOnly=false)
+    public async Task<MediaActionOutcome> TrackNamesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,JsonElement? origin,string current,
+        string directory,string node,CancellationToken ct,bool editWorkingCopy=false,bool planOnly=false)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
         using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
@@ -18,7 +19,8 @@ public sealed partial class MediaActions
         var edits=TrackNaming.Plan(identification.RootElement,probe,origin,TrackNameOptions.From(c));
         if(edits.Count==0) return new(null,[]);
         if(planOnly) return new(null,[],null,null,true);
-        var canEditDirectly = editWorkingCopy || (Path.GetDirectoryName(current) == Path.GetFullPath(directory) && Path.GetFileName(current).StartsWith("out-", StringComparison.Ordinal) && new FileInfo(current).LinkTarget is null);
+        var canEditDirectly = editWorkingCopy || (Path.GetDirectoryName(current) == Path.GetFullPath(directory) && Path.GetFileName(current).StartsWith("out-",
+            StringComparison.Ordinal) && new FileInfo(current).LinkTarget is null);
         var file = canEditDirectly ? (editWorkingCopy ? MutableAssemblyFile(current, directory) : current) : Output(directory, node, ".mkv");
         if (!canEditDirectly) File.Copy(current, file, true);
         var args = new List<string> { file };
@@ -31,7 +33,8 @@ public sealed partial class MediaActions
     }
 
     /// <summary>Gestion des sous-titres (0057) : extrait les pistes texte, planifie (conversion SRT vers ASS, mise à niveau, doublons, forcés, titres, défaut) puis écrit un seul MKV avec mkvmerge. Les pistes non modifiées sont recopiées de la source ; rien n'est produit quand tout est déjà conforme.</summary>
-    public async Task<MediaActionOutcome> SubtitleManageAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,string current,string directory,string node,CancellationToken ct,bool planOnly=false)
+    public async Task<MediaActionOutcome> SubtitleManageAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,string current,string directory,
+        string node,CancellationToken ct,bool planOnly=false)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
         var options=SubtitleOptions.From(c);
@@ -61,11 +64,13 @@ public sealed partial class MediaActions
             {
                 var stream=subtitleStreams[ordinal]; var codec=(stream.TryGetProperty("codec_name",out var name)?name.GetString()??"":"").ToLowerInvariant();
                 if(!SubtitlePlanner.IsText(codec)) continue;
-                if(codec is "subrip" or "srt" or "ass" or "ssa") raw.Add((ordinal,subtitleIds[ordinal],Path.Combine(work,ordinal+(codec is "subrip" or "srt"?".srt":".ass")),codec is "subrip" or "srt"));
+                if(codec is "subrip" or "srt" or "ass" or "ssa") raw.Add((ordinal,subtitleIds[ordinal],Path.Combine(work,
+                    ordinal+(codec is "subrip" or "srt"?".srt":".ass")),codec is "subrip" or "srt"));
                 else
                 {
                     var file=Path.Combine(work,ordinal+".ass");
-                    await tools.CheckedAsync("ffmpeg",["-nostdin","-hide_banner","-loglevel","error","-y","-i",current,"-map","0:"+stream.GetProperty("index").GetInt32(),"-c:s","ass",file],directory,ct);
+                    await tools.CheckedAsync("ffmpeg",["-nostdin","-hide_banner","-loglevel","error","-y","-i",current,"-map",
+                        "0:"+stream.GetProperty("index").GetInt32(),"-c:s","ass",file],directory,ct);
                     texts[ordinal]=await File.ReadAllTextAsync(file,ct);
                 }
             }
@@ -144,7 +149,8 @@ public sealed partial class MediaActions
     }
 
     /// <summary>Polices (0057) : ajoute en pièces jointes les polices d'un jeu du dossier déclaré par le nœud (<c>ENCODING_FONT_DIR</c>) qui ne sont pas déjà dans le MKV. Jamais de chemin libre.</summary>
-    public async Task<MediaActionOutcome> AddFontsAsync(IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,CancellationToken ct,string? resourceFolder=null,bool editWorkingCopy=false)
+    public async Task<MediaActionOutcome> AddFontsAsync(IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,
+        CancellationToken ct,string? resourceFolder=null,bool editWorkingCopy=false)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
         var extensions = new[] { ".ttf", ".otf", ".ttc" };
@@ -160,9 +166,11 @@ public sealed partial class MediaActions
         {
         var root=Path.GetFullPath(Environment.GetEnvironmentVariable("ENCODING_FONT_DIR") is { Length: >0 } configured?configured:"/app/common/Fonts");
         set=Text(c,"fontSet","Crunchyroll");
-        if(set.Length==0||!System.Text.RegularExpressions.Regex.IsMatch(set,@"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")||set.Contains("..",StringComparison.Ordinal)) throw new SubtitleException("Nom de jeu de polices invalide.");
+        if(set.Length==0||!System.Text.RegularExpressions.Regex.IsMatch(set,@"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")||set.Contains("..",
+            StringComparison.Ordinal)) throw new SubtitleException("Nom de jeu de polices invalide.");
         folder=Path.GetFullPath(Path.Combine(root,set));
-        if(!folder.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,StringComparison.Ordinal)||!Directory.Exists(folder)) throw new SubtitleException($"Jeu de polices « {set} » introuvable sur ce nœud.");
+        if(!folder.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,
+            StringComparison.Ordinal)||!Directory.Exists(folder)) throw new SubtitleException($"Jeu de polices « {set} » introuvable sur ce nœud.");
         names=Text(c,"fonts").Split([',','\n',';'],StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).ToList();
         if(names.Count==0) names=Directory.EnumerateFiles(folder).Select(Path.GetFileName).Where(name=>extensions.Contains(Path.GetExtension(name)!.ToLowerInvariant())).Order(StringComparer.Ordinal).ToList()!;
         if(names.Count==0) throw new SubtitleException($"Le jeu de polices « {set} » ne contient aucune police.");

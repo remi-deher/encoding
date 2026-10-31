@@ -76,7 +76,8 @@ public sealed class ClusterIdentityRepository(DbDataSource dataSource)
             await clearPending.ExecuteNonQueryAsync(cancellationToken);
         await using (var clearTableCursors = Sql.Command("DELETE FROM cluster_sync_table_cursors", connection, transaction))
             await clearTableCursors.ExecuteNonQueryAsync(cancellationToken);
-        await using (var resetCapture = Sql.Command("UPDATE cluster_sync_capture_tables SET revision=revision+1,captured_revision=0,full_scan_revision=revision+1; DELETE FROM cluster_sync_dirty_entities", connection, transaction))
+        await using (var resetCapture = Sql.Command("UPDATE cluster_sync_capture_tables SET revision=revision+1,captured_revision=0,full_scan_revision=revision+1; DELETE FROM cluster_sync_dirty_entities",
+            connection, transaction))
             await resetCapture.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }

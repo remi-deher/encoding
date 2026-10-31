@@ -8,7 +8,8 @@ internal static class FfmpegBuilderValidation
     public static IEnumerable<FlowValidationIssue> Validate(FlowDefinition flow, string entry)
     {
         var nodes = flow.Nodes.Where(node => node?.Component is not null && !string.IsNullOrWhiteSpace(node.Id)).GroupBy(node=>node.Id).ToDictionary(group=>group.Key,group=>group.First());
-        var edges = flow.Connections.Where(edge => edge is not null && !string.IsNullOrWhiteSpace(edge.SourceNodeId) && !string.IsNullOrWhiteSpace(edge.TargetNodeId)).GroupBy(edge => edge.SourceNodeId)
+        var edges = flow.Connections.Where(edge => edge is not null && !string.IsNullOrWhiteSpace(edge.SourceNodeId)
+            && !string.IsNullOrWhiteSpace(edge.TargetNodeId)).GroupBy(edge => edge.SourceNodeId)
             .ToDictionary(group => group.Key, group => group.ToArray());
         var pending = new Queue<(string Node, bool Open)>();
         var seen = new HashSet<(string, bool)>();

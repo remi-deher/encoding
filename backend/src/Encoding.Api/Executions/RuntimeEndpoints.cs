@@ -161,13 +161,15 @@ public static class RuntimeEndpoints
             catch(ArgumentException) {return Results.BadRequest();}
         });
         group.MapPost("/executions/{id:guid}/source-write/authorize",async(Guid nodeId,Guid id,SourceWriteAuthorization request,RuntimeRepository runtime,CancellationToken ct)=>
-            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await runtime.AuthorizeSourceWriteAsync(id,nodeId,request.Epoch,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096
+                && await runtime.AuthorizeSourceWriteAsync(id,nodeId,request.Epoch,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
         group.MapPost("/replacements/{id:guid}/authorize",async(Guid nodeId,Guid id,SourceWriteLocation request,SourceReplacementRepository replacements,CancellationToken ct)=>
             !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await replacements.AuthorizeAsync(id,nodeId,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
         group.MapPost("/source-writes/claim",async(Guid nodeId,PendingSourceWriteRepository writes,Encoding.Api.Plugins.PublicationGuardProvider guards,CancellationToken ct)=>
             await writes.ClaimAsync(nodeId,ct) is {} task?(IResult)Results.Ok(task with { Guards=await guards.ListAsync(ct) }):Results.NoContent());
         group.MapPost("/source-writes/{id:guid}/authorize",async(Guid nodeId,Guid id,PendingSourceWriteFence request,PendingSourceWriteRepository writes,CancellationToken ct)=>
-            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await writes.AuthorizeAsync(id,nodeId,request.ClaimId,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096
+                && await writes.AuthorizeAsync(id,nodeId,request.ClaimId,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
         group.MapPost("/source-writes/{id:guid}/complete",async(Guid nodeId,Guid id,PendingSourceWriteCompletion request,PendingSourceWriteRepository writes,CancellationToken ct)=>
             await writes.CompleteAsync(id,nodeId,request,ct)?(IResult)Results.NoContent():Results.Conflict());
         group.MapPost("/executions/{id:guid}/steps/start",async(Guid nodeId,Guid id,StartRuntimeStep request,RuntimeRepository runtime,CancellationToken ct)=>
@@ -211,7 +213,8 @@ public static class RuntimeEndpoints
             await replacements.ReportAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPost("/executions/{id:guid}/source-failure",async(Guid nodeId,Guid id,FinishRuntimeExecution request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.FinishAsync(id,nodeId,request,ct,true) ? (IResult)Results.NoContent() : Results.Conflict());
-        group.MapPut("/executions/{id:guid}/dav/{digest}",async(Guid nodeId,Guid id,string digest,long epoch,bool? original,string? inputPath,HttpRequest request,RuntimeArtifactStore artifacts,IConfiguration configuration,CancellationToken ct)=>
+        group.MapPut("/executions/{id:guid}/dav/{digest}",async(Guid nodeId,Guid id,string digest,long epoch,bool? original,string? inputPath,
+            HttpRequest request,RuntimeArtifactStore artifacts,IConfiguration configuration,CancellationToken ct)=>
         {
             if(!RuntimeArtifactStore.ValidDigest(digest)) return (IResult)Results.BadRequest();
             var feature=request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
@@ -222,7 +225,8 @@ public static class RuntimeEndpoints
         // Ressources du catalogue (ADR 0006) : le worker lit la liste des fichiers d'une version puis les télécharge un à un.
         // Si ce serveur n'a pas encore l'octet, il le récupère d'abord auprès d'un pair (délai borné).
         group.MapGet("/resources",async(ResourceRepository resources,CancellationToken ct)=>
-            Results.Ok((await resources.LatestVersionsAsync(ct)).Select(item=>new ResourceVersionInfo(item.ResourceId,item.Version,item.Files.Select(file=>new ResourceFileInfo(file.Name,file.Sha256,file.Bytes)).ToArray())).ToArray()));
+            Results.Ok((await resources.LatestVersionsAsync(ct)).Select(item=>new ResourceVersionInfo(item.ResourceId,item.Version,
+                item.Files.Select(file=>new ResourceFileInfo(file.Name,file.Sha256,file.Bytes)).ToArray())).ToArray()));
         group.MapGet("/resources/{resourceId:guid}/versions/{version:int}",async(Guid resourceId,int version,ResourceRepository resources,CancellationToken ct)=>
             await resources.GetVersionAsync(resourceId,version,ct) is { } item
                 ? Results.Ok(new ResourceVersionInfo(item.ResourceId,item.Version,item.Files.Select(file=>new ResourceFileInfo(file.Name,file.Sha256,file.Bytes)).ToArray()))
@@ -247,7 +251,8 @@ public static class RuntimeEndpoints
             if(!RuntimeArtifactStore.ValidDigest(digest) || !await artifacts.AuthorizeAsync(id,nodeId,epoch,ct)) return (IResult)Results.Conflict();
             var file=new FileInfo(artifacts.PathFor(id,digest));
             if(!file.Exists) return Results.NotFound();
-            return Results.Text($"<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>{digest}</d:href><d:propstat><d:prop><d:getcontentlength>{file.Length}</d:getcontentlength><d:getetag>\"{digest}\"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>","application/xml",statusCode:207);
+            return Results.Text($"<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>{digest}</d:href><d:propstat><d:prop><d:getcontentlength>{file.Length}</d:getcontentlength><d:getetag>\"{digest}\"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>",
+                "application/xml",statusCode:207);
         });
     }
 

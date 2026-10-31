@@ -138,7 +138,8 @@ public sealed partial class AiAssistantService
             {"kind":"answer","content":"brouillon factuel"}
             {"kind":"tool_call","name":"nom","arguments":{...}}
             """ + (isAdmin
-                ? "Pour une action explicitement demandée, utilise kind action_call. Tu peux choisir une action confirmable nommée ci-dessous ou les actions spéciales publish-flow, delete-flow, start-library, cancel-execution, assign-library-flow, create-flow-template. Pour les opérations du catalogue, les arguments doivent suivre leur schéma. Une opération du catalogue ne sera exécutée qu’après confirmation explicite.\nOpérations d’administration confirmables :\n- " + string.Join("\n- ", actionContracts) + "\n"
+                ? "Pour une action explicitement demandée, utilise kind action_call. Tu peux choisir une action confirmable nommée ci-dessous ou les actions spéciales publish-flow, delete-flow, start-library, cancel-execution, assign-library-flow, create-flow-template. Pour les opérations du catalogue, les arguments doivent suivre leur schéma. Une opération du catalogue ne sera exécutée qu’après confirmation explicite.\nOpérations d’administration confirmables :\n- " + string.Join("\n- ",
+                    actionContracts) + "\n"
                 : string.Empty)
             + "Outils de lecture autorisés et leurs schémas :\n- " + string.Join("\n- ", readContracts)
             + "\nN’invente aucun outil ou argument. Ne propose une action que si l’utilisateur demande explicitement de la réaliser et que sa ressource exacte figure dans le contexte. Une action proposée attendra une confirmation explicite. Choisis un outil de lecture seulement si les sources présentes ne suffisent pas.";

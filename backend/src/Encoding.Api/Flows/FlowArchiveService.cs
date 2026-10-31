@@ -55,7 +55,8 @@ public sealed class FlowArchiveService(FlowRepository repository, FlowDefinition
             using var document=JsonDocument.Parse(bytes.ToArray());
             if(document.RootElement.ValueKind!=JsonValueKind.Object) throw new InvalidDataException("Un document de flow doit être un objet JSON.");
             if(document.RootElement.TryGetProperty("kind",out var kind)) {
-                if(kind.ValueKind!=JsonValueKind.String || kind.GetString()!="draft" || !document.RootElement.TryGetProperty("definition",out var body) || document.RootElement.EnumerateObject().Any(p=>p.Name is not("kind" or "definition" or "draftRevision"))) throw new InvalidDataException("Enveloppe de brouillon invalide.");
+                if(kind.ValueKind!=JsonValueKind.String || kind.GetString()!="draft" || !document.RootElement.TryGetProperty("definition",out var body)
+                    || document.RootElement.EnumerateObject().Any(p=>p.Name is not("kind" or "definition" or "draftRevision"))) throw new InvalidDataException("Enveloppe de brouillon invalide.");
                 var (definition,_)=validator.ValidateDocument(body);
                 if(definition is null) throw new InvalidDataException("Brouillon absent.");
                 var result=validator.ValidateDraft(definition);

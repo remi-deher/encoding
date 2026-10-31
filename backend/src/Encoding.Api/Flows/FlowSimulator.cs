@@ -166,7 +166,9 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
         }
         var failed = terminal == "failed" || terminal is null && lastOutput == "error";
         if (context.Plan.Count > 0 && !failed) return new("failed", "Le flow se termine avec un plan non exécuté.", steps, TerminalResult: terminal);
-        return new(failed ? "failed" : "completed", failed ? "Le chemin simulé se termine en échec." : "Chemin simulé terminé. Les résultats supposés restent à vérifier sur un worker réel.", steps, TerminalResult: terminal);
+        return new(failed ? "failed" : "completed",
+            failed ? "Le chemin simulé se termine en échec." : "Chemin simulé terminé. Les résultats supposés restent à vérifier sur un worker réel.", steps,
+            TerminalResult: terminal);
     }
     private static bool ValidMetadata(JsonElement metadata) => metadata.ValueKind == JsonValueKind.Object
         && metadata.TryGetProperty("streams", out var streams) && streams.ValueKind == JsonValueKind.Array && streams.GetArrayLength() <= 1000

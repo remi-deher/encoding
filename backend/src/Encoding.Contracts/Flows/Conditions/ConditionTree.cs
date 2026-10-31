@@ -174,7 +174,8 @@ public static class ConditionTree
             case "number":
                 if (actual!.Value.ValueKind != JsonValueKind.Number || !actual.Value.TryGetDecimal(out var number)) throw TypeError(field);
                 var target = expected.GetDecimal();
-                return rule.Operator switch { "eq" => number == target, "neq" => number != target, "gt" => number > target, "gte" => number >= target, "lt" => number < target, "lte" => number <= target, _ => throw TypeError(field) };
+                return rule.Operator switch { "eq" => number == target, "neq" => number != target, "gt" => number > target, "gte" => number >= target,
+                    "lt" => number < target, "lte" => number <= target, _ => throw TypeError(field) };
             case "boolean":
                 if (actual!.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw TypeError(field);
                 equal = actual.Value.GetBoolean() == expected.GetBoolean(); break;
@@ -223,7 +224,8 @@ public static class ConditionTree
         if (!json.TryGetProperty("streams", out var streams) || streams.ValueKind != JsonValueKind.Array) return null;
         var type = rule.Field.StartsWith("video.", StringComparison.Ordinal) ? "video" : rule.Field.StartsWith("audio.", StringComparison.Ordinal) ? "audio" : "subtitle";
         var tracks = streams.EnumerateArray().Where(track => track.ValueKind == JsonValueKind.Object && track.TryGetProperty("codec_type", out var codecType) && codecType.GetString() == type
-            && !(type == "video" && track.TryGetProperty("disposition", out var disposition) && disposition.ValueKind == JsonValueKind.Object && disposition.TryGetProperty("attached_pic", out var cover) && cover.ValueKind == JsonValueKind.Number && cover.GetInt32() != 0)).ToArray();
+            && !(type == "video" && track.TryGetProperty("disposition", out var disposition) && disposition.ValueKind == JsonValueKind.Object
+                && disposition.TryGetProperty("attached_pic", out var cover) && cover.ValueKind == JsonValueKind.Number && cover.GetInt32() != 0)).ToArray();
         var property = rule.Field.Split('.')[1];
         if (rule.Field == "video.bitDepth") return tracks.Length == 0 ? null : Element(MediaConditionEvaluator.DetectBitDepth(tracks[0]));
         if (rule.Field == "video.hdr") return tracks.Length == 0 ? null : Element(MediaConditionEvaluator.DetectHdrFormat(tracks[0]) != MediaConditionEvaluator.HdrFormat.Sdr);

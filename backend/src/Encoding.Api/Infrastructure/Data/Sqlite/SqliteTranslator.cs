@@ -26,9 +26,12 @@ public static partial class SqliteTranslator
         text = InfinityRegex().Replace(text, InfinityLiteral);
         text = RowLockRegex().Replace(text, "");
         text = text.Replace("gen_random_uuid()", RandomUuid, StringComparison.Ordinal);
-        text = Regex.Replace(text, @"EXTRACT\(\s*EPOCH\s+FROM\s+clock_timestamp\(\)\s*-\s*(min\(\w+\)|[\w.]+)\s*\)", "((julianday('now') - julianday($1)) * 86400.0)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        text = Regex.Replace(text, @"EXTRACT\(\s*EPOCH\s+FROM\s+clock_timestamp\(\)\s*-\s*(min\(\w+\)|[\w.]+)\s*\)",
+            "((julianday('now') - julianday($1)) * 86400.0)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         text = Regex.Replace(text, @"(@?\w+) <@ (@?\w+) AND \2 <@ \1", m => "(" + SortedSet(m.Groups[1].Value) + " = " + SortedSet(m.Groups[2].Value) + ")", RegexOptions.CultureInvariant);
-        text = Regex.Replace(text, @"\brepeat\('([^'])',\s*(\d+)\)", m => $"replace(substr(hex(zeroblob({(int.Parse(m.Groups[2].Value) + 1) / 2})), 1, {m.Groups[2].Value}), '0', '{m.Groups[1].Value}')", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        text = Regex.Replace(text, @"\brepeat\('([^'])',\s*(\d+)\)",
+            m => $"replace(substr(hex(zeroblob({(int.Parse(m.Groups[2].Value) + 1) / 2})), 1, {m.Groups[2].Value}), '0', '{m.Groups[1].Value}')",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         text = text.Replace("now()", "clock_timestamp()", StringComparison.OrdinalIgnoreCase);
         text = TranslateIntervals(text);
         text = text.Replace("clock_timestamp()", Now(), StringComparison.Ordinal).Replace("now()", Now(), StringComparison.Ordinal);
@@ -151,7 +154,8 @@ public static partial class SqliteTranslator
         "lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6)))";
 
     [GeneratedRegex(@"'infinity'(::timestamptz)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex InfinityRegex();
-    [GeneratedRegex(@"\s+FOR\s+(?:NO\s+KEY\s+)?(?:UPDATE|SHARE)\b(?:\s+OF\s+\w+(?:\s*,\s*\w+)*)?(?:\s+SKIP\s+LOCKED|\s+NOWAIT)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex RowLockRegex();
+    [GeneratedRegex(@"\s+FOR\s+(?:NO\s+KEY\s+)?(?:UPDATE|SHARE)\b(?:\s+OF\s+\w+(?:\s*,\s*\w+)*)?(?:\s+SKIP\s+LOCKED|\s+NOWAIT)?",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex RowLockRegex();
     [GeneratedRegex(@"clock_timestamp\(\)\s*([+-])\s*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex ClockOffsetRegex();
     [GeneratedRegex(@"interval\s+'(\d+)\s+(\w+)'", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex IntervalLiteralRegex();
     [GeneratedRegex(@"make_interval\(\s*(\w+)\s*=>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex MakeIntervalOpening();
@@ -159,7 +163,8 @@ public static partial class SqliteTranslator
     [GeneratedRegex(@"\*\s*interval\s+'1\s+(\w+)'", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex TimesIntervalRegex();
     [GeneratedRegex(@"('[^']*'|@\w+)\s*=\s*ANY\(\s*([A-Za-z_][\w.]*|COALESCE\([^()]*\))\s*\)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex AnyColumnRegex();
     [GeneratedRegex(@"([A-Za-z_][\w.]*)\s*=\s*ANY\(\s*@(\w+)\s*\)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex AnyParameterRegex();
-    [GeneratedRegex(@"::(?:uuid|text|jsonb|json|integer|int|bigint|numeric|double precision|timestamptz|timestamp|boolean|bytea)(?:\[\])?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex CastRegex();
+    [GeneratedRegex(@"::(?:uuid|text|jsonb|json|integer|int|bigint|numeric|double precision|timestamptz|timestamp|boolean|bytea)(?:\[\])?",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex CastRegex();
     [GeneratedRegex(@"\bARRAY\[([^\]]*)\]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex ArrayLiteralRegex();
     [GeneratedRegex(@"unnest\(\s*@(\w+)(?:::text\[\])?\s*\)\s+AS\s+(\w+)\((\w+)\)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex UnnestRegex();
     [GeneratedRegex(@"\bUPDATE\s+(\w+)\s+(?!AS\b|SET\b)(\w+)\s+SET\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex UpdateAliasRegex();

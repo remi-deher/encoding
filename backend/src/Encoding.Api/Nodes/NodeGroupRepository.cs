@@ -67,7 +67,8 @@ public sealed class NodeGroupRepository(DbDataSource dataSource)
             { clear.Parameters.AddWithValue("id", groupId); await clear.ExecuteNonQueryAsync(ct); }
             foreach (var nodeId in request.NodeIds.Distinct())
             {
-                await using var add = Sql.Command("INSERT INTO node_group_members(group_id,node_id) SELECT @group,@node WHERE EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL)", c, tx);
+                await using var add = Sql.Command("INSERT INTO node_group_members(group_id,node_id) SELECT @group,@node WHERE EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL)",
+                    c, tx);
                 add.Parameters.AddWithValue("group", groupId); add.Parameters.AddWithValue("node", nodeId);
                 if (await add.ExecuteNonQueryAsync(ct) == 0) return false;
             }

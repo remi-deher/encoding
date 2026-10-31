@@ -34,11 +34,13 @@ internal static class PendingSourceWriteHandler
         {
             if(await Authorized(watch.Token))
             {
-                var transfer=new RuntimeTransfer(task.ExecutionId,0,task.Root,task.OriginalPath,task.SourceSha256,task.ResultSha256,task.ResultExtension,true,LibraryId:task.LibraryId,Guards:task.Guards);
+                var transfer=new RuntimeTransfer(task.ExecutionId,0,task.Root,task.OriginalPath,task.SourceSha256,task.ResultSha256,task.ResultExtension,true,
+                    LibraryId:task.LibraryId,Guards:task.Guards);
                 var verdict=await guards.CheckAsync(transfer,watch.Token);
                 if(!verdict.Allowed) report=new("failed",null,null,0,DateTimeOffset.UtcNow,verdict.Detail);
                 else report=await SourceReplacer.ReplaceAsync(task.Root,task.ExecutionId,task.OriginalPath,
-                    SafeMediaPaths.Resolve(task.Root,task.PublishedPath),task.SourceSha256,task.ResultSha256,task.ResultExtension,async token=>await Authorized(token)?true:throw new SourceWriteDeferredException(),watch.Token);
+                    SafeMediaPaths.Resolve(task.Root,task.PublishedPath),task.SourceSha256,task.ResultSha256,task.ResultExtension,
+                        async token=>await Authorized(token)?true:throw new SourceWriteDeferredException(),watch.Token);
             }
         }
         catch(SourceWriteDeferredException) { }

@@ -41,8 +41,11 @@ internal static class RuntimeCommandJournal
             var logs = Merge(existing, group.Select(item => item.Command));
             var serialized = JsonSerializer.Serialize(logs, Json);
             if (System.Text.Encoding.UTF8.GetByteCount(serialized) > 524288) return false;
-            await using var update = Sql.Command("UPDATE execution_steps SET command_logs=@logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND ((@completed AND completed_at IS NOT NULL) OR (NOT @completed AND completed_at IS NULL))", connection, transaction);
-            update.Parameters.AddWithValue("id", execution); update.Parameters.AddWithValue("node", group.Key.NodeId); update.Parameters.AddWithValue("invocation", group.Key.InvocationId); update.Parameters.AddWithValue("logs", SqlKind.Json, serialized);
+            await using var update = Sql.Command("UPDATE execution_steps SET command_logs=@logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND ((@completed AND completed_at IS NOT NULL) OR (NOT @completed AND completed_at IS NULL))",
+                connection, transaction);
+            update.Parameters.AddWithValue("id", execution); update.Parameters.AddWithValue("node",
+                group.Key.NodeId); update.Parameters.AddWithValue("invocation", group.Key.InvocationId); update.Parameters.AddWithValue("logs", SqlKind.Json,
+                serialized);
             update.Parameters.AddWithValue("completed", completed);
             if (await update.ExecuteNonQueryAsync(ct) != 1) return false;
         }
