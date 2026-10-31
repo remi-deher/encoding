@@ -166,18 +166,20 @@ public sealed class DockerClusterTests
                 try { Directory.Delete(directory, true); } catch { }
         }
 
-        public string IdentityDiagnostics()
+        public async Task<string> IdentityDiagnosticsAsync()
         {
             var entries = new List<string>();
-            foreach (var directory in dataDirectories)
+            foreach (var container in containers)
             {
-                var path = Path.Combine(directory, "node-identity.json");
+                var path = Path.Combine(Path.GetTempPath(), $"encoding-node-identity-{id}-{container}.json");
+                await DockerAsync(allowFailure: true, "cp", $"{container}:/var/lib/encoding-node/node-identity.json", path);
                 if (!File.Exists(path)) continue;
                 using var document = JsonDocument.Parse(File.ReadAllText(path));
+                File.Delete(path);
                 var identity = document.RootElement;
                 entries.Add(JsonSerializer.Serialize(new
                 {
-                    node = Path.GetFileName(directory),
+                    node = container,
                     id = identity.TryGetProperty("id", out var id) ? id.GetString() : null,
                     clusterId = identity.TryGetProperty("clusterId", out var clusterId) ? clusterId.GetString() : null,
                     apiBaseUrl = identity.TryGetProperty("apiBaseUrl", out var apiBaseUrl) ? apiBaseUrl.GetString() : null,
@@ -243,7 +245,7 @@ public sealed class DockerClusterTests
         }, 420, "reprise et fin de l'exécution", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{cluster.IdentityDiagnostics()}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
         Assert.NotEqual(victim, final.GetProperty("node").GetString());
         Assert.Contains("reprise", history, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
@@ -271,7 +273,7 @@ public sealed class DockerClusterTests
         }, 300, "exécution par le worker de l'ancienne version", cluster);
 
         var history = (await cluster.Client.GetFromJsonAsync<JsonElement>($"api/v1/executions/{executionId}/events")).ToString();
-        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{cluster.IdentityDiagnostics()}\n{await cluster.LogsAsync()}");
+        Assert.True(final.GetProperty("state").GetString() == "succeeded", $"{final.GetProperty("detail")}\n{history}\n{await cluster.IdentityDiagnosticsAsync()}\n{await cluster.LogsAsync()}");
         Assert.Equal("worker-old", final.GetProperty("node").GetString());
         Assert.Equal(sourceSha, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(source))));
     }
