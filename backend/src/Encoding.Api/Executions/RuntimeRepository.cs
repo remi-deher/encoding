@@ -519,8 +519,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             var epoch=checked(item.Epoch+1);
             await using(var reserve=Sql.Command("""
               INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until)
-              VALUES(@library,@key,@id,@epoch,clock_timestamp()+interval '60 seconds')
-              ON CONFLICT(library_id,media_key) DO UPDATE SET execution_id=@id,lease_epoch=@epoch,lease_until=clock_timestamp()+interval '60 seconds'
+              VALUES(@library,@key,@id,@epoch,clock_timestamp()+interval '180 seconds')
+              ON CONFLICT(library_id,media_key) DO UPDATE SET execution_id=@id,lease_epoch=@epoch,lease_until=clock_timestamp()+interval '180 seconds'
               WHERE media_reservations.execution_id=@id OR media_reservations.lease_until<=clock_timestamp() RETURNING execution_id
               """,c,tx))
             {
@@ -536,7 +536,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             await using(var set=Sql.Command("""
               UPDATE execution_work SET worker_node_id=@worker,source_node_id=@source,lease_epoch=@epoch,handoff_pending=false,
                  plugin_configuration_snapshot=COALESCE(plugin_configuration_snapshot,@settings),
-                 lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
+                 lease_until=clock_timestamp()+interval '180 seconds' WHERE execution_id=@id;
               UPDATE executions SET node_id=@worker WHERE id=@id;
               """,c,tx))
             { set.Parameters.AddWithValue("worker",worker); set.Parameters.AddWithValue("source",source); set.Parameters.AddWithValue("epoch",epoch); set.Parameters.AddWithValue("id",item.Id);
@@ -608,9 +608,9 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         if(!await FenceAsync(id,worker,epoch,c,tx,ct)) return null;
         if (!await RuntimeCommandJournal.StoreAsync(id, commands, c, tx, ct)) return null;
         await using var update=Sql.Command("""
-          UPDATE execution_work SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
-          UPDATE media_reservations SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
-          UPDATE disk_locks SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
+          UPDATE execution_work SET lease_until=clock_timestamp()+interval '180 seconds' WHERE execution_id=@id;
+          UPDATE media_reservations SET lease_until=clock_timestamp()+interval '180 seconds' WHERE execution_id=@id;
+          UPDATE disk_locks SET lease_until=clock_timestamp()+interval '180 seconds' WHERE execution_id=@id;
           SELECT e.state='cancelling',e.revision,w.lease_until FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE e.id=@id
           """,c,tx);
         update.Parameters.AddWithValue("id",id); await using var r=await update.ExecuteReaderAsync(ct); await r.ReadAsync(ct);

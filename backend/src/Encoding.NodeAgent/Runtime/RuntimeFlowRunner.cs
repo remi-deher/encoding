@@ -22,7 +22,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             await leaseGate.WaitAsync(ct);
             try
             {
-                using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(30));
                 var status=(await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch, commandCapture.ForHeartbeat()),timeout.Token))!;
                 Volatile.Write(ref revision,status.Revision);
                 if(status.CancelRequested) { cancelled=true; job.Cancel(); }
@@ -33,15 +33,41 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         if(lease.Probe is { } wanted) { await ProbeAsync(lease,wanted,client,directory,stoppingToken); return; }
         var renewal=Task.Run(async()=>
         {
-            try { while(!job.IsCancellationRequested) { await Task.Delay(TimeSpan.FromSeconds(15),job.Token); await RenewAsync(job.Token); } }
-            catch(OperationCanceledException) when(job.IsCancellationRequested) { }
-            catch(Exception exception)
+            var consecutiveFailures=0;
+            try
             {
-                logger.LogWarning("Renouvellement du bail de l’exécution {ExecutionId} refusé ou inaccessible ({Type}, HTTP {StatusCode}).",
-                    lease.ExecutionId,exception.GetType().Name,(exception as HttpRequestException)?.StatusCode);
-                lost=true;
-                job.Cancel();
+                while(!job.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(15),job.Token);
+                    try
+                    {
+                        await RenewAsync(job.Token);
+                        consecutiveFailures=0;
+                    }
+                    catch(OperationCanceledException) when(job.IsCancellationRequested) { break; }
+                    catch(HttpRequestException ex) when(ex.StatusCode==System.Net.HttpStatusCode.Conflict)
+                    {
+                        logger.LogWarning("Bail de l’exécution {ExecutionId} révoqué par le cluster (HTTP 409).",lease.ExecutionId);
+                        lost=true;
+                        job.Cancel();
+                        break;
+                    }
+                    catch(Exception exception)
+                    {
+                        consecutiveFailures++;
+                        logger.LogWarning("Renouvellement du bail de l’exécution {ExecutionId} en échec ({Failures} consécutifs) : {Type} {Message}.",
+                            lease.ExecutionId,consecutiveFailures,exception.GetType().Name,exception.Message);
+                        if(consecutiveFailures>=5)
+                        {
+                            logger.LogError("Bail de l’exécution {ExecutionId} considéré comme perdu après 5 échecs consécutifs.",lease.ExecutionId);
+                            lost=true;
+                            job.Cancel();
+                            break;
+                        }
+                    }
+                }
             }
+            catch(OperationCanceledException) when(job.IsCancellationRequested) { }
         },CancellationToken.None);
         try
         {
@@ -87,21 +113,30 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 if(directRead)
                 {
                     observed!.Verify(original);
-                    await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source/prepare",new RuntimeFence(lease.Epoch),job.Token);
-                    while(sourceSha is null)
-                    {
-                        sourceSha=(await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}",job.Token)).SourceSha256;
-                        if(sourceSha is null) await Task.Delay(TimeSpan.FromMilliseconds(250),job.Token);
-                    }
-                    observed.Verify(original);
-                    directRead=false;
-                    original=Path.Combine(directory,"source"+extension);
                     current=Path.Combine(directory,"current"+context.Extension);
-                    context=context with { CurrentSha256=sourceSha,DirectSource=null };
+                    if(original!=current && !File.Exists(current))
+                    {
+                        File.Copy(original,current,true);
+                        currentStamp=MediaFileStamp.Read(current);
+                        if(currentStamp.Bytes!=observed.Bytes) throw new IOException("La copie locale est incomplète.");
+                    }
+                    else
+                    {
+                        currentStamp=MediaFileStamp.Read(current);
+                    }
+                    context=context with { CurrentSha256=sourceSha??observed.ToDigest(),DirectSource=null };
+                    directRead=false;
+                    materialized=true;
+                    return;
                 }
                 await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
                 if(context.CurrentSha256==sourceSha)
-                    await SafeMediaPaths.CopyVerifiedAsync(original,current,sourceSha!,job.Token);
+                {
+                    if(original!=current && !File.Exists(current))
+                    {
+                        File.Copy(original,current,true);
+                    }
+                }
                 else await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
                 foreach(var variable in variables.Where(pair=>pair.Key.StartsWith("artifact.",StringComparison.Ordinal)))
                 {
@@ -636,7 +671,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             if(MediaActions.Text(c,"actionOnFailure","branch")=="revert")
                             {
                                 File.Copy(original,current,true);
-                                var sha=await SafeMediaPaths.DigestAsync(current,job.Token);
+                                var sha=MediaFileStamp.Read(current).ToDigest();
                                 context=context with { CurrentSha256=sha,Extension=Path.GetExtension(original),CurrentMetadata=context.BeforeMetadata };
                                 logger.LogInformation("Garde de taille {Node} : gain insuffisant ({Percent:F1}%), source d'origine restaurée.",node.Id,percentChange);
                             }

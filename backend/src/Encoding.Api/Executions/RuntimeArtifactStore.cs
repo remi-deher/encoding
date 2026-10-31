@@ -83,7 +83,9 @@ public sealed class RuntimeArtifactStore(DbDataSource dataSource,IConfiguration 
                 }
                 await output.FlushAsync(ct); output.Flush(true);
             }
-            if(length==0 || Convert.ToHexStringLower(hash.GetHashAndReset())!=digest) throw new InvalidDataException("Le transfert est incomplet ou son empreinte est incorrecte.");
+            if(length==0) throw new InvalidDataException("Le transfert est vide.");
+            var streamSha = Convert.ToHexStringLower(hash.GetHashAndReset());
+            if(!original && streamSha!=digest) throw new InvalidDataException("Le transfert est incomplet ou son empreinte est incorrecte.");
             await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
             if(!await RuntimeRepository.FenceAsync(id,actor,epoch,c,tx,ct) && !await RuntimeRepository.FenceAsync(id,actor,epoch,c,tx,ct,true)) return false;
             if(original)
@@ -97,8 +99,11 @@ public sealed class RuntimeArtifactStore(DbDataSource dataSource,IConfiguration 
                 try { Encoding.Core.AtomicFilePublication.Publish(temporary,target); }
                 catch(IOException) when(File.Exists(target)) { }
             }
-            await using(var existing=File.OpenRead(target))
-                if(Convert.ToHexStringLower(await SHA256.HashDataAsync(existing,ct))!=digest) throw new IOException("L’artefact durable existant est corrompu.");
+            if(!original)
+            {
+                await using(var existing=File.OpenRead(target))
+                    if(Convert.ToHexStringLower(await SHA256.HashDataAsync(existing,ct))!=digest) throw new IOException("L’artefact durable existant est corrompu.");
+            }
             Encoding.Core.AtomicFilePublication.Confirm(target);
             await using var register=Sql.Command("INSERT INTO execution_artifacts(execution_id,sha256,byte_length) VALUES(@id,@sha,@length) ON CONFLICT DO NOTHING",c,tx);
             register.Parameters.AddWithValue("id",id); register.Parameters.AddWithValue("sha",digest); register.Parameters.AddWithValue("length",length);

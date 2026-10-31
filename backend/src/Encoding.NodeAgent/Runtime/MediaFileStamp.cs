@@ -20,4 +20,11 @@ public sealed record MediaFileStamp(long Bytes, long LastWriteUtcTicks)
     {
         if (Read(path) != this) throw new IOException("Le fichier média a changé pendant son utilisation.");
     }
+
+    public string ToDigest()
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var bytes = System.Text.Encoding.UTF8.GetBytes($"stamp:{Bytes}:{LastWriteUtcTicks}");
+        return Convert.ToHexStringLower(sha.ComputeHash(bytes));
+    }
 }
