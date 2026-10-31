@@ -66,11 +66,21 @@ public sealed class LeadershipReceiverTests : IDisposable
         var info = new LocalBackupInfo("digest123", fakeDbContent.Length, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         await File.WriteAllTextAsync(service.BackupInfoFilePath, JsonSerializer.Serialize(info));
 
+        // Créer d'anciens fichiers résiduels WAL et SHM
+        var walPath = service.DatabaseFilePath + "-wal";
+        var shmPath = service.DatabaseFilePath + "-shm";
+        await File.WriteAllTextAsync(walPath, "stale wal");
+        await File.WriteAllTextAsync(shmPath, "stale shm");
+
         var result = await service.EmergencyPromoteAsync(force: false, CancellationToken.None);
 
         Assert.True(result.Success);
         Assert.True(File.Exists(service.DatabaseFilePath));
         Assert.Equal(fakeDbContent, await File.ReadAllTextAsync(service.DatabaseFilePath));
+
+        // Les fichiers WAL et SHM résiduels doivent avoir été purgés
+        Assert.False(File.Exists(walPath));
+        Assert.False(File.Exists(shmPath));
     }
 
     [Fact]

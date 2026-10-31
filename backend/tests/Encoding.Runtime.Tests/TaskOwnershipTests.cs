@@ -178,4 +178,34 @@ public sealed class TaskOwnershipTests
         Assert.True(number>1);
     }
 
+    [Fact]
+    public async Task AdoptDatabaseFromPreviousMaster_ReassignsActiveTasksAndDoesNotThrow()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var id = await f.AddAsync();
+
+        // Créer une nouvelle identité représentant un nouveau serveur maître
+        var newRoot = Path.Combine(Path.GetTempPath(), "new-master-" + Guid.NewGuid().ToString("N"));
+        using var newIdentity = new ClusterPeerIdentityStore(
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["PluginSettings:KeyDirectory"] = newRoot }).Build(),
+            new EphemeralDataProtectionProvider());
+
+        var newOwnershipRepo = new TaskOwnershipRepository(f.Db.Db, newIdentity, f.Health);
+
+        // L'initialisation doit réussir sans lever "L'identité serveur ne correspond pas à la file locale."
+        await newOwnershipRepo.InitializeAsync(default);
+
+        // Vérifier que task_server_identity a été rebindé au nouveau master
+        await using var checkServer = f.Db.Db.CreateCommand("SELECT peer_id FROM task_server_identity WHERE singleton=1");
+        var boundPeer = await checkServer.ExecuteScalarAsync();
+        Assert.Equal(newIdentity.PeerId.ToString("D"), boundPeer?.ToString());
+
+        // Vérifier que la tâche active a été réassignée au nouveau master
+        await using var checkTask = f.Db.Db.CreateCommand("SELECT owner_peer_id FROM task_ownership WHERE execution_id=@id");
+        checkTask.Parameters.AddWithValue("id", id);
+        var ownerPeer = await checkTask.ExecuteScalarAsync();
+        Assert.Equal(newIdentity.PeerId.ToString("D"), ownerPeer?.ToString());
+
+        if (Directory.Exists(newRoot)) Directory.Delete(newRoot, true);
+    }
 }

@@ -86,6 +86,7 @@ public sealed class LeadershipHandoffService(
             await nodeRepository.SetDrainingAsync(localNodeId.Value, true, ct);
 
         var snapshotDir = Path.Combine(dataDirectory, "transfers");
+        CleanupStaleTransfers(snapshotDir);
         var snapshotPath = Path.Combine(snapshotDir, $"transfer-{transferId:N}.db");
 
         logger.LogInformation("Création de l'instantané SQLite pour le transfert de gouvernance {TransferId} vers {TargetNodeName} ({TargetNodeId})...",
@@ -104,6 +105,26 @@ public sealed class LeadershipHandoffService(
         return new LeadershipTransferResponse(true, "Passation de pouvoir initiée. L'instantané est prêt pour le worker.", targetUrl);
     }
 
+    private void CleanupStaleTransfers(string snapshotDir)
+    {
+        try
+        {
+            if (!Directory.Exists(snapshotDir)) return;
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-1);
+            foreach (var file in Directory.EnumerateFiles(snapshotDir, "transfer-*.db"))
+            {
+                if (File.GetLastWriteTimeUtc(file) < cutoff.UtcDateTime)
+                {
+                    try { File.Delete(file); } catch { }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Erreur non bloquante lors du nettoyage des anciens transferts.");
+        }
+    }
+
     /// <summary>
     /// Appelée lorsque le worker promu a téléchargé et validé l'instantané de base de données.
     /// L'ancien maître valide le transfert et rétrograde son mode local en worker pur.
@@ -118,11 +139,22 @@ public sealed class LeadershipHandoffService(
 
         await repository.CompleteTransferAsync(transferId, ct);
 
-        // Suppression sécurisée du snapshot temporaire
+        // Suppression différée sécurisée du snapshot temporaire (pour tolérer les retentatives et requêtes trailing)
         if (!string.IsNullOrEmpty(record.SnapshotPath) && File.Exists(record.SnapshotPath))
         {
-            try { File.Delete(record.SnapshotPath); }
-            catch (Exception ex) { logger.LogWarning(ex, "Impossible de supprimer le snapshot temporaire de transfert."); }
+            var snapshotPath = record.SnapshotPath;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(5));
+                    if (File.Exists(snapshotPath)) File.Delete(snapshotPath);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Impossible de supprimer le snapshot temporaire de transfert après délai de grâce.");
+                }
+            });
         }
 
         // Rétrogradation de l'ancien maître en worker pur via le Launcher
