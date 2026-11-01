@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Analyseurs Roslyn recommandés sur les projets de production uniquement.
+    La vérification dotnet format reste hors CI jusqu'à un commit de format dédié.
+  -->
+  <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <AnalysisMode>Default</AnalysisMode>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

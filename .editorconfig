@@ -8,6 +8,11 @@ insert_final_newline = true
 [*.cs]
 indent_style = space
 indent_size = 4
+# Style / qualité : suggestion IDE uniquement — ne pas monter en erreur tant que
+# le dépôt n'a pas un commit de format unique + verify-no-changes en CI.
+dotnet_analyzer_diagnostic.category-Style.severity = suggestion
+dotnet_analyzer_diagnostic.category-CodeQuality.severity = suggestion
+dotnet_diagnostic.IDE0055.severity = suggestion
 
 [*.md]
 trim_trailing_whitespace = false

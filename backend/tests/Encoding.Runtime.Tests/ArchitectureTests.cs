@@ -5,7 +5,8 @@ namespace Encoding.Runtime.Tests;
 
 // Garde-fous de séparation des responsabilités (BACKEND_RULES.md §3 et §8).
 // Les plafonds de taille sont un cliquet : ils ne peuvent que baisser.
-public sealed class ArchitectureTests
+// Constantes centralisées dans ArchitectureCeilings (ce fichier + MethodLength).
+public sealed partial class ArchitectureTests
 {
     private static readonly string SourceRoot = FindSourceRoot();
 
@@ -18,9 +19,7 @@ public sealed class ArchitectureTests
         ["Encoding.Launcher"] = ["Encoding.Core"],
     };
 
-    private const int MaxFileLines = 600;
-
-    // Dette connue : fichiers déjà au-dessus de MaxFileLines. Ne jamais augmenter une valeur.
+    // Dette connue : fichiers déjà au-dessus de ArchitectureCeilings.MaxFileLines. Ne jamais augmenter une valeur.
     private static readonly Dictionary<string, int> OversizedFileCeilings = new()
     {
     };
@@ -181,7 +180,7 @@ public sealed class ArchitectureTests
             {
                 var relative = Relative(file);
                 var lines = File.ReadLines(file).Count();
-                var ceiling = OversizedFileCeilings.GetValueOrDefault(relative, MaxFileLines);
+                var ceiling = OversizedFileCeilings.GetValueOrDefault(relative, ArchitectureCeilings.MaxFileLines);
                 if (lines > ceiling) offenders.Add($"{relative} : {lines} lignes (plafond {ceiling})");
             }
         Assert.True(offenders.Count == 0, string.Join(Environment.NewLine, offenders));
@@ -193,7 +192,7 @@ public sealed class ArchitectureTests
         var stale = OversizedFileCeilings.Where(entry =>
         {
             var path = Path.Combine(SourceRoot, entry.Key);
-            return !File.Exists(path) || File.ReadLines(path).Count() <= MaxFileLines;
+            return !File.Exists(path) || File.ReadLines(path).Count() <= ArchitectureCeilings.MaxFileLines;
         }).Select(entry => entry.Key).ToArray();
         Assert.True(stale.Length == 0, "Retirer de OversizedFileCeilings : " + string.Join(", ", stale));
     }
@@ -222,16 +221,14 @@ public sealed class ArchitectureTests
             "Fragments SQL dynamiques non allow-listés (utiliser des constantes + @params) : " + string.Join(", ", offenders));
     }
 
-    // Les lignes restantes sont des littéraux longs (SQL, textes) ; le total ne doit pas augmenter.
-    private const int MaxLongLines = 227;
-
     [Fact]
     public void LongCodeLinesDoNotGrow()
     {
         var count = new[] { "Encoding.Api", "Encoding.NodeAgent", "Encoding.Contracts", "Encoding.Core", "Encoding.Launcher" }
             .SelectMany(SourceFiles).SelectMany(File.ReadLines)
             .Count(line => line.Length > 200 && !line.TrimStart().StartsWith("//"));
-        Assert.True(count <= MaxLongLines, $"{count} lignes de code dépassent 200 caractères (max {MaxLongLines}) : les couper.");
+        Assert.True(count <= ArchitectureCeilings.MaxLongLines,
+            $"{count} lignes de code dépassent 200 caractères (max {ArchitectureCeilings.MaxLongLines}) : les couper.");
     }
 
     private static IEnumerable<string> SourceFiles(string project) =>
@@ -251,5 +248,13 @@ public sealed class ArchitectureTests
             if (Directory.Exists(backend)) return Path.Combine(directory.FullName, "backend", "src");
         }
         throw new DirectoryNotFoundException("Sources backend introuvables.");
+    }
+
+    /// <summary>Plafonds d’architecture centralisés (cliquets : ne baissent que volontairement).</summary>
+    internal static class ArchitectureCeilings
+    {
+        public const int MaxFileLines = 600;
+        public const int MaxLongLines = 227;
+        public const int SoftMaxMethodLines = 120;
     }
 }
