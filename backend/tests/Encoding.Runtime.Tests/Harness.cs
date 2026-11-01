@@ -286,6 +286,9 @@ internal static partial class Harness
             builder.Services.AddSingleton(_ => new Encoding.Api.Resources.ResourceBlobStore(config));
             builder.Services.AddSingleton(provider => new Encoding.Api.Resources.ResourceRepository(db, provider.GetRequiredService<Encoding.Api.Resources.ResourceBlobStore>()));
             builder.Services.AddSingleton<Encoding.Api.Resources.ResourceBlobFetcher>(_ => throw new NotSupportedException("Récupération par un pair non utilisée dans ce scénario."));
+            builder.Services.AddSingleton<Encoding.Api.Executions.RuntimeExecutionCoordinator>();
+            builder.Services.AddSingleton<Encoding.Api.Nodes.NodeManagementService>();
+            builder.Services.AddSingleton<Encoding.Api.Flows.FlowCoordinatorService>();
             app=builder.Build();
             app.Use(async (context,next) =>
             {

@@ -198,6 +198,9 @@ builder.Services.AddSingleton<ClusterReconciliationRepository>();
 builder.Services.AddSingleton<ClusterEntityReconciliation>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
+builder.Services.AddSingleton<RuntimeExecutionCoordinator>();
+builder.Services.AddSingleton<NodeManagementService>();
+builder.Services.AddSingleton<FlowCoordinatorService>();
 builder.Services.AddHttpClient("ClusterReconciliation", client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<IClusterTaskPeerClient,ClusterTaskPeerClient>();

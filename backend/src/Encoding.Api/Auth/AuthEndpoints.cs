@@ -8,6 +8,12 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this WebApplication app)
     {
+        app.MapSessionRoutes();
+        app.MapUserManagementRoutes();
+    }
+
+    private static void MapSessionRoutes(this WebApplication app)
+    {
         var auth = app.MapGroup("/api/v1/auth").WithTags("Authentification");
         auth.MapGet("/status", async (HttpContext http, AuthService service, CancellationToken ct) =>
         {
@@ -100,28 +106,31 @@ public static class AuthEndpoints
             var changed = await service.ChangePasswordAsync(Current(http.User)!.Id, request.CurrentPassword ?? string.Empty, request.NewPassword, token, ct);
             return changed ? Results.NoContent() : Results.ValidationProblem(new Dictionary<string, string[]> { ["currentPassword"] = ["Le mot de passe actuel est incorrect."] });
         }).AllowViewer().WithName("ChangeOwnPassword");
+    }
 
+    private static void MapUserManagementRoutes(this WebApplication app)
+    {
         var users = app.MapGroup("/api/v1/users").WithTags("Utilisateurs").RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        users.MapGet("", async (UserRepository repository, CancellationToken ct) => Results.Ok(await repository.ListAsync(ct)))
+        users.MapGet("", async (AuthService service, CancellationToken ct) => Results.Ok(await service.ListUsersAsync(ct)))
             .WithName("ListUsers");
 
-        users.MapPost("", async (CreateUserRequest request, UserRepository repository, CancellationToken ct) =>
+        users.MapPost("", async (CreateUserRequest request, AuthService service, CancellationToken ct) =>
         {
             var errors = AuthService.ValidateNewUser(request.Username, request.Password);
             if (!Enum.IsDefined(request.Role)) errors["role"] = ["Le rôle est inconnu."];
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            var created = await repository.CreateAsync(request.Username.Trim(), PasswordHasher.Hash(request.Password), request.Role, ct);
+            var created = await service.CreateUserAsync(request.Username, request.Password, request.Role, ct);
             return created is null
                 ? Results.Conflict(new { title = "Ce nom d’utilisateur existe déjà." })
                 : Results.Created($"/api/v1/users/{created.Id}", created);
         }).WithName("CreateUser");
 
-        users.MapPut("/{id:guid}", async (Guid id, UpdateUserRequest request, HttpContext http, UserRepository repository, CancellationToken ct) =>
+        users.MapPut("/{id:guid}", async (Guid id, UpdateUserRequest request, HttpContext http, AuthService service, CancellationToken ct) =>
         {
             if (!Enum.IsDefined(request.Role)) return (IResult)Results.ValidationProblem(new Dictionary<string, string[]> { ["role"] = ["Le rôle est inconnu."] });
             if (id == Current(http.User)!.Id && (!request.IsActive || request.Role != UserRole.Admin))
                 return Results.Conflict(new { title = "Vous ne pouvez pas retirer vos propres droits d’administration ni désactiver votre compte." });
-            return await repository.UpdateAsync(id, request.Role, request.IsActive, ct) switch
+            return await service.UpdateUserAsync(id, request.Role, request.IsActive, ct) switch
             {
                 UserChangeResult.Updated => Results.NoContent(),
                 UserChangeResult.LastAdministrator => Results.Conflict(new { title = "Le cluster doit conserver au moins un administrateur actif." }),
@@ -136,10 +145,10 @@ public static class AuthEndpoints
             return await service.ResetPasswordAsync(id, request.NewPassword, ct) ? Results.NoContent() : Results.NotFound();
         }).WithName("ResetUserPassword");
 
-        users.MapDelete("/{id:guid}", async (Guid id, HttpContext http, UserRepository repository, CancellationToken ct) =>
+        users.MapDelete("/{id:guid}", async (Guid id, HttpContext http, AuthService service, CancellationToken ct) =>
         {
             if (id == Current(http.User)!.Id) return Results.Conflict(new { title = "Vous ne pouvez pas supprimer votre propre compte." });
-            return await repository.DeleteAsync(id, ct) switch
+            return await service.DeleteUserAsync(id, ct) switch
             {
                 UserChangeResult.Updated => Results.NoContent(),
                 UserChangeResult.LastAdministrator => Results.Conflict(new { title = "Le cluster doit conserver au moins un administrateur actif." }),
@@ -153,7 +162,7 @@ public static class AuthEndpoints
             ? new CurrentUserResponse(
                 Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!),
                 principal.FindFirstValue(ClaimTypes.Name)!,
-                UserRepository.ParseRole(principal.FindFirstValue(ClaimTypes.Role)!))
+                AuthService.ParseRole(principal.FindFirstValue(ClaimTypes.Role)!))
             : null;
 
     private static void SetSessionCookie(HttpContext http, string token, AuthOptions options) =>

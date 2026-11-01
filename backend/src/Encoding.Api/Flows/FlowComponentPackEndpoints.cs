@@ -9,20 +9,20 @@ public static class FlowComponentPackEndpoints
     public static void MapFlowComponentPackEndpoints(this WebApplication app)
     {
         var packs = app.MapGroup("/api/v1/component-packs").WithTags("Packs de composants");
-        packs.MapGet("", async (FlowComponentPackRepository repository, CancellationToken ct) =>
-            Results.Ok(await repository.ListAsync(ct))).WithName("ListFlowComponentPacks");
-        packs.MapGet("/{id:guid}", async (Guid id, FlowComponentPackRepository repository, CancellationToken ct) =>
-            await repository.GetAsync(id, ct) is { } pack ? Results.Ok(pack) : Results.NotFound())
+        packs.MapGet("", async (FlowCoordinatorService coordinator, CancellationToken ct) =>
+            Results.Ok(await coordinator.ListComponentPacksAsync(ct))).WithName("ListFlowComponentPacks");
+        packs.MapGet("/{id:guid}", async (Guid id, FlowCoordinatorService coordinator, CancellationToken ct) =>
+            await coordinator.GetComponentPackAsync(id, ct) is { } pack ? Results.Ok(pack) : Results.NotFound())
             .WithName("GetFlowComponentPack");
         packs.MapPost("/from-flow", async (
             CreateFlowComponentPackRequest request,
-            FlowComponentPackRepository repository,
+            FlowCoordinatorService coordinator,
             CancellationToken ct) =>
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
             return await UniqueConflict.GuardAsync(async () => {
-                var pack = await repository.CreateFromFlowAsync(Guid.NewGuid(), request, ct);
+                var pack = await coordinator.CreateComponentPackFromFlowAsync(Guid.NewGuid(), request, ct);
                 return pack is null
                     ? Results.UnprocessableEntity(new { title = "Le flow publié doit contenir une entrée reliée à au moins un composant." })
                     : Results.Created($"/api/v1/component-packs/{pack.Pack.Id:D}", pack);

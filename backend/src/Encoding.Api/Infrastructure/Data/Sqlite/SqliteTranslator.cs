@@ -15,13 +15,44 @@ public static partial class SqliteTranslator
     private const string ArrayPlaceholder = "/*ARRAY:";
 
     /// <summary>Instant courant (horloge de l'application côté base), éventuellement décalé de modificateurs SQLite.</summary>
-    private static string Now(string? modifiers = null) =>
+    public static string Now(string? modifiers = null) =>
         "(strftime('%Y-%m-%d %H:%M:%f', 'now'" + (modifiers is null ? "" : ", " + modifiers) + ") || '000Z')";
+
+    public static string NowUtc => Now();
 
     private static string SortedSet(string array) => $"(SELECT json_group_array(value) FROM (SELECT value FROM json_each({array}) ORDER BY value))";
 
+    public static bool RequiresTranslation(string sql)
+    {
+        if (string.IsNullOrEmpty(sql)) return false;
+        return sql.Contains("clock_timestamp", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("now()", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("infinity", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("interval", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("make_interval", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("::", StringComparison.Ordinal)
+            || sql.Contains("ANY(", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("jsonb_", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("gen_random_uuid", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("FOR UPDATE", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("FOR SHARE", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("FOR NO KEY UPDATE", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("unnest", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("repeat(", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("ARRAY[", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("LEAST(", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("GREATEST(", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("chr(", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("<@", StringComparison.Ordinal)
+            || sql.Contains(" - '", StringComparison.Ordinal)
+            || sql.Contains("EXTRACT(", StringComparison.OrdinalIgnoreCase)
+            || sql.Contains("CROSS JOIN LATERAL", StringComparison.OrdinalIgnoreCase)
+            || UpdateAliasRegex().IsMatch(sql);
+    }
+
     public static string Translate(string sql)
     {
+        if (!RequiresTranslation(sql)) return sql;
         var text = sql;
         text = InfinityRegex().Replace(text, InfinityLiteral);
         text = RowLockRegex().Replace(text, "");
@@ -53,7 +84,9 @@ public static partial class SqliteTranslator
 
     /// <summary>Noms des paramètres tableau à développer en <c>IN (@p_0, @p_1…)</c>.</summary>
     public static IReadOnlyList<string> ArrayParameters(string translated) =>
-        ArrayMarkerRegex().Matches(translated).Select(m => m.Groups[1].Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        translated.Contains(ArrayPlaceholder, StringComparison.Ordinal)
+            ? ArrayMarkerRegex().Matches(translated).Select(m => m.Groups[1].Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+            : [];
 
     public static string ExpandArray(string translated, string name, int count)
     {

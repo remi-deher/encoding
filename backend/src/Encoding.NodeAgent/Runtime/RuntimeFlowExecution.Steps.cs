@@ -79,70 +79,7 @@ internal sealed partial class RuntimeFlowExecution
                     job.Token)).Components.SingleOrDefault(component => component.Id == id && component.Version == node.Component.ComponentVersion);
                 if (!DirectMediaInspection.AllowsMetadataOnly(descriptor)) await EnsureFilesAsync();
             }
-            StepOutcome outcome;
-            if (id.StartsWith("base-input-", StringComparison.Ordinal)) { if (id != "base-input-file") await EnsureScanAsync(); outcome = StepOutcome.Continue(); }
-            else if (id == "base-variable")
-            {
-                state.Variables[MediaActions.Text(c, "name")] = FlowVariableValue.Parse(MediaActions.Text(c, "value"));
-                outcome = StepOutcome.Continue();
-            }
-            else if (id == FfmpegBuilderPolicy.Start) outcome = await StartFfmpegBuilderAsync(ctx);
-            else if (id == FfmpegBuilderPolicy.Execute) outcome = await ExecuteFfmpegBuilderAsync(ctx);
-            else if (id == "base-prepare-processing") outcome = await PrepareProcessingAsync(ctx);
-            else if (id == "base-complete-flow") { await EnsureScanAsync(); ctx.Output = null; state.Terminal = MediaActions.Text(c, "result", "unchanged"); outcome = StepOutcome.Continue(); }
-            else if (id == "base-defer-processing") { await EnsureScanAsync(); ctx.Output = null; state.Terminal = "deferred";
-                state.Variables["runtime.deferMinutes"] = JsonSerializer.SerializeToElement(int.Parse(MediaActions.Number(c,
-                "delayMinutes", 2))); outcome = StepOutcome.Continue(); }
-            else if (id is "base-disk-lock" or "base-disk-unlock") outcome = await DiskLockAsync(ctx);
-            else if (id is "base-script" or "base-condition") outcome = await RunScriptAsync(ctx);
-            else if (node.Component.PluginId == "conditions" && node.Component.ComponentId == "conditions-match") outcome = await MatchConditionsAsync(ctx);
-            else if (node.Component.PluginId == "conditions" && MediaConditionEvaluator.IsMediaCondition(node.Component.ComponentId))
-            {
-                if (state.Context.CurrentMetadata is null) await EnsureScanAsync();
-                ctx.Output = MediaConditionEvaluator.Evaluate(node.Component.ComponentId, c, state.Context.CurrentMetadata);
-                outcome = StepOutcome.Continue();
-            }
-            else if (node.Component.PluginId == "probe" && id == MediaIntegrityPolicy.Component) outcome = await CheckMediaIntegrityAsync(ctx);
-            else if (node.Component.PluginId is "base" or "probe" && id != "probe-validate-output"
-                && (id.StartsWith("base-probe-", StringComparison.Ordinal) || id.StartsWith("probe-", StringComparison.Ordinal)
-                    && !id.StartsWith("probe-inspect-", StringComparison.Ordinal) && id != "probe-export-report"))
-            {
-                await EnsureScanAsync();
-                state.Variables[MediaActions.Text(c, "resultVariable", "result")] = FlowMediaValues.Probe(id, state.Context.CurrentMetadata!.Value, int.Parse(MediaActions.Number(c, "trackId")));
-                outcome = StepOutcome.Continue();
-            }
-            else if (node.Component.PluginId == "probe" && id == "probe-validate-output") outcome = await ValidateOutputAsync(ctx);
-            else if (RuntimeWaitPolicy.IsWait(node)) { ctx.Wait = RuntimeWaitPolicy.Resolve(node); ctx.Output = "resumed"; outcome = StepOutcome.Continue(); }
-            else if (RuntimeHandoffPolicy.IsHandoff(node)) outcome = await PrepareHandoffAsync(ctx);
-            else if (node.Component.PluginId == "nodes" && node.Component.ComponentId == RuntimeRetryPolicy.ComponentId)
-            {
-                // This block declares an execution policy; retry decisions are made by the server after a lost lease.
-                outcome = StepOutcome.Continue();
-            }
-            else if (node.Component.PluginId == "nodes" && id == "nodes-library-access") outcome = await CheckLibraryAccessAsync(ctx);
-            else if (node.Component.PluginId == "nodes"
-                && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability" or "nodes-require-direct-access"))
-            {
-                // Scheduling enforces these constraints before assigning the file to this worker.
-                outcome = StepOutcome.Continue();
-            }
-            else if (node.Component.PluginId == "ai" && id == "ai-metadata-enricher") outcome = await EnrichMetadataWithAiAsync(ctx);
-            else if (node.Component.PluginId == "ai" && id == "ai-translate-subtitles") outcome = await TranslateSubtitlesWithAiAsync(ctx);
-            else if (node.Component.PluginId is not ("base" or "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" or "ai")) outcome = await RunExternalPluginAsync(ctx);
-            else if (id == "base-publish-result") outcome = await PublishResultAsync(ctx);
-            else if (id == "mkv-edit-in-place") outcome = await EditInPlaceAsync(ctx);
-            else if (state.DirectRead && state.ConformingNodes.Contains(node.Id)) { ctx.Output = "unchanged"; outcome = StepOutcome.Continue(); }
-            else if (id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id)) outcome = await ApplyTrackNamesAsync(ctx);
-            else if (id is "base-subtitle-manage" or "subtitles-manage" || FlowOperationConfiguration.IsSubtitleOperation(id)) outcome = await ManageSubtitlesAsync(ctx);
-            else if (id is "base-add-fonts" or "subtitles-add-fonts" or "base-assemble-media") outcome = await AddFontsOrAssembleAsync(ctx);
-            else if (id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules") outcome = await ApplyAudioRulesAsync(ctx);
-            else if (id is "base-auto-crop" or "video-auto-crop") outcome = await DetectAutoCropAsync(ctx);
-            else if (id is "base-deinterlace-video" or "video-deinterlace") outcome = await DetectDeinterlaceAsync(ctx);
-            else if (id is "base-file-size-guard" or "video-file-size-guard") outcome = await GuardFileSizeAsync(ctx);
-            else if (id is "base-filter-languages" or "audio-filter-languages") outcome = await FilterLanguagesAsync(ctx);
-            else if (id is "base-remove-commentary" or "audio-remove-commentary") outcome = await RemoveCommentaryAsync(ctx);
-            else if (id == "base-execute-processing") outcome = await ExecuteProcessingAsync(ctx);
-            else outcome = await ApplyGenericOperationAsync(ctx);
+            var outcome = await DispatchStepAsync(ctx);
             if (outcome.Kind != StepOutcomeKind.Continue) return outcome;
             // Planning can inspect metadata first. Materialize only after it finds real work.
             if (state.DirectRead && state.Context.Plan.Count > 0) await EnsureFilesAsync();
@@ -197,6 +134,103 @@ internal sealed partial class RuntimeFlowExecution
             await client.DownloadAsync(lease.ExecutionId, lease.Epoch, state.Context.CurrentSha256, state.Current, job.Token);
             return StepOutcome.Continue(ctx.Output);
         }
+    }
+
+    private async Task<StepOutcome> DispatchStepAsync(StepContext ctx)
+    {
+        if (await DispatchFlowControlStepAsync(ctx) is { } controlOutcome) return controlOutcome;
+        if (await DispatchConditionAndProbeStepAsync(ctx) is { } probeOutcome) return probeOutcome;
+        if (await DispatchAiAndPluginStepAsync(ctx) is { } aiOutcome) return aiOutcome;
+        return await DispatchMediaOperationStepAsync(ctx);
+    }
+
+    private async Task<StepOutcome?> DispatchFlowControlStepAsync(StepContext ctx)
+    {
+        var id = ctx.Id; var c = ctx.Config; var node = ctx.Node;
+        if (id.StartsWith("base-input-", StringComparison.Ordinal))
+        {
+            if (id != "base-input-file") await EnsureScanAsync();
+            return StepOutcome.Continue();
+        }
+        if (id == "base-variable")
+        {
+            state.Variables[MediaActions.Text(c, "name")] = FlowVariableValue.Parse(MediaActions.Text(c, "value"));
+            return StepOutcome.Continue();
+        }
+        if (id == FfmpegBuilderPolicy.Start) return await StartFfmpegBuilderAsync(ctx);
+        if (id == FfmpegBuilderPolicy.Execute) return await ExecuteFfmpegBuilderAsync(ctx);
+        if (id == "base-prepare-processing") return await PrepareProcessingAsync(ctx);
+        if (id == "base-complete-flow")
+        {
+            await EnsureScanAsync(); ctx.Output = null; state.Terminal = MediaActions.Text(c, "result", "unchanged");
+            return StepOutcome.Continue();
+        }
+        if (id == "base-defer-processing")
+        {
+            await EnsureScanAsync(); ctx.Output = null; state.Terminal = "deferred";
+            state.Variables["runtime.deferMinutes"] = JsonSerializer.SerializeToElement(int.Parse(MediaActions.Number(c, "delayMinutes", 2)));
+            return StepOutcome.Continue();
+        }
+        if (id is "base-disk-lock" or "base-disk-unlock") return await DiskLockAsync(ctx);
+        if (RuntimeWaitPolicy.IsWait(node)) { ctx.Wait = RuntimeWaitPolicy.Resolve(node); ctx.Output = "resumed"; return StepOutcome.Continue(); }
+        if (RuntimeHandoffPolicy.IsHandoff(node)) return await PrepareHandoffAsync(ctx);
+        if (node.Component.PluginId == "nodes" && node.Component.ComponentId == RuntimeRetryPolicy.ComponentId) return StepOutcome.Continue();
+        if (node.Component.PluginId == "nodes" && id == "nodes-library-access") return await CheckLibraryAccessAsync(ctx);
+        if (node.Component.PluginId == "nodes" && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability" or "nodes-require-direct-access")) return StepOutcome.Continue();
+        return null;
+    }
+
+    private async Task<StepOutcome?> DispatchConditionAndProbeStepAsync(StepContext ctx)
+    {
+        var id = ctx.Id; var c = ctx.Config; var node = ctx.Node;
+        if (id is "base-script" or "base-condition") return await RunScriptAsync(ctx);
+        if (node.Component.PluginId == "conditions" && node.Component.ComponentId == "conditions-match") return await MatchConditionsAsync(ctx);
+        if (node.Component.PluginId == "conditions" && MediaConditionEvaluator.IsMediaCondition(node.Component.ComponentId))
+        {
+            if (state.Context.CurrentMetadata is null) await EnsureScanAsync();
+            ctx.Output = MediaConditionEvaluator.Evaluate(node.Component.ComponentId, c, state.Context.CurrentMetadata);
+            return StepOutcome.Continue();
+        }
+        if (node.Component.PluginId == "probe" && id == MediaIntegrityPolicy.Component) return await CheckMediaIntegrityAsync(ctx);
+        if (node.Component.PluginId is "base" or "probe" && id != "probe-validate-output"
+            && (id.StartsWith("base-probe-", StringComparison.Ordinal) || id.StartsWith("probe-", StringComparison.Ordinal)
+                && !id.StartsWith("probe-inspect-", StringComparison.Ordinal) && id != "probe-export-report"))
+        {
+            await EnsureScanAsync();
+            state.Variables[MediaActions.Text(c, "resultVariable", "result")] = FlowMediaValues.Probe(id, state.Context.CurrentMetadata!.Value, int.Parse(MediaActions.Number(c, "trackId")));
+            return StepOutcome.Continue();
+        }
+        if (node.Component.PluginId == "probe" && id == "probe-validate-output") return await ValidateOutputAsync(ctx);
+        return null;
+    }
+
+    private async Task<StepOutcome?> DispatchAiAndPluginStepAsync(StepContext ctx)
+    {
+        var id = ctx.Id; var node = ctx.Node;
+        if (node.Component.PluginId == "ai" && id == "ai-metadata-enricher") return await EnrichMetadataWithAiAsync(ctx);
+        if (node.Component.PluginId == "ai" && id == "ai-translate-subtitles") return await TranslateSubtitlesWithAiAsync(ctx);
+        if (node.Component.PluginId is not ("base" or "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" or "ai"))
+            return await RunExternalPluginAsync(ctx);
+        return null;
+    }
+
+    private async Task<StepOutcome> DispatchMediaOperationStepAsync(StepContext ctx)
+    {
+        var id = ctx.Id; var node = ctx.Node;
+        if (id == "base-publish-result") return await PublishResultAsync(ctx);
+        if (id == "mkv-edit-in-place") return await EditInPlaceAsync(ctx);
+        if (state.DirectRead && state.ConformingNodes.Contains(node.Id)) { ctx.Output = "unchanged"; return StepOutcome.Continue(); }
+        if (id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id)) return await ApplyTrackNamesAsync(ctx);
+        if (id is "base-subtitle-manage" or "subtitles-manage" || FlowOperationConfiguration.IsSubtitleOperation(id)) return await ManageSubtitlesAsync(ctx);
+        if (id is "base-add-fonts" or "subtitles-add-fonts" or "base-assemble-media") return await AddFontsOrAssembleAsync(ctx);
+        if (id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules") return await ApplyAudioRulesAsync(ctx);
+        if (id is "base-auto-crop" or "video-auto-crop") return await DetectAutoCropAsync(ctx);
+        if (id is "base-deinterlace-video" or "video-deinterlace") return await DetectDeinterlaceAsync(ctx);
+        if (id is "base-file-size-guard" or "video-file-size-guard") return await GuardFileSizeAsync(ctx);
+        if (id is "base-filter-languages" or "audio-filter-languages") return await FilterLanguagesAsync(ctx);
+        if (id is "base-remove-commentary" or "audio-remove-commentary") return await RemoveCommentaryAsync(ctx);
+        if (id == "base-execute-processing") return await ExecuteProcessingAsync(ctx);
+        return await ApplyGenericOperationAsync(ctx);
     }
 
     // Publie le checkpoint ; HandoffOrWait arrête la marche locale après confirmation cluster.

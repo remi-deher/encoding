@@ -8,15 +8,15 @@ public static class ApiTokenEndpoints
     {
         var group = app.MapGroup("/api/v1/tokens").WithTags("Tokens");
 
-        group.MapGet("", async (ApiTokenRepository repository, CancellationToken ct) =>
-            Results.Ok(await repository.ListAsync(ct)))
+        group.MapGet("", async (AuthService auth, CancellationToken ct) =>
+            Results.Ok(await auth.ListTokensAsync(ct)))
             .WithName("ListApiTokens");
 
         group.MapGet("/replication", async (Encoding.Api.Tools.AiClusterService cluster, CancellationToken ct) =>
             Results.Ok(await cluster.ApiTokenReplicationAsync(ct)))
             .WithName("ApiTokenReplication").RequireAuthorization(AuthExtensions.AdministratorPolicy);
 
-        group.MapPost("", async (CreateApiTokenRequest request, HttpContext http, AuthService auth, ApiTokenRepository repository, CancellationToken ct) =>
+        group.MapPost("", async (CreateApiTokenRequest request, HttpContext http, AuthService auth, CancellationToken ct) =>
         {
             var current = AuthEndpoints.Current(http.User);
             if (current is null || http.User.FindFirst("auth_type")?.Value == "api_token"
@@ -40,23 +40,23 @@ public static class ApiTokenEndpoints
             if (role == "viewer" && scopes.Count > 0)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["scopes"] = ["Un jeton en lecture seule ne peut pas porter de portée d’écriture."] });
 
-            var (summary, rawToken) = await repository.CreateTokenAsync(request.Name.Trim(), role, request.ExpiresAt, ct, scopes);
+            var (summary, rawToken) = await auth.CreateTokenAsync(request.Name.Trim(), role, request.ExpiresAt, scopes, ct);
             return Results.Created($"/api/v1/tokens/{summary.Id}", new CreatedApiTokenResponse(
                 summary.Id, summary.Name, summary.TokenPrefix, summary.Role, summary.CreatedAt, summary.ExpiresAt, rawToken, summary.Scopes));
         }).WithName("CreateApiToken");
 
-        group.MapDelete("/{id:guid}", async (Guid id, bool? permanent, ApiTokenRepository repository, CancellationToken ct) =>
+        group.MapDelete("/{id:guid}", async (Guid id, bool? permanent, AuthService auth, CancellationToken ct) =>
         {
             if (permanent == true)
             {
-                return await repository.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound();
+                return await auth.DeleteTokenAsync(id, ct) ? Results.NoContent() : Results.NotFound();
             }
 
-            return await repository.RevokeAsync(id, ct) ? Results.NoContent() : Results.NotFound();
+            return await auth.RevokeTokenAsync(id, ct) ? Results.NoContent() : Results.NotFound();
         }).WithName("RevokeOrDeleteApiToken");
 
-        group.MapPost("/{id:guid}/revoke", async (Guid id, ApiTokenRepository repository, CancellationToken ct) =>
-            await repository.RevokeAsync(id, ct) ? Results.NoContent() : Results.NotFound())
+        group.MapPost("/{id:guid}/revoke", async (Guid id, AuthService auth, CancellationToken ct) =>
+            await auth.RevokeTokenAsync(id, ct) ? Results.NoContent() : Results.NotFound())
             .WithName("RevokeApiToken");
     }
 }

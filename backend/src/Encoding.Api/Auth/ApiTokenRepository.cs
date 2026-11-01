@@ -26,9 +26,9 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         var normalizedRole = string.Equals(role, "viewer", StringComparison.OrdinalIgnoreCase) ? "viewer" : "admin";
 
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var command = Sql.Command("""
+        await using var command = Sql.Command($"""
             INSERT INTO api_tokens (id, name, token_hash, token_prefix, role, is_active, created_at, expires_at, scopes)
-            VALUES (@id, @name, @hash, @prefix, @role, true, clock_timestamp(), @expires, @scopes)
+            VALUES (@id, @name, @hash, @prefix, @role, true, {Sql.UtcNow}, @expires, @scopes)
             """, connection);
 
         command.Parameters.AddWithValue("id", id);
@@ -87,13 +87,13 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
     public async Task<ApiTokenRecord?> ValidateTokenAsync(byte[] tokenHash, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var command = Sql.Command("""
+        await using var command = Sql.Command($"""
             SELECT id, name, role, last_used_at, scopes
             FROM api_tokens
             WHERE token_hash = @hash
               AND is_active = true
               AND revoked_at IS NULL
-              AND (expires_at IS NULL OR expires_at > clock_timestamp())
+              AND (expires_at IS NULL OR expires_at > {Sql.UtcNow})
             """, connection);
         command.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
 
@@ -112,7 +112,7 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         {
             try
             {
-                await using var touch = Sql.Command("UPDATE api_tokens SET last_used_at = clock_timestamp() WHERE id = @id", connection);
+                await using var touch = Sql.Command($"UPDATE api_tokens SET last_used_at = {Sql.UtcNow} WHERE id = @id", connection);
                 touch.Parameters.AddWithValue("id", id);
                 await touch.ExecuteNonQueryAsync(ct);
             }
@@ -167,9 +167,9 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
     public async Task<bool> RevokeAsync(Guid id, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var command = Sql.Command("""
+        await using var command = Sql.Command($"""
             UPDATE api_tokens
-            SET is_active = false, revoked_at = clock_timestamp()
+            SET is_active = false, revoked_at = {Sql.UtcNow}
             WHERE id = @id AND is_active = true
             """, connection);
         command.Parameters.AddWithValue("id", id);
