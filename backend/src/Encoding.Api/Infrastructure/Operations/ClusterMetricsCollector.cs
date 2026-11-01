@@ -2,13 +2,18 @@ using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using Encoding.Api.Nodes;
+using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Infrastructure.Operations;
 
 /// <summary>Construit la page <c>/metrics</c> : état du cluster dans SQLite et mesures du processus local.</summary>
 public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenceOptions presence, IHostEnvironment environment)
 {
-    private static readonly string[] ExecutionStates = ["queued", "running", "cancelling", "succeeded", "failed", "cancelled", "deferred"];
+    private static readonly string[] MetricExecutionStates =
+    [
+        ExecutionStates.Queued, ExecutionStates.Running, ExecutionStates.Cancelling,
+        ExecutionStates.Succeeded, ExecutionStates.Failed, ExecutionStates.Cancelled, ExecutionStates.Deferred
+    ];
     private static readonly string[] BackupStatuses = ["pending", "ready", "failed"];
 
     public async Task<string> CollectAsync(CancellationToken cancellationToken)
@@ -58,7 +63,7 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
             writer.Gauge("encoding_nodes", "Nœuds enrôlés non retirés, par présence.", nodes.GetValueOrDefault(status), ("status", status));
 
         var executions = await Rows(connection, "SELECT state, count(*) FROM executions GROUP BY state", ct);
-        foreach (var state in ExecutionStates)
+        foreach (var state in MetricExecutionStates)
             writer.Gauge("encoding_executions", "Exécutions par état.", executions.GetValueOrDefault(state), ("state", state));
 
         writer.Gauge("encoding_executions_oldest_queued_age_seconds", "Ancienneté de la plus ancienne exécution en file.",

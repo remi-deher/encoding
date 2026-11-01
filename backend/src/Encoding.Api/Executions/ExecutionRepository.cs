@@ -416,7 +416,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         if (await cmd.ScalarInt32Async(ct) is not {} revision) return false;
         await AddEvent(c, tx, id, update.EventId, revision, update.State, update.Detail, ct); return true;
     }
-    private static readonly HashSet<string> AllowedStates = ["running", "succeeded", "failed", "cancelled", "deferred"];
+    private static readonly HashSet<string> AllowedStates = [..ExecutionStates.ProgressRecordable];
     internal static async Task AddEvent(DbConnection c, DbTransaction tx, Guid id, Guid eventId, int revision, string state, string detail, CancellationToken ct)
     {
         await using var cmd = Sql.Command("INSERT INTO execution_events(id,execution_id,revision,state,detail) VALUES(@event,@id,@revision,@state,@detail)", c, tx);

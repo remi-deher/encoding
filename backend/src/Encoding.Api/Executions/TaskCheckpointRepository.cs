@@ -25,7 +25,7 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
             var signed=JsonSerializer.Deserialize<SignedTaskOwnershipPlan>(body,Json);
             if(signed?.Data is null) return(null,false);
             var e=JsonSerializer.Deserialize<ClusterTaskEvent>(signed.Data,Json);
-            if(e is not {Version:2} || e.EventId==Guid.Empty || e.AuthorPeerId==Guid.Empty) return(null,false);
+            if(e is null || !ClusterTaskMessageVersions.IsSupported(e.Version) || e.EventId==Guid.Empty || e.AuthorPeerId==Guid.Empty) return(null,false);
             await using var cluster=Sql.Command("SELECT id FROM cluster_identity WHERE singleton=true",c,tx);
             if(await cluster.ScalarGuidAsync(ct)!=e.ClusterId) return(null,false);
             await using var admission=Sql.Command("SELECT public_key FROM cluster_peer_admissions WHERE cluster_id=@cluster AND peer_id=@peer AND revoked_at IS NULL",c,tx);
@@ -93,7 +93,7 @@ public sealed class TaskCheckpointRepository(ClusterPeerIdentityStore identity,C
     {
         if(!keys.HasKey(cluster)) keys.GetOrCreate(cluster);
         var plain=JsonSerializer.SerializeToUtf8Bytes(snapshot,Json);
-        return new(2,Guid.NewGuid(),cluster,identity.PeerId,"checkpoint",id,epoch,previous,Snapshot:ClusterPayloadProtection.Protect(keys.GetRequired(cluster),
+        return new(ClusterTaskMessageVersions.Current,Guid.NewGuid(),cluster,identity.PeerId,"checkpoint",id,epoch,previous,Snapshot:ClusterPayloadProtection.Protect(keys.GetRequired(cluster),
             plain,"task-checkpoint/"+id.ToString("D")),Revision:snapshot.Revision);
     }
     public ClusterTaskSnapshot Decode(ClusterTaskEvent e)

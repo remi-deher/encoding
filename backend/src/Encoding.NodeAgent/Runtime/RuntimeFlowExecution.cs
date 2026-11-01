@@ -377,12 +377,12 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
     {
         await EnsureScanAsync(); state.Context = state.Context with { Variables = state.Variables };
         if (state.DirectRead) state.Observed!.Verify(state.Original);
-        var failed = state.Terminal == "failed" || state.Terminal is null && state.LastOutput == "error";
+        var failed = ExecutionOutcomes.IsFailure(state.Terminal, state.LastOutput);
         if (state.Context.Plan.Count > 0 && !failed) throw new IOException("Le flow se termine avec un plan non exécuté.");
 
         // Après une publication par bloc (ADR 0003), la référence est le fichier publié : la fin du flow ne republie pas.
         var publishedSha = state.Variables.TryGetValue("runtime.published", out var publication) && publication.TryGetProperty("sha256", out var publishedDigest) ? publishedDigest.GetString() : null;
-        var changed = !failed && state.Terminal is not ("unchanged" or "deferred") && state.Context.CurrentSha256 != (publishedSha ?? state.SourceSha ?? "");
+        var changed = !failed && state.Terminal is not (ExecutionOutcomes.Unchanged or ExecutionOutcomes.Deferred) && state.Context.CurrentSha256 != (publishedSha ?? state.SourceSha ?? "");
         if (changed && publishedSha is not null) throw new IOException("Le média a été modifié après sa publication ; ce résultat ne peut pas être publié une seconde fois.");
         if (changed && state.Variables.ContainsKey("runtime.inPlaceEdited"))
             throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
@@ -390,16 +390,16 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         if (changed && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null)
             localPublicationArtifacts.Register(lease.ExecutionId, lease.Epoch, state.Context.CurrentSha256, state.Current);
         await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish", new FinishRuntimeExecution(lease.Epoch, Guid.NewGuid(),
-            state.Revision, failed ? "failed" : state.Terminal == "deferred" ? "deferred" : "succeeded",
+            state.Revision, failed ? ExecutionStates.Failed : state.Terminal == ExecutionOutcomes.Deferred ? ExecutionStates.Deferred : ExecutionStates.Succeeded,
             failed ? "Le flow a atteint une fin en échec." : "Flow terminé ; scans média réalisés.", changed ? state.Context.CurrentSha256 : null,
                 changed ? state.Context.Extension : null, state.Context.BeforeMetadata, state.Context.CurrentMetadata,
-                state.Terminal == "deferred" ? (state.Variables.TryGetValue("runtime.deferMinutes", out var delay) ? delay.GetInt32() : 2) : null,
+                state.Terminal == ExecutionOutcomes.Deferred ? (state.Variables.TryGetValue("runtime.deferMinutes", out var delay) ? delay.GetInt32() : 2) : null,
             commandCapture.Pending()), job.Token);
         if (changed)
         {
             while (true)
             {
-                var status = await client.ExecutionAsync(lease.ExecutionId, job.Token); if (status.State is "succeeded" or "failed" or "cancelled") break;
+                var status = await client.ExecutionAsync(lease.ExecutionId, job.Token); if (ExecutionStates.IsTerminal(status.State)) break;
                 await Task.Delay(TimeSpan.FromSeconds(2), job.Token);
             }
         }
