@@ -1,6 +1,6 @@
 ---
 domain: runtime
-updated: 2026-10-30
+updated: 2026-11-01
 legacy_adr: [0005, 0009, 0015, 0016, 0018, 0020, 0021, 0028, 0030, 0033, 0054, 0058, 0059, 0064, 0066, 0075]
 code:
   - backend/src/Encoding.Api/Executions/
@@ -14,6 +14,28 @@ tags: [exécution, bail, époque, checkpoint, relais, attente, verrou, découver
 # Runtime : exécution, intégrité et publication
 
 Un worker exécute une **version publiée précise** d'un flow, de bout en bout, sur un seul nœud par défaut. Le modèle de flow est dans [flows.md](flows.md), les plugins dans [plugins.md](plugins.md).
+
+## Organisation de l'exécution worker
+
+- `RuntimeFlowRunner` (singleton) ne porte **aucun** état de marche : il crée une `RuntimeFlowExecution` par bail.
+- L'état de graphe et de workspace vit dans `FlowExecutionState` (position `Next`, fichier `Current`, `Context`/`Variables`, empreintes, materialisation, publication confirmée). Les champs de bail (`Revision`, perdu, annulé) ne mutent que via des méthodes thread-safe ; le renouvellement les applique sous `leaseGate`.
+- Chaque étape retourne un `StepOutcome` (`Continue` / `HandoffOrWait` / `Fail`). Un seul applicateur met à jour `FlowExecutionState` à partir de l'outcome ; la clôture locale (`FinishAsync`) n'a lieu qu'après un parcours `Continue` jusqu'à `Next == null`.
+- Fichiers : `RuntimeFlowExecution.cs` (cycle de vie, bail, préparation), `RuntimeFlowExecution.Steps.cs` (boucle et familles d'étapes), `RuntimeFlowExecution.Steps.Operations.cs` (opérations média).
+
+```mermaid
+flowchart LR
+  claim[Claim bail] --> init[InitializeAsync]
+  init --> step[ExecuteStep → StepOutcome]
+  step -->|Continue| complete[CompleteStep + checkpoint]
+  complete --> apply[ApplyStepOutcome]
+  apply -->|Next non null| step
+  apply -->|Next null| finish[FinishAsync]
+  finish -->|média modifié| publish[Publication nœud d'accès]
+  finish -->|inchangé / différé| done[État terminal]
+  publish --> done
+  step -->|HandoffOrWait| pause[Cession ou attente durable]
+  pause -.->|reprise autre worker / sonde| claim
+```
 
 ## Registre des exécutions
 - États : `queued`, `running`, `cancelling`, `succeeded`, `failed`, `cancelled`. Une transition et son événement sont écrits dans la même transaction ; rapports idempotents (identifiant d'événement + révision attendue) ; transitions terminales figées. Annulation en cours = demande confirmée après arrêt des processus. Une relance conserve l'échec et crée une tentative liée (une seule relance concurrente).
