@@ -31,13 +31,16 @@ builder.Services.AddSingleton<ISystemLogNodeContext>(sp =>
     });
 });
 builder.Services.AddSystemLogging();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ProcessToolRunner>();
+builder.Services.AddSingleton<IProcessToolRunner>(provider => provider.GetRequiredService<ProcessToolRunner>());
 builder.Services.AddSingleton<PluginProcessHost>();
 builder.Services.AddSingleton<IPublicationGuardInvoker,PluginPublicationGuardInvoker>();
 builder.Services.AddSingleton<PublicationGuardRunner>();
 builder.Services.AddSingleton<MediaScanner>();
 builder.Services.AddSingleton<MediaActions>();
 builder.Services.AddSingleton<LocalPublicationArtifactStore>();
+builder.Services.AddSingleton<ILocalPublicationArtifactStore>(provider => provider.GetRequiredService<LocalPublicationArtifactStore>());
 builder.Services.AddSingleton<RuntimeFlowRunner>();
 builder.Services.AddHostedService<RuntimeTransferService>();
 builder.Services.AddHostedService<WorkspaceCleanupService>();
@@ -101,7 +104,8 @@ app.MapDelete("/api/v1/worker/clusters/{clusterId:guid}", (Guid clusterId, Worke
     discovery.Forget(clusterId)
         ? Results.NoContent()
         : Results.NotFound(new { title = "Seule une adresse ajoutée à la main peut être oubliée ; ce cluster est détecté automatiquement." })).WithName("ForgetWorkerCluster");
-app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, WorkerEnrollmentService enrollment, CancellationToken cancellationToken) =>
+app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe,
+    WorkerEnrollmentService enrollment, CancellationToken cancellationToken) =>
 {
     var identity = await identityStore.GetAsync(cancellationToken);
     var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);

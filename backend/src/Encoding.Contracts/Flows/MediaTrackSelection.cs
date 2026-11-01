@@ -7,7 +7,8 @@ namespace Encoding.Contracts.Flows;
 public static class MediaTrackSelection
 {
     public static string Text(JsonElement row, string key) => row.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString()!.Trim() : "";
-    public static int Number(JsonElement row, string key, int fallback = 0) => row.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) ? number : fallback;
+    public static int Number(JsonElement row, string key, int fallback = 0) => row.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt32(out var number) ? number : fallback;
     public static string Language(string value) => value.ToLowerInvariant().Split('-')[0] switch
     {
         "" => "und", "fr" or "fre" or "fra" => "fra", "en" or "eng" => "eng", "ja" or "jpn" => "jpn",

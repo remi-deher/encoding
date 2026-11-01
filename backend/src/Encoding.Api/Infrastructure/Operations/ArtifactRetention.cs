@@ -113,7 +113,8 @@ public sealed class ArtifactRetentionService(ArtifactRetention retention, Operat
             {
                 var result = await retention.RunOnceAsync(stoppingToken);
                 if (result.Purged > 0 || result.TempFilesRemoved > 0)
-                    logger.LogInformation("Rétention : {Purged} exécutions, {Bytes} octets, {Temporary} fichiers temporaires{Simulation}.", result.Purged, result.BytesFreed, result.TempFilesRemoved, result.DryRun ? " (simulation)" : "");
+                    logger.LogInformation("Rétention : {Purged} exécutions, {Bytes} octets, {Temporary} fichiers temporaires{Simulation}.", result.Purged,
+                        result.BytesFreed, result.TempFilesRemoved, result.DryRun ? " (simulation)" : "");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception)

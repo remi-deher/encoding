@@ -94,7 +94,8 @@ public static class SourceReplacer
         finally
         {
             foreach (var temporary in new[] { stagedBackup, stagedResult }) if (File.Exists(temporary)) File.Delete(temporary);
-            if (!success && createdBackup && !mutated) { File.Delete(backup); var directory = Path.GetDirectoryName(backup)!; if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory); }
+            if (!success && createdBackup
+                && !mutated) { File.Delete(backup); var directory = Path.GetDirectoryName(backup)!; if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory); }
         }
     }
 
@@ -110,7 +111,8 @@ public static class SourceReplacer
         catch (InvalidOperationException exception) { return Failed(exception.Message); }
     }
 
-    private static async Task<SourceReplacementReport> RestoreFilesAsync(string root, string mediaPath, string finalRelative, string backupRelative, string sourceSha, string resultSha, bool force, CancellationToken ct,Func<CancellationToken,Task<bool>>? stillAuthorized=null)
+    private static async Task<SourceReplacementReport> RestoreFilesAsync(string root, string mediaPath, string finalRelative, string backupRelative,
+        string sourceSha, string resultSha, bool force, CancellationToken ct,Func<CancellationToken,Task<bool>>? stillAuthorized=null)
     {
         var original = SafeMediaPaths.Resolve(root, mediaPath); var final = SafeMediaPaths.Resolve(root, finalRelative); var backup = SafeMediaPaths.Resolve(root, backupRelative);
         if (!File.Exists(backup))
@@ -120,8 +122,10 @@ public static class SourceReplacer
             throw new InvalidOperationException("La sauvegarde est absente ; restauration impossible.");
         }
         if (await SafeMediaPaths.DigestAsync(backup, ct) != sourceSha) throw new InvalidOperationException("La sauvegarde a été altérée ; restauration refusée.");
-        if (!force && File.Exists(final) && await SafeMediaPaths.DigestAsync(final, ct) != resultSha) throw new InvalidOperationException("Le fichier remplaçant a été modifié depuis le remplacement ; restauration refusée.");
-        if (!force && original != final && File.Exists(original) && await SafeMediaPaths.DigestAsync(original, ct) != sourceSha) throw new InvalidOperationException("Un autre fichier occupe l'emplacement d'origine ; restauration refusée.");
+        if (!force && File.Exists(final) && await SafeMediaPaths.DigestAsync(final,
+            ct) != resultSha) throw new InvalidOperationException("Le fichier remplaçant a été modifié depuis le remplacement ; restauration refusée.");
+        if (!force && original != final && File.Exists(original) && await SafeMediaPaths.DigestAsync(original,
+            ct) != sourceSha) throw new InvalidOperationException("Un autre fichier occupe l'emplacement d'origine ; restauration refusée.");
         var staged = original + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {

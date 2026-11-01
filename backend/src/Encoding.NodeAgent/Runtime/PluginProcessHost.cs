@@ -18,7 +18,7 @@ public sealed class PluginLaunch
 }
 
 /// <summary>Third party implementations run as separate child processes with a versioned JSON envelope.</summary>
-public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration configuration,NodeAgentOptions options)
+public sealed class PluginProcessHost(IProcessToolRunner processes,IConfiguration configuration,NodeAgentOptions options)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private const int MaxVariableChanges=64, MaxVariableNameLength=128, MaxVariableBytes=256*1024, MaxDetailLength=4096, MaxErrorLength=400, MaxFingerprintedFiles=5000;
@@ -56,7 +56,8 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
         {
             var directory=Path.Combine(options.DataDirectory,"plugin-describe",Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key))));
             Directory.CreateDirectory(directory);
-            var result=await processes.RunAsync(plugin.Executable,plugin.Arguments,directory,TimeSpan.FromSeconds(20),ct,"{\"type\":\"describe\",\"contractVersion\":1}\n",sandbox:true,readOnlyPaths:plugin.ReadOnlyPaths);
+            var result=await processes.RunAsync(plugin.Executable,plugin.Arguments,directory,TimeSpan.FromSeconds(20),ct,
+                "{\"type\":\"describe\",\"contractVersion\":1}\n",sandbox:true,readOnlyPaths:plugin.ReadOnlyPaths);
             if(result.ExitCode!=0) throw Failure(plugin,"La poignée de main du plugin a échoué",result);
             try { manifest=JsonSerializer.Deserialize<PluginManifest>(result.Output,Json)??throw new IOException("Manifeste plugin absent."); }
             catch(JsonException exception) { throw new IOException($"Le plugin {plugin.Id} a répondu un manifeste illisible ({exception.Message}).",exception); }
@@ -113,7 +114,9 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
             ??throw new IOException("Cette version du plugin n’est pas installée sur le worker.");
         if (plugin.IsNative) throw new IOException($"Le composant {plugin.Id} doit être exécuté par le moteur et ne peut pas être invoqué comme plugin de processus.");
         var manifest=await DescribeAsync(plugin,ct);
-        var component=manifest.Components.FirstOrDefault(component=>component.Id==invocation.Component.ComponentId && component.Version==invocation.Component.ComponentVersion && component.ConfigurationSchema.Version==invocation.Component.ConfigurationSchemaVersion)
+        var component=manifest.Components.FirstOrDefault(component=>component.Id==invocation.Component.ComponentId
+            && component.Version==invocation.Component.ComponentVersion
+            && component.ConfigurationSchema.Version==invocation.Component.ConfigurationSchemaVersion)
             ??throw new IOException("Version de composant absente du processus plugin.");
         var mediaEffect=new MediaEffectGuard(component.MediaEffect,workspace,invocation.Context.CurrentArtifactId);
         var input=JsonSerializer.Serialize(new { type="execute",contractVersion=1,invocation },Json)+"\n";
@@ -129,7 +132,8 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
         if(result.ExitCode!=0) throw Failure(plugin,"Le processus du plugin a échoué ; son effet doit être considéré comme incertain",result);
         FlowStepResult response;
         try { response=JsonSerializer.Deserialize<FlowStepResult>(result.Output,Json)??throw new IOException("Réponse plugin absente."); }
-        catch(JsonException exception) { throw new IOException($"Le plugin {plugin.Id} a répondu un résultat illisible ({exception.Message}) ; son effet doit être considéré comme incertain.",exception); }
+        catch(JsonException exception) { throw new IOException($"Le plugin {plugin.Id} a répondu un résultat illisible ({exception.Message}) ; son effet doit être considéré comme incertain.",
+            exception); }
         if(response.ContractVersion!=1 || response.InvocationId!=invocation.InvocationId || response.LeaseEpoch!=invocation.LeaseEpoch
             || (response.OutputId is null)==(response.TerminalResult is null)) throw new IOException("Réponse plugin incompatible avec l’invocation.");
         if(response.OutputId is { } outputId && component.Outputs.All(output=>output.Id!=outputId))

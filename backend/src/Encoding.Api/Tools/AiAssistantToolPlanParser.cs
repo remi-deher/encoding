@@ -78,8 +78,7 @@ public static class AiAssistantToolPlanParser
         var arguments = document.RootElement;
         if (!BusinessOperationCatalog.IsAssistantAction(plan.Name))
             throw new ArgumentException("Action non autorisée.");
-        if (!BusinessOperationCatalog.IsAssistantAction(plan.Name)
-            || !new[] { "publish-flow", "delete-flow", "start-library", "cancel-execution", "assign-library-flow", "create-flow-template" }.Contains(plan.Name, StringComparer.Ordinal))
+        if (!BusinessOperationCatalog.AssistantToMcpToolNames.ContainsKey(plan.Name))
         {
             if (BusinessOperationCatalog.FindTool(plan.Name) is not { RequiresAdministrator: true }
                 || !BusinessOperationCatalog.ValidateArguments(plan.Name, arguments))

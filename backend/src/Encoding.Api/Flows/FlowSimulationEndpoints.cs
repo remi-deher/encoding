@@ -2,7 +2,6 @@ using Encoding.Api.Auth;
 using System.ComponentModel;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
-using Encoding.Api.Plugins;
 using Microsoft.AspNetCore.Http.Features;
 
 namespace Encoding.Api.Flows;
@@ -12,19 +11,16 @@ public static class FlowSimulationEndpoints
     public static void MapFlowSimulationEndpoints(this WebApplication app)
     {
         app.MapPost("/api/v1/flows/simulate", async (FlowSimulationRequest request, FlowSimulator simulator,
-            FlowDefinitionValidator validator, PluginConfigurationRepository settings, CancellationToken ct) =>
+            FlowDefinitionValidator validator, IServiceProvider services, CancellationToken ct) =>
         {
             try
             {
                 if (JsonSerializer.Serialize(request).Length > 1048576) return (IResult)Results.BadRequest(new { title = "Le scénario dépasse 1 Mio." });
                 var (flow, validation) = validator.ValidateDocument(request.Definition);
                 if (flow is null || !validation.IsValid) return Results.UnprocessableEntity(simulator.Simulate(request));
-                IReadOnlyDictionary<string, JsonElement>? defaults = null;
-                if (flow.Nodes.Any(Encoding.Contracts.Executions.RuntimeHandoffPolicy.IsHandoff))
-                {
-                    var effective = await settings.ResolveEffectiveAsync(flow.Id, ["nodes"], ct);
-                    defaults = effective.GetValueOrDefault("nodes");
-                }
+                var coordinator = services.GetService(typeof(FlowCoordinatorService)) as FlowCoordinatorService
+                    ?? new FlowCoordinatorService(services);
+                var defaults = await coordinator.ResolveHandoffDefaultsAsync(flow, ct);
                 var result = simulator.Simulate(request, defaults);
                 return result.Status == "invalid" ? Results.UnprocessableEntity(result) : Results.Ok(result);
             }

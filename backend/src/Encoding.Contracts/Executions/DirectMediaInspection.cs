@@ -11,7 +11,8 @@ public static class DirectMediaInspection
     public static bool AllowsMetadataOnly(FlowComponentDescriptor? component) =>
         component is { MediaEffect:MediaEffects.ReadOnly,RequiresMedia:false,ProducesFiles:false };
 
-    public static bool Allows(string plugin, string component, IReadOnlyDictionary<string,JsonElement>? configuration = null, int pendingPlanSteps = 0, bool builderActive = false) => (builderActive && plugin is "base" or "video" or "audio" && FfmpegBuilderPolicy.IsSetting(component))
+    public static bool Allows(string plugin, string component, IReadOnlyDictionary<string,JsonElement>? configuration = null, int pendingPlanSteps = 0,
+        bool builderActive = false) => (builderActive && plugin is "base" or "video" or "audio" && FfmpegBuilderPolicy.IsSetting(component))
         || plugin=="base" && component==FfmpegBuilderPolicy.Start
         || plugin=="base" && component==FfmpegBuilderPolicy.Execute && pendingPlanSteps==0
         || plugin is "base" or "probe" && (component.StartsWith("base-probe-",StringComparison.Ordinal)

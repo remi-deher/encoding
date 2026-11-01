@@ -70,7 +70,8 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
           ORDER BY e.updated_at LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED
           """,c,tx))
         await using(var r=await cmd.ExecuteReaderAsync(ct))
-        { while(await r.ReadAsync(ct)) expired.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetInt32(4),r.GetString(5),r.GetBoolean(6),r.GetBoolean(7),r.GetBoolean(8),r.GetInt32(9))); }
+        { while(await r.ReadAsync(ct)) expired.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetInt32(4),r.GetString(5),
+            r.GetBoolean(6),r.GetBoolean(7),r.GetBoolean(8),r.GetInt32(9))); }
         foreach(var item in expired)
         {
             var cancelled=item.State=="cancelling";
@@ -168,7 +169,9 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         {
         cmd.Parameters.AddWithValue("freshGrace",FreshPlacementGrace.TotalSeconds);
         await using var r=await cmd.ExecuteReaderAsync(ct);
-        { while(await r.ReadAsync(ct)) targets.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetString(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetGuid(7),r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:r.GetString(9),r.GetFieldValue<DateTimeOffset>(10),r.IsDBNull(11)?null:JsonSerializer.Deserialize<FlowPlacementPlan>(r.GetString(11),Json))); }
+        { while(await r.ReadAsync(ct)) targets.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetString(4),r.GetString(5),
+            r.IsDBNull(6)?null:r.GetGuid(6),r.GetGuid(7),r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:r.GetString(9),r.GetFieldValue<DateTimeOffset>(10),
+            r.IsDBNull(11)?null:JsonSerializer.Deserialize<FlowPlacementPlan>(r.GetString(11),Json))); }
         }
 
         var failed=0;

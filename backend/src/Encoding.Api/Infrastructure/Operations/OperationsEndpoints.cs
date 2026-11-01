@@ -103,7 +103,8 @@ public static class OperationsEndpoints
                 OperationsMetrics.Request(context.Request.Method, route, status, elapsed);
                 // Chemin seul, sans chaîne de requête ni en-têtes : les jetons ne doivent jamais atteindre les journaux.
                 if (!route.StartsWith("/health", StringComparison.Ordinal) && route != "/metrics" && (routed is not null || status >= 400))
-                    logger.Log(status >= 500 ? LogLevel.Warning : LogLevel.Information, "{Method} {Route} → {Status} en {ElapsedMs} ms", context.Request.Method, route, status, Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F0", System.Globalization.CultureInfo.InvariantCulture));
+                    logger.Log(status >= 500 ? LogLevel.Warning : LogLevel.Information, "{Method} {Route} → {Status} en {ElapsedMs} ms", context.Request.Method,
+                        route, status, Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F0", System.Globalization.CultureInfo.InvariantCulture));
             }
         });
     }

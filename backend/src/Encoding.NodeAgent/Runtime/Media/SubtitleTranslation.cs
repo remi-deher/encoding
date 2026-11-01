@@ -13,7 +13,8 @@ public static partial class SubtitleTranslation
 {
     private sealed record Cue(string Id, string Timecode, string Text);
 
-    [GeneratedRegex(@"(?:^|\r?\n)(?<id>\d+)\r?\n(?<timecode>\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3})\r?\n(?<text>[\s\S]*?)(?=(?:\r?\n\d+\r?\n\d{2}:\d{2}:\d{2}|$))", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:^|\r?\n)(?<id>\d+)\r?\n(?<timecode>\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3})\r?\n(?<text>[\s\S]*?)(?=(?:\r?\n\d+\r?\n\d{2}:\d{2}:\d{2}|$))",
+        RegexOptions.CultureInvariant)]
     private static partial Regex SrtCueRegex();
 
     [GeneratedRegex("</?[A-Za-z][^>]*>", RegexOptions.CultureInvariant)]

@@ -19,12 +19,15 @@ public static class ClusterTaskEndpoints
             using var content=new StreamContent(request.Body);
             var body=await ClusterTaskPeerClient.ReadAsync(content,ct);
             if(body is null) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
-            if(!ClusterReconciliationSignature.Verify(key,peer,request.Headers[ClusterReconciliationSignature.TimeHeader],request.Headers[ClusterReconciliationSignature.SignatureHeader],body)) return Results.Unauthorized();
+            if(!ClusterReconciliationSignature.Verify(key,peer,request.Headers[ClusterReconciliationSignature.TimeHeader],
+                request.Headers[ClusterReconciliationSignature.SignatureHeader],body)) return Results.Unauthorized();
             ClusterTaskProbe? probe;
             try {probe=JsonSerializer.Deserialize<ClusterTaskProbe>(body,ClusterTaskPeerClient.Json);}
             catch(JsonException) {return Results.BadRequest();}
-            if(probe is not { ProtocolVersion:ClusterTaskPeerClient.Version,Kind:ClusterTaskPeerClient.ProbeKind } || probe.ClusterId!=cluster.Id || probe.Nonce==Guid.Empty) return Results.BadRequest();
-            var result=JsonSerializer.SerializeToUtf8Bytes(new ClusterTaskProbeResponse(ClusterTaskPeerClient.Version,cluster.Id,probe.Nonce,identity.PeerId,[SourceWriteProtocol.Capability]),ClusterTaskPeerClient.Json);
+            if(probe is not { ProtocolVersion:ClusterTaskPeerClient.Version,Kind:ClusterTaskPeerClient.ProbeKind } || probe.ClusterId!=cluster.Id
+                || probe.Nonce==Guid.Empty) return Results.BadRequest();
+            var result=JsonSerializer.SerializeToUtf8Bytes(new ClusterTaskProbeResponse(ClusterTaskPeerClient.Version,cluster.Id,probe.Nonce,identity.PeerId,
+                [SourceWriteProtocol.Capability]),ClusterTaskPeerClient.Json);
             var time=DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
             response.Headers[ClusterReconciliationSignature.PeerHeader]=identity.PeerId.ToString("D");
             response.Headers[ClusterReconciliationSignature.TimeHeader]=time;

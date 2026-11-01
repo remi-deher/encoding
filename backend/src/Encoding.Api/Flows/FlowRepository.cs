@@ -23,7 +23,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
             """);
         await using var reader = await command.ExecuteReaderAsync(ct);
         var result = new List<FlowSummary>();
-        while (await reader.ReadAsync(ct)) result.Add(new(reader.GetGuid(0),reader.GetString(1),reader.GetString(2),reader.GetInt32(3),reader.GetInt32(4),reader.GetString(5),reader.GetFieldValue<DateTimeOffset>(6),reader.GetBoolean(7)));
+        while (await reader.ReadAsync(ct)) result.Add(new(reader.GetGuid(0),reader.GetString(1),reader.GetString(2),reader.GetInt32(3),reader.GetInt32(4),
+            reader.GetString(5),reader.GetFieldValue<DateTimeOffset>(6),reader.GetBoolean(7)));
         return result;
     }
 
@@ -46,7 +47,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
     {
         await using var command=dataSource.CreateCommand("SELECT d.definition::text,d.revision,f.current_version,d.updated_at,b.status FROM flow_drafts d JOIN flows f ON f.id=d.flow_id JOIN flow_draft_backups b ON b.flow_id=d.flow_id AND b.revision=d.revision WHERE f.id=@id AND f.deleted_at IS NULL");
         command.Parameters.AddWithValue("id",id); await using var reader=await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? new(JsonSerializer.Deserialize<FlowDefinition>(reader.GetString(0),JsonOptions)!,reader.GetInt32(1),reader.GetInt32(2),reader.GetString(4),reader.GetFieldValue<DateTimeOffset>(3)) : null;
+        return await reader.ReadAsync(ct) ? new(JsonSerializer.Deserialize<FlowDefinition>(reader.GetString(0),JsonOptions)!,reader.GetInt32(1),
+            reader.GetInt32(2),reader.GetString(4),reader.GetFieldValue<DateTimeOffset>(3)) : null;
     }
     public async Task<FlowDraftResponse?> SaveDraftAsync(SaveFlowDraftRequest request,CancellationToken ct)
     {
@@ -57,7 +59,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
         command.Parameters.AddWithValue("id",request.Definition.Id);
         var published=(await command.ScalarInt32Async(ct))!.Value;
         await using var save=Sql.Command(
-          "INSERT INTO flow_drafts(flow_id,revision,definition) SELECT @id,1,@document WHERE @expected=0 ON CONFLICT(flow_id) DO UPDATE SET definition=EXCLUDED.definition,revision=flow_drafts.revision+1,updated_at=clock_timestamp() WHERE flow_drafts.revision=@expected RETURNING revision",connection,tx);
+          "INSERT INTO flow_drafts(flow_id,revision,definition) SELECT @id,1,@document WHERE @expected=0 ON CONFLICT(flow_id) DO UPDATE SET definition=EXCLUDED.definition,revision=flow_drafts.revision+1,updated_at=clock_timestamp() WHERE flow_drafts.revision=@expected RETURNING revision",
+              connection,tx);
         save.Parameters.AddWithValue("id",request.Definition.Id); save.Parameters.AddWithValue("expected",request.ExpectedRevision);
         save.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(request.Definition,JsonOptions));
         // Update cannot use an INSERT filtered out by expected>0; lock and inspect first.
@@ -70,9 +73,12 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
         var nextRevision=(await highest.ScalarInt32Async(ct))!.Value;
         save.Parameters.AddWithValue("next",nextRevision);
         save.CommandText="INSERT INTO flow_drafts(flow_id,revision,definition) VALUES(@id,@next,@document) ON CONFLICT(flow_id) DO UPDATE SET definition=EXCLUDED.definition,revision=EXCLUDED.revision,updated_at=clock_timestamp() RETURNING revision,updated_at";
-        await using var written=await save.ExecuteReaderAsync(ct); await written.ReadAsync(ct); var result=new FlowDraftResponse(request.Definition,written.GetInt32(0),published,"draft",written.GetFieldValue<DateTimeOffset>(1)); await written.DisposeAsync();
+        await using var written=await save.ExecuteReaderAsync(ct); await written.ReadAsync(ct); var result=new FlowDraftResponse(request.Definition,
+            written.GetInt32(0),published,"draft",written.GetFieldValue<DateTimeOffset>(1)); await written.DisposeAsync();
         await using(var backup=Sql.Command("INSERT INTO flow_draft_backups(flow_id,revision,definition) VALUES(@id,@revision,@document)",connection,tx)) {
-            backup.Parameters.AddWithValue("id",request.Definition.Id); backup.Parameters.AddWithValue("revision",result.DraftRevision); backup.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(request.Definition,JsonOptions)); await backup.ExecuteNonQueryAsync(ct);
+            backup.Parameters.AddWithValue("id",request.Definition.Id); backup.Parameters.AddWithValue("revision",result.DraftRevision);
+                backup.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(request.Definition,JsonOptions));
+                await backup.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct); return result with { BackupStatus="pending" };
     }
@@ -116,10 +122,13 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
             existing.Parameters.AddWithValue("id",draft.Id); existing.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
             if(await existing.ScalarNullableBoolAsync(ct) is {} same) { if(!same) return false; continue; }
             await using var historical=Sql.Command("SELECT definition=@document FROM flow_draft_backups WHERE flow_id=@id AND revision=@revision",connection,tx);
-            historical.Parameters.AddWithValue("id",draft.Id); historical.Parameters.AddWithValue("revision",imported.Revision); historical.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
+            historical.Parameters.AddWithValue("id",draft.Id); historical.Parameters.AddWithValue("revision",imported.Revision);
+                historical.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
             if(await historical.ScalarNullableBoolAsync(ct) is {} sameHistory && !sameHistory) return false;
-            await using var save=Sql.Command("INSERT INTO flow_drafts(flow_id,revision,definition) VALUES(@id,@revision,@document); INSERT INTO flow_draft_backups(flow_id,revision,definition) VALUES(@id,@revision,@document) ON CONFLICT DO NOTHING",connection,tx);
-            save.Parameters.AddWithValue("id",draft.Id); save.Parameters.AddWithValue("revision",imported.Revision); save.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
+            await using var save=Sql.Command("INSERT INTO flow_drafts(flow_id,revision,definition) VALUES(@id,@revision,@document); INSERT INTO flow_draft_backups(flow_id,revision,definition) VALUES(@id,@revision,@document) ON CONFLICT DO NOTHING",
+                connection,tx);
+            save.Parameters.AddWithValue("id",draft.Id); save.Parameters.AddWithValue("revision",imported.Revision); save.Parameters.AddWithValue("document",
+                SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
             await save.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct); return true;
@@ -158,7 +167,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
             if (existingJson is not null)
             {
                 var existingDef = JsonSerializer.Deserialize<FlowDefinition>(existingJson, JsonOptions);
-                if (existingDef is not null && JsonSerializer.Serialize(existingDef with { Version = current }, JsonOptions) == JsonSerializer.Serialize(definition with { Version = current }, JsonOptions))
+                if (existingDef is not null && JsonSerializer.Serialize(existingDef with { Version = current },
+                    JsonOptions) == JsonSerializer.Serialize(definition with { Version = current }, JsonOptions))
                 {
                     await ClearDraftAsync(request, connection, tx, ct);
                     return current;
@@ -220,7 +230,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
         if (assignCount > 0)
         {
             // Les exécutions embarquent leur définition : détacher les bibliothèques ne touche pas aux tâches déjà créées.
-            await using var advance = Sql.Command("UPDATE libraries SET flow_assignment_revision = flow_assignment_revision + 1 WHERE id IN (SELECT library_id FROM library_flow_assignments WHERE flow_id = @id)", connection, tx);
+            await using var advance = Sql.Command("UPDATE libraries SET flow_assignment_revision = flow_assignment_revision + 1 WHERE id IN (SELECT library_id FROM library_flow_assignments WHERE flow_id = @id)",
+                connection, tx);
             advance.Parameters.AddWithValue("id", id);
             await advance.ExecuteNonQueryAsync(ct);
             await using var detach = Sql.Command("DELETE FROM library_flow_assignments WHERE flow_id = @id", connection, tx);
@@ -232,7 +243,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
         clearDraft.Parameters.AddWithValue("id", id);
         await clearDraft.ExecuteNonQueryAsync(ct);
 
-        await using var softDelete = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id AND (@expectedVersion IS NULL OR current_version = @expectedVersion)", connection, tx);
+        await using var softDelete = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id AND (@expectedVersion IS NULL OR current_version = @expectedVersion)",
+            connection, tx);
         softDelete.Parameters.AddWithValue("id", id);
         softDelete.Parameters.AddWithValue("expectedVersion", (object?)expectedVersion ?? DBNull.Value);
         if (await softDelete.ExecuteNonQueryAsync(ct) != 1)
@@ -324,7 +336,8 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
                 throw new FlowTemplateSetupConfigurationException($"Le bloc « {update.NodeId} » n’existe plus dans ce modèle.");
             if (update.Values.Keys.Any(field => !allowedFields.Contains(field, StringComparer.Ordinal)))
                 throw new FlowTemplateSetupConfigurationException($"Un paramètre du bloc « {update.NodeId} » n’est pas configurable dans ce modèle.");
-            nodes[update.NodeId] = node with { Configuration = node.Configuration.Concat(update.Values).GroupBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal) };
+            nodes[update.NodeId] = node with { Configuration = node.Configuration.Concat(update.Values).GroupBy(pair => pair.Key,
+                StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal) };
         }
         return template.Definition with { Nodes = template.Definition.Nodes.Select(node => nodes[node.Id]).ToArray() };
     }

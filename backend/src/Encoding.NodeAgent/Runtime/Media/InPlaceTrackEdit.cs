@@ -30,7 +30,8 @@ public sealed record InPlaceTrackEdit(int TrackId,string Language,string Name,bo
         if(wanted=="") return true;
         var stored=properties.TryGetProperty("language",out var l)?l.GetString():null; var ietf=properties.TryGetProperty("language_ietf",out var i)?i.GetString():null;
         var canonical=Bibliographic.GetValueOrDefault(wanted,wanted);
-        return string.Equals(stored,canonical,StringComparison.OrdinalIgnoreCase)||string.Equals(stored,wanted,StringComparison.OrdinalIgnoreCase)||string.Equals(ietf,wanted,StringComparison.OrdinalIgnoreCase);
+        return string.Equals(stored,canonical,StringComparison.OrdinalIgnoreCase)||string.Equals(stored,wanted,
+            StringComparison.OrdinalIgnoreCase)||string.Equals(ietf,wanted,StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? Check(InPlaceTrackEdit edit,JsonElement identification,bool containerToo)

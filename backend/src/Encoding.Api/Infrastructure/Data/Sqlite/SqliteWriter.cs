@@ -94,7 +94,7 @@ public sealed class SqliteWriter
             lock (sync)
             {
                 if (node.List is { } list) list.Remove(node);
-                else if (node.Value.Task.IsCompletedSuccessfully) node.Value.Task.Result.Dispose();
+                else if (node.Value.Task.IsCompletedSuccessfully) node.Value.Task.GetAwaiter().GetResult().Dispose();
                 if (exception is TimeoutException) expired++;
             }
             if (exception is TimeoutException) throw new SqliteWriteUnavailableException("délai d’attente dépassé");

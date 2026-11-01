@@ -20,7 +20,8 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.MediaType);
         var userPrompt = $"Génère un flow complet pour le média '{request.MediaType}' répondant à cette demande :\n\"{request.UserPrompt}\"";
 
-        var initialPrompt = new AiPrompt(systemPrompt, userPrompt, Model: request.Model, SessionId: request.SessionId, RequestId: request.RequestId, ReasoningEffort: request.ReasoningEffort, Scope: new("flow-create"));
+        var initialPrompt = new AiPrompt(systemPrompt, userPrompt, Model: request.Model, SessionId: request.SessionId, RequestId: request.RequestId,
+            ReasoningEffort: request.ReasoningEffort, Scope: new("flow-create"));
         var aiResult = await client.GenerateTextAsync(initialPrompt, ct);
         FlowAiResponse Reply(FlowAiResponse response) => response with { SessionId = aiResult.SessionId, RequestId = aiResult.RequestId };
         if (!aiResult.Success)
@@ -68,7 +69,8 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.CurrentFlow.MediaType);
         var userPrompt = $"Modifie ce flow existant selon l'instruction suivante : \"{request.UserPrompt}\".\n\nFlow actuel :\n{currentJson}";
 
-        var initialPrompt = new AiPrompt(systemPrompt, userPrompt, Model: request.Model, SessionId: request.SessionId, RequestId: request.RequestId, ReasoningEffort: request.ReasoningEffort, Scope: new("flow-edit", FlowId: request.CurrentFlow.Id));
+        var initialPrompt = new AiPrompt(systemPrompt, userPrompt, Model: request.Model, SessionId: request.SessionId, RequestId: request.RequestId,
+            ReasoningEffort: request.ReasoningEffort, Scope: new("flow-edit", FlowId: request.CurrentFlow.Id));
         var aiResult = await client.GenerateTextAsync(initialPrompt, ct);
         FlowAiResponse Reply(FlowAiResponse response) => response with { SessionId = aiResult.SessionId, RequestId = aiResult.RequestId };
         if (!aiResult.Success)
@@ -122,7 +124,8 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = "Tu es un assistant expert qui explique avec pédagogie et précision le fonctionnement d'un flow de traitement de fichiers multimédias dans Encoding.";
         var userPrompt = $"Explique étape par étape ce que fait ce flow (objectifs, conditions, transcodage, gestion des pistes) en français structuré :\n\n{currentJson}";
 
-        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, Model: request.Model, SessionId: request.SessionId, RequestId: request.RequestId, ReasoningEffort: request.ReasoningEffort, Scope: new("flow-explain", FlowId: request.Flow.Id)), ct);
+        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, Model: request.Model, SessionId: request.SessionId,
+            RequestId: request.RequestId, ReasoningEffort: request.ReasoningEffort, Scope: new("flow-explain", FlowId: request.Flow.Id)), ct);
         return new FlowAiResponse(aiResult.Success, request.Flow, aiResult.Success ? aiResult.Content : aiResult.ErrorMessage, SessionId: aiResult.SessionId, RequestId: aiResult.RequestId);
     }
 

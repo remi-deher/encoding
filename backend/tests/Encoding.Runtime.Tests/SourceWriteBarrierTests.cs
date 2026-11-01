@@ -14,6 +14,7 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
+[Collection(RuntimeCollection.Name)]
 public sealed class SourceWriteBarrierTests
 {
     private sealed class Clock : TimeProvider

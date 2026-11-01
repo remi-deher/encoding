@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure;
@@ -38,15 +37,14 @@ public static class ResourceEndpoints
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             try
             {
-                var id = Guid.NewGuid();
-                var created = await repository.CreateAsync(id, request.Kind, request.Name, request.Description ?? "", request.Files ?? [], ct);
-                return Results.Created($"/api/v1/resources/{id:D}", created);
+                return await UniqueConflict.GuardAsync(async () =>
+                {
+                    var id = Guid.NewGuid();
+                    var created = await repository.CreateAsync(id, request.Kind, request.Name, request.Description ?? "", request.Files ?? [], ct);
+                    return Results.Created($"/api/v1/resources/{id:D}", created);
+                }, () => Results.Conflict(new { title = "Une ressource porte déjà ce nom." }));
             }
             catch (ResourceException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Une ressource porte déjà ce nom." });
-            }
         }).WithName("CreateResource");
 
         resources.MapPost("/{id:guid}/versions", async (Guid id, AddResourceVersionRequest request, ResourceRepository repository, CancellationToken ct) =>
@@ -66,9 +64,9 @@ public static class ResourceEndpoints
             if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128) errors["name"] = ["Le nom contient entre 1 et 128 caractères."];
             if (request.Description is null || request.Description.Trim().Length > 1000) errors["description"] = ["La description contient 1000 caractères au plus."];
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try { return await repository.UpdateAsync(id, request.Name, request.Description ?? "", ct) is { } updated ? Results.Ok(updated) : Results.NotFound(); }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            { return Results.Conflict(new { title = "Une ressource porte déjà ce nom." }); }
+            return await UniqueConflict.GuardAsync(
+                async () => await repository.UpdateAsync(id, request.Name, request.Description ?? "", ct) is { } updated ? Results.Ok(updated) : Results.NotFound(),
+                () => Results.Conflict(new { title = "Une ressource porte déjà ce nom." }));
         }).WithName("UpdateResource");
 
         // Lecture d'un fichier par un pair admis (reprise par Range). Pas de corps : la signature couvre la méthode, le chemin

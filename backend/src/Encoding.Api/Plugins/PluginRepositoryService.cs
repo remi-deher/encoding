@@ -224,7 +224,8 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
                     || sha is null || !Sha256Pattern().IsMatch(sha)
                     || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo)
                     || versions.Any(existing => existing.Version == version && existing.Platform == platform)) continue;
-                DateTimeOffset? released = entry.TryGetProperty("releaseDate", out var date) && date.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(date.GetString(), out var parsed) ? parsed : null;
+                DateTimeOffset? released = entry.TryGetProperty("releaseDate", out var date) && date.ValueKind == JsonValueKind.String
+                    && DateTimeOffset.TryParse(date.GetString(), out var parsed) ? parsed : null;
                 versions.Add(new RepositoryToolVersion(version, platform, uri.ToString(), sha.ToLowerInvariant(), Text(entry, "changelog"), released));
             }
         var latest = Text(item, "latestVersion");
@@ -249,7 +250,8 @@ public sealed partial class PluginRepositoryService(IConfiguration configuration
                 if (version is null || !VersionPattern().IsMatch(version) || sha is null || !Sha256Pattern().IsMatch(sha)
                     || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo)
                     || versions.Any(existing => existing.Version == version)) continue;
-                DateTimeOffset? released = entry.TryGetProperty("releaseDate", out var date) && date.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(date.GetString(), out var parsed) ? parsed : null;
+                DateTimeOffset? released = entry.TryGetProperty("releaseDate", out var date) && date.ValueKind == JsonValueKind.String
+                    && DateTimeOffset.TryParse(date.GetString(), out var parsed) ? parsed : null;
                 versions.Add(new RepositoryVersion(version, uri.ToString(), sha.ToLowerInvariant(), Text(entry, "changelog"), released));
             }
         var latest = Text(item, "latestVersion");

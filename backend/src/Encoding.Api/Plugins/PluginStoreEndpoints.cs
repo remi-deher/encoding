@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Auth;
 using Encoding.Core.Plugins;
 
@@ -194,7 +195,7 @@ public static class PluginStoreEndpoints
             var installed = plugins.Installed().SingleOrDefault(item => item.Id == pluginId && item.Version == version);
             if (installed is null) return Results.NotFound();
             var path = plugins.PackagePath(installed.Id, installed.Version);
-            return File.Exists(path) ? Results.File(path, "application/zip", $"{pluginId}-{version}.zip") : Results.NotFound();
+            return FileResults.ServeOrNotFound(path, "application/zip", $"{pluginId}-{version}.zip");
         }).AllowNodeCredentials().WithName("DownloadPluginPackage");
 
         store.MapGet("/tools/packages/{toolId}/{version}/{platform}/download", (string toolId, string version, string platform, ToolStoreService tools) =>
@@ -202,7 +203,7 @@ public static class PluginStoreEndpoints
             var installed = tools.Available().SingleOrDefault(item => item.Id == toolId && item.Version == version && item.Platform == platform);
             if (installed is null) return Results.NotFound();
             var path = tools.PackagePath(installed.Id, installed.Version, installed.Platform);
-            return File.Exists(path) ? Results.File(path, "application/zip", $"{toolId}-{version}-{platform}.zip") : Results.NotFound();
+            return FileResults.ServeOrNotFound(path, "application/zip", $"{toolId}-{version}-{platform}.zip");
         }).AllowNodeCredentials().WithName("DownloadToolPackage");
     }
 

@@ -113,7 +113,8 @@ public static class AudioRulePlanner
             var sampleRateMatches = options.SampleRate == 0 || rule is null && !options.EnforceSampleRate
                 || track.Metadata.TryGetProperty("sample_rate", out var sampling) && int.TryParse(sampling.ToString(), out var sourceSampling) && sourceSampling == options.SampleRate;
             if (sampleRateMatches && track.Codec == target && track.Channels == outputChannels && (rule is null || target == "flac"
-                || track.Metadata.TryGetProperty("bit_rate", out var sourceBitrate) && int.TryParse(sourceBitrate.ToString(), out var sourceRate) && sourceRate == MediaTrackSelection.Number(rule.Value, "bitrateKbps") * 1000))
+                || track.Metadata.TryGetProperty("bit_rate", out var sourceBitrate) && int.TryParse(sourceBitrate.ToString(), out var sourceRate)
+                    && sourceRate == MediaTrackSelection.Number(rule.Value, "bitrateKbps") * 1000))
             {
                 decisions.Add(new(track.Index, track.Codec, track.Channels, false, Note: "conforme"));
                 continue;

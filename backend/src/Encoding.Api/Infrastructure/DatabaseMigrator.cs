@@ -15,7 +15,8 @@ public static class DatabaseMigrator
         var files = MigrationCatalog.Load(MigrationCatalog.ResolveDirectory(contentRoot));
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using (var create = Sql.Command("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT ((strftime('%Y-%m-%d %H:%M:%f','now') || '000Z')), checksum TEXT)", connection))
+        await using (var create = Sql.Command("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT ((strftime('%Y-%m-%d %H:%M:%f','now') || '000Z')), checksum TEXT)",
+            connection))
             await create.ExecuteNonQueryAsync(cancellationToken);
 
         // BEGIN IMMEDIATE sérialise les démarrages de plusieurs processus sur le même fichier local.

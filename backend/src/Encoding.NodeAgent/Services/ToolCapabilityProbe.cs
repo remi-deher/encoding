@@ -8,7 +8,7 @@ using Encoding.NodeAgent.Runtime;
 namespace Encoding.NodeAgent.Services;
 
 public sealed class ToolCapabilityProbe(
-    ProcessToolRunner processes,
+    IProcessToolRunner processes,
     PluginProcessHost plugins,
     NodeAgentOptions options,
     ILogger<ToolCapabilityProbe> logger) : IToolCapabilityProbe
@@ -62,7 +62,7 @@ public sealed class ToolCapabilityProbe(
             })
             {
                 if (id is "python" or "javascript" && !ProcessSandbox.IsAvailable) continue;
-                var executable = names.Select(ProcessToolRunner.Find).FirstOrDefault(path => path is not null);
+                var executable = names.Select(processes.Find).FirstOrDefault(path => path is not null);
                 if (executable is null) continue;
 
                 try

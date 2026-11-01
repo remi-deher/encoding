@@ -23,10 +23,12 @@ public static class ClusterEndpoints
         }).AllowAnonymous().WithTags("Cluster").WithName("GetClusterIdentity");
 
         // Un nœud autonome devient un cluster en le nommant ; ensuite seul le nom change (architecture 0045).
-        app.MapPost(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions, IServiceProvider services, CancellationToken cancellationToken) =>
+        app.MapPost(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions,
+            IServiceProvider services, CancellationToken cancellationToken) =>
         {
             if (!ClusterIdentityRepository.IsValidName(request.Name))
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = [$"Le nom du cluster est obligatoire ({ClusterIdentityRepository.MaximumNameLength} caractères au plus)."] });
+                return Results.ValidationProblem(new Dictionary<string,
+                    string[]> { ["name"] = [$"Le nom du cluster est obligatoire ({ClusterIdentityRepository.MaximumNameLength} caractères au plus)."] });
             var current = await repository.GetAsync(cancellationToken);
             await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
             if (!await repository.CreateAsync(request.Name, cancellationToken))
@@ -38,10 +40,12 @@ public static class ClusterEndpoints
             return Results.Ok(new { resultIdentity.Id, resultIdentity.Name, resultIdentity.Standalone, clusterToken = generatedToken });
         }).WithTags("Cluster").WithName("CreateCluster");
 
-        app.MapPut(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions, ClusterDataKeyStore dataKeyStore, IServiceProvider services, CancellationToken cancellationToken) =>
+        app.MapPut(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions,
+            ClusterDataKeyStore dataKeyStore, IServiceProvider services, CancellationToken cancellationToken) =>
         {
             if (!ClusterIdentityRepository.IsValidName(request.Name))
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = [$"Le nom du cluster est obligatoire ({ClusterIdentityRepository.MaximumNameLength} caractères au plus)."] });
+                return Results.ValidationProblem(new Dictionary<string,
+                    string[]> { ["name"] = [$"Le nom du cluster est obligatoire ({ClusterIdentityRepository.MaximumNameLength} caractères au plus)."] });
             var current = await repository.GetAsync(cancellationToken);
             if (!dataKeyStore.HasKey(current.Id))
                 await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
@@ -53,7 +57,8 @@ public static class ClusterEndpoints
         app.MapGet(route + "/join-collisions", async (ClusterJoinCollisionRepository collisions, CancellationToken ct) =>
             Results.Ok(await collisions.ListAsync(ct))).RequireAuthorization(AuthExtensions.AdministratorPolicy);
         app.MapPost(route + "/join-collisions/{id:guid}/resolve", async (Guid id, ResolveJoinUserCollision request, ClusterJoinCollisionRepository collisions, CancellationToken ct) =>
-            await collisions.ResolveAsync(id, request, ct) ? Results.NoContent() : (IResult)Results.Conflict(new { title = "Le nom est réservé, invalide, ou le compte a changé. Actualisez la proposition." }))
+            await collisions.ResolveAsync(id, request,
+                ct) ? Results.NoContent() : (IResult)Results.Conflict(new { title = "Le nom est réservé, invalide, ou le compte a changé. Actualisez la proposition." }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
 
         // L'agent local peut aligner l'identité de sa base SQLite après l'approbation du cluster d'accueil.
@@ -78,7 +83,8 @@ public static class ClusterEndpoints
             {
                 admissions.ValidateJoinBootstrap(request.Bootstrap, request.NodeId);
                 if (!await collisions.PrepareAsync(request.Bootstrap, cancellationToken))
-                    return Results.Conflict(new { code = "join_username_resolution_required", title = "Résolvez les collisions de comptes dans Paramètres > Utilisateurs. Un cluster ancien doit être mis à jour pour fournir la liste signée des comptes." });
+                    return Results.Conflict(new { code = "join_username_resolution_required",
+                        title = "Résolvez les collisions de comptes dans Paramètres > Utilisateurs. Un cluster ancien doit être mis à jour pour fournir la liste signée des comptes." });
                 await admissions.ImportBootstrapAsync(request.Bootstrap, request.NodeId, cancellationToken);
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FormatException or System.Security.Cryptography.CryptographicException or KeyNotFoundException)

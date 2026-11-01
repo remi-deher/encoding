@@ -174,9 +174,14 @@ public sealed class ResourceRepository(DbDataSource dataSource, ResourceBlobStor
         await using (var connection = await dataSource.OpenConnectionAsync(ct))
         {
             await using var transaction = await connection.BeginTransactionAsync(ct);
-            foreach (var table in new[] { "flow_resource_versions WHERE resource_id", "flow_resources WHERE id" })
+            // Named deletes only — never interpolate a caller-supplied table/filter fragment.
+            foreach (var sql in new[]
             {
-                await using var delete = Sql.Command($"DELETE FROM {table}=@id", connection, transaction);
+                "DELETE FROM flow_resource_versions WHERE resource_id=@id",
+                "DELETE FROM flow_resources WHERE id=@id",
+            })
+            {
+                await using var delete = Sql.Command(sql, connection, transaction);
                 delete.Parameters.AddWithValue("id", id);
                 await delete.ExecuteNonQueryAsync(ct);
             }

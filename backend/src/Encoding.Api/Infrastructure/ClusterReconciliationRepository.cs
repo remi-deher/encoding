@@ -38,7 +38,8 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         Guid clusterId;
         Guid originId;
         long sequence;
-        await using (var identity = Sql.Command("SELECT c.id, s.origin_id, s.next_sequence FROM cluster_identity c CROSS JOIN cluster_sync_identity s WHERE c.singleton = true AND s.singleton = true FOR UPDATE", connection, transaction))
+        await using (var identity = Sql.Command("SELECT c.id, s.origin_id, s.next_sequence FROM cluster_identity c CROSS JOIN cluster_sync_identity s WHERE c.singleton = true AND s.singleton = true FOR UPDATE",
+            connection, transaction))
         {
             await using var reader = await identity.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) throw new InvalidOperationException("L’identité de réconciliation locale est absente.");
@@ -237,9 +238,11 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         }
 
         var tombstones = new List<(string Key, DateTimeOffset Time, Guid Origin, long Sequence)>();
-        await using (var command = Sql.Command("SELECT register_key,occurred_at,origin_id,sequence FROM cluster_sync_registers WHERE value='null' AND (register_key LIKE 'ai/assistant/%' OR register_key LIKE 'ai/session/%')", connection, transaction))
+        await using (var command = Sql.Command("SELECT register_key,occurred_at,origin_id,sequence FROM cluster_sync_registers WHERE value='null' AND (register_key LIKE 'ai/assistant/%' OR register_key LIKE 'ai/session/%')",
+            connection, transaction))
         await using (var reader = await command.ExecuteReaderAsync(ct))
-            while (await reader.ReadAsync(ct)) tombstones.Add((reader.GetString(0), ReadDateTimeOffset(reader.GetValue(1)), ReadGuid(reader, 2), Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture)));
+            while (await reader.ReadAsync(ct)) tombstones.Add((reader.GetString(0), ReadDateTimeOffset(reader.GetValue(1)), ReadGuid(reader, 2),
+                Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture)));
 
         var purged = 0;
         foreach (var tombstone in tombstones)
@@ -249,7 +252,8 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
             if (!acknowledgedByAll) continue;
 
             var oldEvents = new List<(Guid Id, DateTimeOffset Time, Guid Origin, long Sequence)>();
-            await using (var command = Sql.Command("SELECT event_id,occurred_at,origin_id,sequence,payload FROM cluster_change_log WHERE cluster_id=@cluster AND event_type='register.set' AND json_extract(payload,'$.key')=@key", connection, transaction))
+            await using (var command = Sql.Command("SELECT event_id,occurred_at,origin_id,sequence,payload FROM cluster_change_log WHERE cluster_id=@cluster AND event_type='register.set' AND json_extract(payload,'$.key')=@key",
+                connection, transaction))
             {
                 command.Parameters.AddWithValue("cluster", clusterId);
                 command.Parameters.AddWithValue("key", tombstone.Key);
@@ -353,7 +357,8 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         return await reader.ReadAsync(ct) ? (ReadDateTimeOffset(reader.GetValue(0)), ReadGuid(reader, 1), Convert.ToInt64(reader.GetValue(2), CultureInfo.InvariantCulture)) : null;
     }
 
-    private static async Task UpsertRegisterAsync(DbConnection connection, DbTransaction transaction, string key, string jsonValue, DateTimeOffset occurredAt, Guid originId, long sequence, CancellationToken ct)
+    private static async Task UpsertRegisterAsync(DbConnection connection, DbTransaction transaction, string key, string jsonValue, DateTimeOffset occurredAt,
+        Guid originId, long sequence, CancellationToken ct)
     {
         await using var command = Sql.Command("""
             INSERT INTO cluster_sync_registers(register_key, value, occurred_at, origin_id, sequence)

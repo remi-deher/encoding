@@ -24,6 +24,8 @@ public static class Sql
     public static bool IsSqlite(DbConnection connection) => connection is SqliteConnectionWrapper;
     public static bool IsSqlite(DbDataSource dataSource) => dataSource is SqliteDataSource;
 
+    public static string UtcNow => SqliteTranslator.NowUtc;
+
     public static DbParameter Parameter(string name, SqlKind kind, object? value)
     {
         _ = kind;

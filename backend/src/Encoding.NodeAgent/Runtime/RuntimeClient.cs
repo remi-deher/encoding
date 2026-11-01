@@ -51,7 +51,8 @@ public sealed class RuntimeClient : IDisposable
         try
         {
             await using var stream=File.OpenRead(file); using var content=new StreamContent(stream);
-            using var response=await http.PutAsync(Route($"executions/{id:D}/dav/{sha}?epoch={epoch}&original={original.ToString().ToLowerInvariant()}{(inputPath is null?string.Empty:"&inputPath="+Uri.EscapeDataString(inputPath))}"),content,ct);
+            using var response=await http.PutAsync(Route($"executions/{id:D}/dav/{sha}?epoch={epoch}&original={original.ToString().ToLowerInvariant()}{(inputPath is null?string.Empty:"&inputPath="+Uri.EscapeDataString(inputPath))}"),
+                content,ct);
             if(!response.IsSuccessStatusCode)
             {
                 var err=await response.Content.ReadAsStringAsync(ct);
@@ -108,7 +109,8 @@ public sealed class RuntimeClient : IDisposable
         if(runFolder is not null) Directory.CreateDirectory(runFolder);
         foreach(var file in info.Files)
         {
-            if(file.Name!=Path.GetFileName(file.Name)||file.Name.Length==0||!System.Text.RegularExpressions.Regex.IsMatch(file.Sha256,"^[0-9a-f]{64}$")) throw new IOException("Fichier de ressource invalide.");
+            if(file.Name!=Path.GetFileName(file.Name)||file.Name.Length==0||!System.Text.RegularExpressions.Regex.IsMatch(file.Sha256,
+                "^[0-9a-f]{64}$")) throw new IOException("Fichier de ressource invalide.");
             var cached=Path.Combine(cacheRoot,file.Sha256);
             if(!(File.Exists(cached)&&new FileInfo(cached).Length==file.Bytes&&await SafeMediaPaths.DigestAsync(cached,ct)==file.Sha256))
             {
@@ -116,10 +118,12 @@ public sealed class RuntimeClient : IDisposable
                 try
                 {
                     using var response=await http.GetAsync(Route($"resources/blobs/{file.Sha256}"),HttpCompletionOption.ResponseHeadersRead,ct);
-                    if(!response.IsSuccessStatusCode) throw new HttpRequestException($"Le fichier « {file.Name} » de la ressource est indisponible ({(int)response.StatusCode}).",null,response.StatusCode);
+                    if(!response.IsSuccessStatusCode) throw new HttpRequestException($"Le fichier « {file.Name} » de la ressource est indisponible ({(int)response.StatusCode}).",
+                        null,response.StatusCode);
                     await using(var output=new FileStream(partial,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
                     { await response.Content.CopyToAsync(output,ct); await output.FlushAsync(ct); output.Flush(true); }
-                    if(new FileInfo(partial).Length!=file.Bytes||await SafeMediaPaths.DigestAsync(partial,ct)!=file.Sha256) throw new IOException($"Le fichier « {file.Name} » est incomplet ou corrompu.");
+                    if(new FileInfo(partial).Length!=file.Bytes||await SafeMediaPaths.DigestAsync(partial,
+                        ct)!=file.Sha256) throw new IOException($"Le fichier « {file.Name} » est incomplet ou corrompu.");
                     File.Move(partial,cached,true);
                 }
                 finally { if(File.Exists(partial)) File.Delete(partial); }

@@ -108,7 +108,9 @@ public static class LocalNodeEndpoints
         }
     }
 
-    private static async Task<IResult> RelayAsync(HttpContext http, IHttpClientFactory clients, HttpMethod method, string path, CancellationToken cancellationToken, bool hideSecrets = false, Infrastructure.ClusterIdentityRepository? cluster = null, LocalNodeRegistry? registry = null)
+    private static async Task<IResult> RelayAsync(HttpContext http, IHttpClientFactory clients, HttpMethod method, string path,
+        CancellationToken cancellationToken, bool hideSecrets = false, Infrastructure.ClusterIdentityRepository? cluster = null,
+        LocalNodeRegistry? registry = null)
     {
         using var request = new HttpRequestMessage(method, "api/v1/worker/" + path);
         if (method != HttpMethod.Get)

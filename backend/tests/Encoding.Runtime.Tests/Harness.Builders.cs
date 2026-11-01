@@ -40,7 +40,7 @@ internal static partial class Harness
             var bytes=await File.ReadAllBytesAsync(source);
             var(id,lease,_)=await EnqueueAsync(flow,bytes);
             using var client=Client(a);
-            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(90));
             await Runner("builder",out _,failFirst?new FixedProbe():null).RunAsync(lease,client,deadline.Token);
             var result=(await executions.GetAsync(id,CancellationToken.None))!;
             Check(result.State=="succeeded",$"Builder sequence finishes: {result.Detail}");

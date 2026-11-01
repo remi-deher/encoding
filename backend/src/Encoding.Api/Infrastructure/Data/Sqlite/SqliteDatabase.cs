@@ -250,7 +250,8 @@ public sealed class SqliteCommandWrapper : DbCommand
         var command = connection.Inner.CreateCommand();
         command.Transaction = (wrappedTransaction ?? connection.Transaction)?.Inner;
         command.CommandTimeout = connection.Writer.Options.Enabled ? 1 : CommandTimeout;
-        var sql = Translations.GetOrAdd(CommandText, text => { try { return SqliteTranslator.Translate(text); } catch (FormatException exception) { throw new FormatException($"{exception.Message} [SQL: {text}]"); } });
+        var sql = Translations.GetOrAdd(CommandText,
+            text => { try { return SqliteTranslator.Translate(text); } catch (FormatException exception) { throw new FormatException($"{exception.Message} [SQL: {text}]"); } });
         var arrays = SqliteTranslator.ArrayParameters(sql);
         foreach (SqliteParameter parameter in parameters)
         {

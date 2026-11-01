@@ -273,10 +273,12 @@ public sealed class FlowComponentRegistry
             else if (fields.FirstOrDefault(f => f.Type == "record-list" &&
                     (f.ItemFields is null || f.ItemFields.Count == 0 || f.ItemFields.Any(child => child.Type is not ("text" or "number" or "boolean" or "select"))
                     || f.ItemFields.Select(child => child.Id).Distinct().Count() != f.ItemFields.Count
-                    || (f.MinItems ?? 0) < 0 || (f.MaxItems ?? 64) > 64 || (f.MinItems ?? 0) > (f.MaxItems ?? 64))) is { } badList) reason = $"liste « {badList.Id} » invalide (champs d’élément, bornes 0 à 64)";
+                    || (f.MinItems ?? 0) < 0 || (f.MaxItems ?? 64) > 64 || (f.MinItems ?? 0) > (f.MaxItems
+                        ?? 64))) is { } badList) reason = $"liste « {badList.Id} » invalide (champs d’élément, bornes 0 à 64)";
             else if (fields.FirstOrDefault(f => f.Importance is not (null or "basic" or "advanced")
                     || f.Editor is not (null or "languages" or "language" or "node" or "node-group" or "flow-node" or "indices" or "labels" or "artifact" or "font-set" or "resource")
-                    || f.VisibleWhenFieldId is not null && !fields.Any(other => other.Id == f.VisibleWhenFieldId)) is { } badOption) reason = $"champ « {badOption.Id} » : importance, éditeur ou visibleWhenFieldId invalide";
+                    || f.VisibleWhenFieldId is not null
+                        && !fields.Any(other => other.Id == f.VisibleWhenFieldId)) is { } badOption) reason = $"champ « {badOption.Id} » : importance, éditeur ou visibleWhenFieldId invalide";
             else if (fields.FirstOrDefault(f => f.Type is not ("text" or "number" or "boolean" or "select" or "condition-tree" or "script-reference" or "encoding-profile" or "video-encoder" or "record-list")) is { } badType) reason = $"champ « {badType.Id} » : type « {badType.Type} » non pris en charge";
             if (reason is not null) throw new InvalidOperationException($"Descripteur invalide : {component.Id} ({reason}).");
         }

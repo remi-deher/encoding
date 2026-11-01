@@ -41,7 +41,7 @@ public sealed class RuntimeWorkerService(NodeAgentOptions options,WorkerIdentity
                                 }
                             }
                             catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
-                            catch(Exception) { }
+                            catch(Exception exception) { logger.LogDebug(exception, "Claim worker momentanément refusé."); }
                         }
                     }
                 }

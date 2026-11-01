@@ -1,5 +1,5 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
-using System.Data.Common;
 using Encoding.Contracts.Flows;
 using Microsoft.AspNetCore.Http.Features;
 
@@ -16,16 +16,11 @@ public static class FlowScriptEndpoints
         {
             var errors = Validate(request.Draft, allowEmptyCode: true);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var id = Guid.NewGuid();
                 var script = await repository.CreateAsync(id, request.Draft, ct);
                 return Results.Created($"/api/v1/scripts/{id:D}", script);
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un script porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un script porte déjà ce nom." }));
         }).WithName("CreateFlowScript");
         scripts.MapGet("/{id:guid}", async (Guid id, FlowScriptRepository repository, CancellationToken ct) =>
             await repository.GetAsync(id, ct) is { } script ? Results.Ok(script) : Results.NotFound()).WithName("GetFlowScript");
@@ -34,18 +29,13 @@ public static class FlowScriptEndpoints
             var errors = Validate(request.Draft, allowEmptyCode: true);
             if (request.ExpectedRevision < 1) errors["expectedRevision"] = ["Révision de brouillon invalide."];
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var saved = await repository.SaveDraftAsync(id, request, ct);
                 if (saved is not null) return Results.Ok(saved);
                 return await repository.GetAsync(id, ct) is null
                     ? Results.NotFound()
                     : Results.Conflict(new { title = "Le brouillon a été modifié ailleurs. Rechargez-le avant de continuer." });
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un script porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un script porte déjà ce nom." }));
         }).WithName("SaveFlowScriptDraft");
         scripts.MapPost("/{id:guid}/publish", async (Guid id, PublishFlowScriptRequest request, FlowScriptRepository repository, CancellationToken ct) =>
         {
@@ -86,8 +76,7 @@ public static class FlowScriptEndpoints
             catch (System.Text.DecoderFallbackException) { return Results.UnprocessableEntity(new { title = "Le fichier n'est pas un texte UTF-8 valide." }); }
             if (string.IsNullOrWhiteSpace(code)) return Results.UnprocessableEntity(new { title = "Le fichier est vide." });
             var scriptName = FlowScriptFiles.NameOf(name);
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 var existing = (await repository.ListAsync(ct)).FirstOrDefault(item => string.Equals(item.DraftName, scriptName, StringComparison.OrdinalIgnoreCase));
                 if (existing is not null)
                 {
@@ -99,11 +88,7 @@ public static class FlowScriptEndpoints
                 }
                 var created = await repository.CreateAsync(Guid.NewGuid(), new(scriptName, language, "Importé depuis " + Path.GetFileName(name), code), ct);
                 return Results.Created($"/api/v1/scripts/{created!.Script.Id:D}", new { created = true, script = created });
-            }
-            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
-            {
-                return Results.Conflict(new { title = "Un script porte déjà ce nom." });
-            }
+            }, () => Results.Conflict(new { title = "Un script porte déjà ce nom." }));
         }).WithName("ImportFlowScript");
         scripts.MapPost("/{id:guid}/versions/{version:int}/export", async (Guid id, int version, FlowScriptRepository repository, CancellationToken ct) =>
             version < 1 ? Results.BadRequest() : await repository.GetVersionAsync(id, version, ct) is { } item

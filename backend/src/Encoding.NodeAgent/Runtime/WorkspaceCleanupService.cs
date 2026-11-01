@@ -27,8 +27,8 @@ public sealed record WorkspaceRetentionOptions(bool Enabled, TimeSpan Completed,
     /// </summary>
     public bool ShouldDelete(string? state, TimeSpan idle) => state switch
     {
-        "succeeded" or "cancelled" => idle >= Completed,
-        "failed" => idle >= Failed,
+        ExecutionStates.Succeeded or ExecutionStates.Cancelled => idle >= Completed,
+        ExecutionStates.Failed => idle >= Failed,
         null => idle >= Unknown,
         _ => false
     };
@@ -89,7 +89,7 @@ public sealed class WorkspaceCleanupService(NodeAgentOptions options, WorkerIden
                 break;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception) { }
+            catch (Exception exception) { logger.LogDebug(exception, "États d’exécution indisponibles pour le nettoyage des dossiers de travail."); }
         }
         if (!queried) return 0;
 

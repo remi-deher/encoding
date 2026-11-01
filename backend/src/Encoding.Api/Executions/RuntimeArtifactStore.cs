@@ -50,7 +50,8 @@ public sealed class RuntimeArtifactStore(DbDataSource dataSource,IConfiguration 
             await using(var output=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
             {
                 var buffer=new byte[81920];int count;
-                while((count=await input.ReadAsync(buffer,ct))>0) {length+=count;if(length>expectedBytes) throw new InvalidDataException("Artefact trop long.");hash.AppendData(buffer,0,count);await output.WriteAsync(buffer.AsMemory(0,count),ct);}
+                while((count=await input.ReadAsync(buffer,ct))>0) {length+=count;if(length>expectedBytes) throw new InvalidDataException("Artefact trop long.");
+                    hash.AppendData(buffer,0,count);await output.WriteAsync(buffer.AsMemory(0,count),ct);}
                 await output.FlushAsync(ct);output.Flush(true);
             }
             if(length!=expectedBytes||Convert.ToHexStringLower(hash.GetHashAndReset())!=digest) throw new InvalidDataException("Artefact incomplet ou corrompu.");
@@ -112,10 +113,12 @@ public sealed class RuntimeArtifactStore(DbDataSource dataSource,IConfiguration 
             {
                 if (inputPath.StartsWith(Encoding.Contracts.Flows.FlowArtifactReference.Prefix, StringComparison.Ordinal)) return false;
                 inputPath=RuntimeRepository.NormalizePath(inputPath);
-                await using var declared=Sql.Command("SELECT EXISTS(SELECT 1 FROM executions e JOIN execution_work w ON w.execution_id=e.id, json_each(e.flow_definition->'nodes') n WHERE e.id=@id AND w.source_node_id=@actor AND replace(n.value->'configuration'->>'sourceFile',char(92),'/')=@path)",c,tx);
+                await using var declared=Sql.Command("SELECT EXISTS(SELECT 1 FROM executions e JOIN execution_work w ON w.execution_id=e.id, json_each(e.flow_definition->'nodes') n WHERE e.id=@id AND w.source_node_id=@actor AND replace(n.value->'configuration'->>'sourceFile',char(92),'/')=@path)",
+                    c,tx);
                 declared.Parameters.AddWithValue("id",id); declared.Parameters.AddWithValue("actor",actor); declared.Parameters.AddWithValue("path",inputPath);
                 if(!(await declared.ScalarBoolAsync(ct))) return false;
-                await using var bind=Sql.Command("INSERT INTO execution_inputs(execution_id,input_path,sha256) VALUES(@id,@path,@sha) ON CONFLICT(execution_id,input_path) DO UPDATE SET sha256=EXCLUDED.sha256 WHERE execution_inputs.sha256=EXCLUDED.sha256 RETURNING sha256",c,tx);
+                await using var bind=Sql.Command("INSERT INTO execution_inputs(execution_id,input_path,sha256) VALUES(@id,@path,@sha) ON CONFLICT(execution_id,input_path) DO UPDATE SET sha256=EXCLUDED.sha256 WHERE execution_inputs.sha256=EXCLUDED.sha256 RETURNING sha256",
+                    c,tx);
                 bind.Parameters.AddWithValue("id",id); bind.Parameters.AddWithValue("path",inputPath); bind.Parameters.AddWithValue("sha",digest);
                 if(await bind.ExecuteScalarAsync(ct) is null) return false;
             }

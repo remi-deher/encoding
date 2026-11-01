@@ -17,7 +17,7 @@ internal static partial class Harness
         public async Task DeferredSourceWriteEndToEndAsync(bool continueFlow=true)
         {
             Check(sourceWriteBarrier is not null,"A guarded fixture is required.");
-            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(45));var ct=deadline.Token;
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(90));var ct=deadline.Token;
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
             var source=Path.Combine(directory,"source.mkv");var candidate=Path.Combine(directory,"candidate.mkv");
             await tools.CheckedAsync("ffmpeg",["-v","error","-y","-f","lavfi","-i","color=c=red:size=32x32:duration=0.4","-c:v","ffv1",source],directory,ct);

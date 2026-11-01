@@ -9,7 +9,8 @@ public sealed record AiNodeAvailability(Guid NodeId, string Name, IReadOnlyList<
     IReadOnlyDictionary<string, string?>? Models = null, IReadOnlyList<AiModelCatalog>? Catalogs = null,
     IReadOnlyList<AiCredentialStatus>? Credentials = null, IReadOnlyList<string>? Reconnect = null);
 public sealed record AiClusterView(IReadOnlyList<AiNodeAvailability> Nodes);
-public sealed record AiSessionTurn(Guid RequestId, string UserPrompt, string Content, AiUsage? Usage = null, DateTimeOffset? CompletedAt = null, AiTurnModelSelection? Selection = null, Guid? ExecutorNodeId = null);
+public sealed record AiSessionTurn(Guid RequestId, string UserPrompt, string Content, AiUsage? Usage = null, DateTimeOffset? CompletedAt = null,
+    AiTurnModelSelection? Selection = null, Guid? ExecutorNodeId = null);
 public sealed record AiSessionState(string Id, string Provider, string SystemPrompt, IReadOnlyList<AiSessionTurn> Turns,
     Guid? PendingRequest = null, DateTimeOffset? AttemptDeadline = null, AiPrompt? PendingPrompt = null, int Attempt = 0,
     string? Model = null, DateTimeOffset? UpdatedAt = null, string? LastError = null, AiSessionScope? Scope = null,

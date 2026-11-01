@@ -1,5 +1,5 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
-using System.Data.Common;
 using System.Text.RegularExpressions;
 using Encoding.Contracts.Nodes;
 
@@ -22,20 +22,18 @@ public static partial class NodeGroupEndpoints
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try
-            {
+            return await UniqueConflict.GuardAsync(async () => {
                 if (!await repository.SaveAsync(null, request, ct)) return Results.Conflict();
                 var created = (await repository.ListAsync(ct)).FirstOrDefault(g => g.Name == request.Name.Trim());
                 return Results.Created("/api/v1/node-groups/" + created?.Id, created);
-            }
-            catch (DbException e) when (Sql.IsUniqueViolation(e)) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
+            }, () => Results.Conflict(new { title = "Un groupe porte déjà ce nom." }));
         }).WithName("CreateNodeGroup");
         groups.MapPut("/{id:guid}", async (Guid id, SaveNodeGroupRequest request, NodeGroupRepository repository, CancellationToken ct) =>
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try { return await repository.SaveAsync(id, request, ct) ? Results.Ok(await repository.GetAsync(id, ct)) : Results.NotFound(); }
-            catch (DbException e) when (Sql.IsUniqueViolation(e)) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
+            return await UniqueConflict.GuardAsync(async () => { return await repository.SaveAsync(id, request, ct) ? Results.Ok(await repository.GetAsync(id,
+                ct)) : Results.NotFound(); }, () => Results.Conflict(new { title = "Un groupe porte déjà ce nom." }));
         }).WithName("UpdateNodeGroup");
         groups.MapDelete("/{id:guid}", async (Guid id, NodeGroupRepository repository, CancellationToken ct) =>
             await repository.DeleteAsync(id, ct) switch
@@ -75,7 +73,9 @@ public static partial class NodeGroupEndpoints
             && string.IsNullOrWhiteSpace(r.Criteria.OperatingSystem) && string.IsNullOrWhiteSpace(r.Criteria.Architecture)
             && r.Criteria.MinimumMemoryMb is null && (r.Criteria.RequiredToolIds?.Count ?? 0) == 0
             && r.Criteria.MinimumConcurrentTasks is null && r.Criteria.MinimumProcessorCount is null) errors["criteria"] = ["Un groupe automatique doit définir au moins un critère."];
-        if (r.Mode == NodeGroupMode.Manual && (r.Criteria.Roles?.Count > 0 || r.Criteria.OperatingSystem is not null || r.Criteria.Architecture is not null || r.Criteria.MinimumMemoryMb is not null || r.Criteria.RequiredToolIds?.Count > 0 || r.Criteria.MinimumConcurrentTasks is not null || r.Criteria.MinimumProcessorCount is not null)) errors["criteria"] = ["Un groupe manuel ne peut pas définir de critères automatiques."];
+        if (r.Mode == NodeGroupMode.Manual && (r.Criteria.Roles?.Count > 0 || r.Criteria.OperatingSystem is not null || r.Criteria.Architecture is not null
+            || r.Criteria.MinimumMemoryMb is not null || r.Criteria.RequiredToolIds?.Count > 0 || r.Criteria.MinimumConcurrentTasks is not null
+            || r.Criteria.MinimumProcessorCount is not null)) errors["criteria"] = ["Un groupe manuel ne peut pas définir de critères automatiques."];
         if (r.Labels.Count > 128) errors["labels"] = ["Un groupe ne peut pas déclarer plus de 128 étiquettes."];
         foreach (var (key, value) in r.Labels)
             if (!LabelKeyPattern().IsMatch(key) || value?.Length > 256) errors[$"labels.{key}"] = ["Une clé d’étiquette est invalide ou sa valeur dépasse 256 caractères."];

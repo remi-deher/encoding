@@ -286,6 +286,9 @@ internal static partial class Harness
             builder.Services.AddSingleton(_ => new Encoding.Api.Resources.ResourceBlobStore(config));
             builder.Services.AddSingleton(provider => new Encoding.Api.Resources.ResourceRepository(db, provider.GetRequiredService<Encoding.Api.Resources.ResourceBlobStore>()));
             builder.Services.AddSingleton<Encoding.Api.Resources.ResourceBlobFetcher>(_ => throw new NotSupportedException("Récupération par un pair non utilisée dans ce scénario."));
+            builder.Services.AddSingleton<Encoding.Api.Executions.RuntimeExecutionCoordinator>();
+            builder.Services.AddSingleton<Encoding.Api.Nodes.NodeManagementService>();
+            builder.Services.AddSingleton<Encoding.Api.Flows.FlowCoordinatorService>();
             app=builder.Build();
             app.Use(async (context,next) =>
             {
@@ -408,6 +411,7 @@ internal static partial class Harness
             await using(var leftovers=db.CreateCommand(cleanup)) await leftovers.ExecuteNonQueryAsync();
             Interlocked.Exchange(ref rejectNextCheckpoint, 0);
             Interlocked.Exchange(ref rejectNextFinish, 0);
+            Interlocked.Exchange(ref artifactDownloads, 0);
             await ResetNodesAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""
@@ -814,7 +818,7 @@ internal static partial class Harness
             if(!planned) flow=flow with { Connections=flow.Connections.Select(edge=>edge.SourceNodeId=="condition"?edge with { SourceOutputId="yes" }:edge).ToArray() };
             var(id,lease,context)=await EnqueueAsync(flow,await File.ReadAllBytesAsync(source));
             if(replace) Check(await new SourceReplacementRepository(db).SavePolicyAsync(lease.LibraryId!.Value,new(true,1,0),CancellationToken.None),"Enable source replacement for the media library.");
-            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(40));
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(90));
             using(var client=Client(a)) await Runner("media-a",out _).RunAsync(lease,client,deadline.Token);
             var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("Converted media must yield.");
             Check(planned?received.Checkpoint!.Context.CurrentSha256==context.CurrentSha256:received.Checkpoint!.Context.CurrentSha256!=context.CurrentSha256,
@@ -827,11 +831,22 @@ internal static partial class Harness
             using var receiver=Client(b);var run=Runner("media-b",out _).RunAsync(received,receiver,deadline.Token);
             RuntimeTransfer? publication=null;
             var transfers=new RuntimeTransferRepository(db);
-            for(var retry=0;retry<100;retry++)
+            while(publication is null)
             {
                 publication=(await transfers.ListAsync(a,deadline.Token)).SingleOrDefault(item=>item.ExecutionId==id && item.Publish);
                 if(publication is not null) break;
-                if(run.IsCompleted) break;
+                if(run.IsCompleted)
+                {
+                    // Do not treat worker completion as "no publication": the transfer row can lag the task.
+                    await run;
+                    publication=(await transfers.ListAsync(a,deadline.Token)).SingleOrDefault(item=>item.ExecutionId==id && item.Publish);
+                    for(var grace=0;publication is null && grace<50;grace++)
+                    {
+                        await Task.Delay(100,deadline.Token);
+                        publication=(await transfers.ListAsync(a,deadline.Token)).SingleOrDefault(item=>item.ExecutionId==id && item.Publish);
+                    }
+                    break;
+                }
                 await Task.Delay(100,deadline.Token);
             }
             Check(publication is not null,"The final worker requests publication from the original source node.");

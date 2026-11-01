@@ -31,7 +31,8 @@ public sealed class ClusterJoinCollisionRepository(DbDataSource db)
             var suggestion = prefix + "-" + user.Id.ToString("N")[..8];
             var suffix = 0;
             while (!reserved.Add(suggestion)) suggestion = prefix + "-" + (++suffix).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            await using var insert = Sql.Command("INSERT INTO cluster_join_user_collisions(local_user_id,expected_username,host_username,proposed_username,reserved_names,cluster_id) VALUES(@id,@expected,@host,@proposed,@names,@cluster)", c, tx);
+            await using var insert = Sql.Command("INSERT INTO cluster_join_user_collisions(local_user_id,expected_username,host_username,proposed_username,reserved_names,cluster_id) VALUES(@id,@expected,@host,@proposed,@names,@cluster)",
+                c, tx);
             insert.Parameters.AddWithValue("id", user.Id); insert.Parameters.AddWithValue("expected", user.Username);
             insert.Parameters.AddWithValue("host", host.First(other => other.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase)).Username);
             insert.Parameters.AddWithValue("proposed", suggestion); insert.Parameters.AddWithValue("names", JsonSerializer.Serialize(host.Select(account => account.Username)));
@@ -64,7 +65,8 @@ public sealed class ClusterJoinCollisionRepository(DbDataSource db)
         var reserved = JsonSerializer.Deserialize<string[]>(reader.GetString(1)) ?? [];
         await reader.DisposeAsync();
         if (reserved.Contains(username, StringComparer.OrdinalIgnoreCase)) return false;
-        await using var update = Sql.Command("UPDATE users SET username=@name,updated_at=clock_timestamp() WHERE id=@id AND username=@expected AND NOT EXISTS(SELECT 1 FROM users WHERE lower(username)=lower(@name) AND id<>@id)", c, tx);
+        await using var update = Sql.Command("UPDATE users SET username=@name,updated_at=clock_timestamp() WHERE id=@id AND username=@expected AND NOT EXISTS(SELECT 1 FROM users WHERE lower(username)=lower(@name) AND id<>@id)",
+            c, tx);
         update.Parameters.AddWithValue("id", id); update.Parameters.AddWithValue("name", username); update.Parameters.AddWithValue("expected", request.ExpectedUsername);
         if (await update.ExecuteNonQueryAsync(ct) != 1) return false;
         await using var clear = Sql.Command("DELETE FROM cluster_join_user_collisions WHERE local_user_id=@id", c, tx);

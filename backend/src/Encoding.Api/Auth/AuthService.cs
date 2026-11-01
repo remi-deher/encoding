@@ -8,9 +8,12 @@ public enum SetupOutcome { Created, AlreadyConfigured }
 
 public sealed record LoginResult(CurrentUserResponse User, string SessionToken);
 
-/// <summary>Règles métier de l’authentification : politique des identifiants, ouverture et fermeture de session.</summary>
-public sealed partial class AuthService(UserRepository users, AuthOptions options)
+public sealed partial class AuthService(
+    UserRepository users,
+    AuthOptions options,
+    IServiceProvider? services = null)
 {
+    private T? Get<T>() where T : class => services?.GetService(typeof(T)) as T;
     public const int MinimumPasswordLength = 12;
     public const int MaximumPasswordLength = 256;
 
@@ -99,6 +102,49 @@ public sealed partial class AuthService(UserRepository users, AuthOptions option
 
     public Task<bool> ResetPasswordAsync(Guid userId, string newPassword, CancellationToken ct) =>
         users.SetPasswordAsync(userId, PasswordHasher.Hash(newPassword), null, ct);
+
+    public static UserRole ParseRole(string role) => UserRepository.ParseRole(role);
+
+    public Task<IReadOnlyList<UserResponse>> ListUsersAsync(CancellationToken ct) =>
+        users.ListAsync(ct);
+
+    public Task<UserResponse?> CreateUserAsync(string username, string password, UserRole role, CancellationToken ct) =>
+        users.CreateAsync(username.Trim(), PasswordHasher.Hash(password), role, ct);
+
+    public Task<UserChangeResult> UpdateUserAsync(Guid id, UserRole role, bool isActive, CancellationToken ct) =>
+        users.UpdateAsync(id, role, isActive, ct);
+
+    public Task<UserChangeResult> DeleteUserAsync(Guid id, CancellationToken ct) =>
+        users.DeleteAsync(id, ct);
+
+    public async Task<IReadOnlyList<ApiTokenResponse>> ListTokensAsync(CancellationToken ct)
+    {
+        var repo = Get<ApiTokenRepository>();
+        return repo is not null ? await repo.ListAsync(ct) : [];
+    }
+
+    public async Task<(ApiTokenResponse Summary, string Plaintext)> CreateTokenAsync(
+        string name,
+        string role,
+        DateTimeOffset? expiresAt,
+        IReadOnlyList<string>? scopes,
+        CancellationToken ct)
+    {
+        var repo = Get<ApiTokenRepository>() ?? throw new InvalidOperationException("ApiTokenRepository non disponible.");
+        return await repo.CreateTokenAsync(name, role, expiresAt, ct, scopes);
+    }
+
+    public async Task<bool> RevokeTokenAsync(Guid id, CancellationToken ct)
+    {
+        var repo = Get<ApiTokenRepository>();
+        return repo is not null && await repo.RevokeAsync(id, ct);
+    }
+
+    public async Task<bool> DeleteTokenAsync(Guid id, CancellationToken ct)
+    {
+        var repo = Get<ApiTokenRepository>();
+        return repo is not null && await repo.DeleteAsync(id, ct);
+    }
 
     public static byte[] TokenHash(string token) => SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
 }

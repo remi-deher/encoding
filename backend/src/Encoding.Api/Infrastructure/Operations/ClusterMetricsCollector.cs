@@ -2,13 +2,18 @@ using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using Encoding.Api.Nodes;
+using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Infrastructure.Operations;
 
 /// <summary>Construit la page <c>/metrics</c> : état du cluster dans SQLite et mesures du processus local.</summary>
 public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenceOptions presence, IHostEnvironment environment)
 {
-    private static readonly string[] ExecutionStates = ["queued", "running", "cancelling", "succeeded", "failed", "cancelled", "deferred"];
+    private static readonly string[] MetricExecutionStates =
+    [
+        ExecutionStates.Queued, ExecutionStates.Running, ExecutionStates.Cancelling,
+        ExecutionStates.Succeeded, ExecutionStates.Failed, ExecutionStates.Cancelled, ExecutionStates.Deferred
+    ];
     private static readonly string[] BackupStatuses = ["pending", "ready", "failed"];
 
     public async Task<string> CollectAsync(CancellationToken cancellationToken)
@@ -58,25 +63,29 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
             writer.Gauge("encoding_nodes", "Nœuds enrôlés non retirés, par présence.", nodes.GetValueOrDefault(status), ("status", status));
 
         var executions = await Rows(connection, "SELECT state, count(*) FROM executions GROUP BY state", ct);
-        foreach (var state in ExecutionStates)
+        foreach (var state in MetricExecutionStates)
             writer.Gauge("encoding_executions", "Exécutions par état.", executions.GetValueOrDefault(state), ("state", state));
 
         writer.Gauge("encoding_executions_oldest_queued_age_seconds", "Ancienneté de la plus ancienne exécution en file.",
             await Scalar(connection, "SELECT COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - min(queued_at)), 0) FROM executions WHERE state = 'queued'", ct));
         writer.Gauge("encoding_execution_leases_expired", "Exécutions en cours dont le bail a expiré et attendent leur clôture en erreur.",
-            await Scalar(connection, "SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id WHERE e.state IN ('running','cancelling') AND (w.lease_until IS NULL OR w.lease_until <= clock_timestamp())", ct));
+            await Scalar(connection,
+                "SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id WHERE e.state IN ('running','cancelling') AND (w.lease_until IS NULL OR w.lease_until <= clock_timestamp())",
+                ct));
         writer.Gauge("encoding_media_reservations_active", "Médias actuellement réservés par un bail valide.",
             await Scalar(connection, "SELECT count(*) FROM media_reservations WHERE lease_until > clock_timestamp()", ct));
         writer.Gauge("encoding_disk_locks_active", "Disques actuellement verrouillés par une exécution au bail valide.",
             await Scalar(connection, "SELECT count(*) FROM disk_locks WHERE lease_until > clock_timestamp()", ct));
         writer.Gauge("encoding_artifacts_pending_purge", "Exécutions terminées dont les artefacts n’ont pas été purgés.",
-            await Scalar(connection, "SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id WHERE w.artifacts_purged_at IS NULL AND e.state IN ('succeeded','failed','cancelled')", ct));
+            await Scalar(connection,
+                "SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id WHERE w.artifacts_purged_at IS NULL AND e.state IN ('succeeded','failed','cancelled')", ct));
 
         var backups = await Rows(connection, "SELECT status, count(*) FROM flow_backup_jobs GROUP BY status", ct);
         foreach (var status in BackupStatuses)
             writer.Gauge("encoding_flow_backup_jobs", "Sauvegardes de versions de flow par statut.", backups.GetValueOrDefault(status), ("status", status));
         writer.Gauge("encoding_flow_backup_oldest_pending_age_seconds", "Ancienneté de la plus ancienne sauvegarde de flow en attente.",
-            await Scalar(connection, "SELECT COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - min(next_attempt_at)), 0) FROM flow_backup_jobs WHERE status = 'pending' AND next_attempt_at <= clock_timestamp()", ct));
+            await Scalar(connection,
+                "SELECT COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - min(next_attempt_at)), 0) FROM flow_backup_jobs WHERE status = 'pending' AND next_attempt_at <= clock_timestamp()", ct));
 
         var migrations = await DatabaseMigrator.StatusAsync(dataSource, environment.ContentRootPath, ct);
         writer.Gauge("encoding_schema_migrations_applied", "Migrations enregistrées en base.", migrations.Applied);
@@ -91,7 +100,8 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
         writer.Gauge("process_resident_memory_bytes", "Mémoire résidente.", process.WorkingSet64);
         writer.Gauge("dotnet_gc_heap_bytes", "Tas géré actuel.", GC.GetTotalMemory(false));
         for (var generation = 0; generation <= GC.MaxGeneration; generation++)
-            writer.Counter("dotnet_gc_collections_total", "Collections du ramasse-miettes par génération.", GC.CollectionCount(generation), ("generation", generation.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            writer.Counter("dotnet_gc_collections_total", "Collections du ramasse-miettes par génération.", GC.CollectionCount(generation), ("generation",
+                generation.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         writer.Gauge("dotnet_threadpool_threads", "Threads du pool.", ThreadPool.ThreadCount);
         writer.Gauge("dotnet_threadpool_queue_length", "Éléments en attente dans le pool.", ThreadPool.PendingWorkItemCount);
     }
@@ -108,7 +118,8 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
 
     private static void WriteHttp(PrometheusWriter writer)
     {
-        foreach (var (key, stat) in OperationsMetrics.HttpRequests.OrderBy(pair => pair.Key.Route, StringComparer.Ordinal).ThenBy(pair => pair.Key.Method, StringComparer.Ordinal).ThenBy(pair => pair.Key.Status))
+        foreach (var (key, stat) in OperationsMetrics.HttpRequests.OrderBy(pair => pair.Key.Route, StringComparer.Ordinal).ThenBy(pair => pair.Key.Method,
+            StringComparer.Ordinal).ThenBy(pair => pair.Key.Status))
         {
             var labels = new[] { ("method", key.Method), ("route", key.Route), ("status", key.Status.ToString(System.Globalization.CultureInfo.InvariantCulture)) };
             writer.Counter("encoding_http_requests_total", "Requêtes HTTP traitées.", Interlocked.Read(ref stat.Count), labels);

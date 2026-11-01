@@ -57,7 +57,8 @@ public static class AiAssistantEndpoints
             }))
         .AllowAssistantConversation();
 
-        group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, AiClusterTransport transport, AiClusterService cluster, CancellationToken ct) =>
+        group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, AiClusterTransport transport,
+            AiClusterService cluster, CancellationToken ct) =>
             await GuardAsync(async () =>
             {
                 if (await cluster.CoordinatorAsync(request.ConversationId, ct) is { } coordinatorId && coordinatorId != transport.LocalId
@@ -79,7 +80,8 @@ public static class AiAssistantEndpoints
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
 
-        group.MapPost("/requests/{requestId:guid}/cancel", async (Guid requestId, HttpContext http, AiAssistantService service, AiClusterTransport transport, AiClusterService cluster, CancellationToken ct) =>
+        group.MapPost("/requests/{requestId:guid}/cancel", async (Guid requestId, HttpContext http, AiAssistantService service, AiClusterTransport transport,
+            AiClusterService cluster, CancellationToken ct) =>
             await GuardAsync(async () =>
             {
                 var coordinatorId = await cluster.CoordinatorAsync(http.Request.Query["conversationId"].ToString(), ct)

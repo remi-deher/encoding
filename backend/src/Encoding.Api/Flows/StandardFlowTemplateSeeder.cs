@@ -87,7 +87,8 @@ public static class StandardFlowTemplateSeeder
                     var nextVersion = existingVersion + 1;
                     var nextDefinition = currentDefinition with { Version = nextVersion };
                     var nextJson = JsonSerializer.Serialize(nextDefinition, FlowRepository.JsonOptions);
-                    await using (var version = Sql.Command("INSERT INTO flow_versions(flow_id,version,definition,created_at) VALUES(@id,@version,@definition,@timestamp) ON CONFLICT(flow_id,version) DO NOTHING", connection, transaction))
+                    await using (var version = Sql.Command("INSERT INTO flow_versions(flow_id,version,definition,created_at) VALUES(@id,@version,@definition,@timestamp) ON CONFLICT(flow_id,version) DO NOTHING",
+                        connection, transaction))
                     {
                         version.Parameters.AddWithValue("id", existingFlowId);
                         version.Parameters.AddWithValue("version", nextVersion);
@@ -102,7 +103,8 @@ public static class StandardFlowTemplateSeeder
                         flow.Parameters.AddWithValue("timestamp", timestamp);
                         await flow.ExecuteNonQueryAsync(ct);
                     }
-                    await using (var templateUpdate = Sql.Command("UPDATE flow_templates SET source_version=@version,definition=@definition,description=@description WHERE id=@id", connection, transaction))
+                    await using (var templateUpdate = Sql.Command("UPDATE flow_templates SET source_version=@version,definition=@definition,description=@description WHERE id=@id",
+                        connection, transaction))
                     {
                         templateUpdate.Parameters.AddWithValue("id", templateId);
                         templateUpdate.Parameters.AddWithValue("version", nextVersion);
@@ -110,7 +112,8 @@ public static class StandardFlowTemplateSeeder
                         templateUpdate.Parameters.AddWithValue("description", template.Description);
                         await templateUpdate.ExecuteNonQueryAsync(ct);
                     }
-                    await using (var backup = Sql.Command("INSERT INTO flow_backup_jobs(flow_id,version,status,next_attempt_at) VALUES(@id,@version,'pending',@timestamp) ON CONFLICT(flow_id,version) DO NOTHING", connection, transaction))
+                    await using (var backup = Sql.Command("INSERT INTO flow_backup_jobs(flow_id,version,status,next_attempt_at) VALUES(@id,@version,'pending',@timestamp) ON CONFLICT(flow_id,version) DO NOTHING",
+                        connection, transaction))
                     {
                         backup.Parameters.AddWithValue("id", existingFlowId);
                         backup.Parameters.AddWithValue("version", nextVersion);
@@ -138,14 +141,16 @@ public static class StandardFlowTemplateSeeder
             flow.Parameters.AddWithValue("timestamp", timestamp);
             await flow.ExecuteNonQueryAsync(ct);
         }
-        await using (var version = Sql.Command("INSERT INTO flow_versions(flow_id,version,definition,created_at) VALUES(@id,1,@definition,@timestamp) ON CONFLICT(flow_id,version) DO NOTHING", connection, transaction))
+        await using (var version = Sql.Command("INSERT INTO flow_versions(flow_id,version,definition,created_at) VALUES(@id,1,@definition,@timestamp) ON CONFLICT(flow_id,version) DO NOTHING",
+            connection, transaction))
         {
             version.Parameters.AddWithValue("id", sourceFlowId);
             version.Parameters.AddWithValue("definition", SqlKind.Json, json);
             version.Parameters.AddWithValue("timestamp", timestamp);
             await version.ExecuteNonQueryAsync(ct);
         }
-        await using (var backup = Sql.Command("INSERT INTO flow_backup_jobs(flow_id,version,status,next_attempt_at) VALUES(@id,1,'pending',@timestamp) ON CONFLICT(flow_id,version) DO NOTHING", connection, transaction))
+        await using (var backup = Sql.Command("INSERT INTO flow_backup_jobs(flow_id,version,status,next_attempt_at) VALUES(@id,1,'pending',@timestamp) ON CONFLICT(flow_id,version) DO NOTHING",
+            connection, transaction))
         {
             backup.Parameters.AddWithValue("id", sourceFlowId);
             backup.Parameters.AddWithValue("timestamp", timestamp);
@@ -225,7 +230,9 @@ public static class StandardFlowTemplateSeeder
         Add("Uniformiser les sous-titres d’une vidéo", "Applique les règles intégrées aux sous-titres de la copie de travail et conserve les autres pistes.",
             Make("Uniformiser les sous-titres d’une vidéo", "video",
                 new("input", "base", "base-input-video", new { }),
-                new("manage", "subtitles", "subtitles-manage", new { styleProfile = "crunchyroll", convertSrt = true, upgradeAss = true, removeDuplicates = true, inferForced = true, setTitles = true, frenchDefault = true, fontFamily = "Trebuchet MS", fontSize = 23, fontOutline = 2.5, fontMargin = 20 }),
+                new("manage", "subtitles", "subtitles-manage", new { styleProfile = "crunchyroll", convertSrt = true, upgradeAss = true,
+                    removeDuplicates = true, inferForced = true, setTitles = true, frenchDefault = true, fontFamily = "Trebuchet MS", fontSize = 23,
+                    fontOutline = 2.5, fontMargin = 20 }),
                 new("done", "base", "base-complete-flow", new { result = "success", message = "Uniformisation des sous-titres terminée." })));
 
         Add("Actualiser le film dans Radarr", "Actualise les informations du film après le traitement. Requiert une configuration Radarr.",

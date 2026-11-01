@@ -32,4 +32,20 @@ public sealed class BusinessOperationSchemaTests
         Assert.Equal(1000, schema.GetProperty("properties").GetProperty("nodes").GetProperty("maxItems").GetInt32());
         Assert.True(schema.GetProperty("properties").GetProperty("nodes").TryGetProperty("items", out _));
     }
+
+    [Fact]
+    public void MappedAssistantActionsShareDomainWithTheirMcpTools()
+    {
+        foreach (var (assistant, mcp) in BusinessOperationCatalog.AssistantToMcpToolNames)
+        {
+            Assert.True(BusinessOperationCatalog.IsAssistantAction(assistant));
+            if (mcp is null) continue;
+            var tool = BusinessOperationCatalog.FindTool(mcp);
+            Assert.NotNull(tool);
+            var action = BusinessOperationCatalog.Describe().Single(item => item.Name == assistant);
+            Assert.Equal(tool.Domain, action.Domain);
+            Assert.True(BusinessOperationCatalog.TryResolveMcpToolName(assistant, out var resolved));
+            Assert.Equal(mcp, resolved);
+        }
+    }
 }

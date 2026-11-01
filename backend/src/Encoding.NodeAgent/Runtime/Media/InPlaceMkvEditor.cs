@@ -13,7 +13,7 @@ public sealed record InPlaceEditResult(string Status,string Detail,string? NewSh
 /// ou de durée, ou une propriété non appliquée, restaure le fichier d'origine. Une intention écrite avant la modification permet
 /// de trancher une reprise après perte du nœud.
 /// </summary>
-public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
+public sealed class InPlaceMkvEditor(IProcessToolRunner tools)
 {
     public const string IntentName="in-place.json";
     public const string BackupName="before-edit.mkv";
@@ -26,7 +26,8 @@ public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
     {
         var document=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",file],directory,ct)); var root=document.RootElement;
         var tracks=root.GetProperty("tracks").EnumerateArray().Select(t=>t.GetProperty("type").GetString()+":"+t.GetProperty("codec").GetString()).ToArray();
-        var attachments=root.TryGetProperty("attachments",out var a)?a.EnumerateArray().Select(x=>x.GetProperty("file_name").GetString()+":"+x.GetProperty("size").GetInt64()).Order(StringComparer.Ordinal).ToArray():[];
+        var attachments=root.TryGetProperty("attachments",
+            out var a)?a.EnumerateArray().Select(x=>x.GetProperty("file_name").GetString()+":"+x.GetProperty("size").GetInt64()).Order(StringComparer.Ordinal).ToArray():[];
         var chapters=root.TryGetProperty("chapters",out var c)?c.EnumerateArray().Sum(x=>x.TryGetProperty("num_entries",out var n)?n.GetInt32():0):0;
         var duration=root.GetProperty("container").TryGetProperty("properties",out var p)&&p.TryGetProperty("duration",out var d)?d.GetInt64()/1e9:0;
         return (document,new(tracks,attachments,chapters,duration));
@@ -64,7 +65,8 @@ public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
     /// <param name="beforeWrite">Dernier contrôle après la sauvegarde et avant l'écriture ; retourne un message pour refuser, null pour continuer.</param>
     /// <param name="alreadyApplied">Évalué sur la sortie de <c>mkvmerge -J</c> avant modification ; vrai si rien ne doit changer.</param>
     public async Task<InPlaceEditResult> ApplyAsync(string root,string lockDirectory,Guid executionId,string mediaPath,string expectedSha,Func<JsonElement,IReadOnlyList<string>> editArguments,
-        Func<JsonElement,bool> alreadyApplied,Func<JsonElement,string?> expectedChange,string workDirectory,bool keepBackup,Func<bool> stillAuthorized,CancellationToken ct,Func<CancellationToken,Task<string?>>? beforeWrite=null)
+        Func<JsonElement,bool> alreadyApplied,Func<JsonElement,string?> expectedChange,string workDirectory,bool keepBackup,Func<bool> stillAuthorized,
+            CancellationToken ct,Func<CancellationToken,Task<string?>>? beforeWrite=null)
     {
         var original=SafeMediaPaths.Resolve(root,mediaPath);
         if(!string.Equals(Path.GetExtension(original),".mkv",StringComparison.OrdinalIgnoreCase)) throw new InPlaceEditException("Seuls les fichiers MKV peuvent être modifiés sur place.");
@@ -89,7 +91,8 @@ public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
             var directory=BackupDirectory(root,executionId); Directory.CreateDirectory(directory);
             var backup=Path.Combine(directory,BackupName); var size=new FileInfo(original).Length; var modified=File.GetLastWriteTimeUtc(original);
             File.Copy(original,backup,true);
-            if(await SafeMediaPaths.DigestAsync(backup,ct)!=expectedSha) { File.Delete(backup); throw new InPlaceEditException("La sauvegarde de la source est invalide ; la source n'a pas été modifiée."); }
+            if(await SafeMediaPaths.DigestAsync(backup,ct)!=expectedSha) { File.Delete(backup);
+                throw new InPlaceEditException("La sauvegarde de la source est invalide ; la source n'a pas été modifiée."); }
             if(!stillAuthorized()) { File.Delete(backup); throw new InPlaceEditException("Le bail n'est plus valide ; la source n'a pas été modifiée."); }
             // Dernier contrôle juste avant d'écrire : la sauvegarde peut durer, une lecture a pu démarrer entre-temps.
             if(beforeWrite is not null && await beforeWrite(ct) is { } refusal) { File.Delete(backup); throw new InPlaceEditException(refusal+" La source n'a pas été modifiée."); }
@@ -111,7 +114,8 @@ public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
             if(failure is not null)
             {
                 try { await RestoreAsync(original,backup,expectedSha,modified,CancellationToken.None); await WriteIntentAsync(directory,"restored",expectedSha,size,CancellationToken.None); }
-                catch(Exception exception) { throw new InPlaceEditException(failure+" Restauration impossible ("+exception.GetType().Name+") : sauvegarde conservée dans "+SourceReplacer.BackupDirectory+"/"+executionId.ToString("D")+"."); }
+                catch(Exception exception) { throw new InPlaceEditException(failure+" Restauration impossible ("+exception.GetType().Name+") : sauvegarde conservée dans "+SourceReplacer.BackupDirectory+"/"+executionId.ToString("D")+".");
+                    }
                 throw new InPlaceEditException(failure+" Fichier d'origine restauré.");
             }
             var sha=await SafeMediaPaths.DigestAsync(original,ct);

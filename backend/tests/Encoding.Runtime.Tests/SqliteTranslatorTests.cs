@@ -69,4 +69,12 @@ public sealed class SqliteTranslatorTests
         const string plain = "SELECT id, name FROM libraries WHERE id = @id ORDER BY name";
         Assert.Equal(plain, SqliteTranslator.Translate(plain));
     }
+
+    [Fact]
+    public void PlainStatementsBypassTranslation()
+    {
+        const string plain = "SELECT id, name FROM libraries WHERE id = @id ORDER BY name";
+        Assert.False(SqliteTranslator.RequiresTranslation(plain));
+        Assert.Same(plain, SqliteTranslator.Translate(plain));
+    }
 }

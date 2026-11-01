@@ -366,6 +366,15 @@ public sealed class SystemLogMcpTests
         services.AddSingleton(repo);
         services.AddLogging();
         services.AddSingleton<Encoding.Api.Updates.ReleaseService>();
+        services.AddSingleton<McpLibrariesHandler>();
+        services.AddSingleton<McpAuthoringHandler>();
+        services.AddSingleton<McpExecutionsHandler>();
+        services.AddSingleton<McpPluginsHandler>();
+        services.AddSingleton<IMcpDomainHandler>(provider => provider.GetRequiredService<McpLibrariesHandler>());
+        services.AddSingleton<IMcpDomainHandler>(provider => provider.GetRequiredService<McpAuthoringHandler>());
+        services.AddSingleton<IMcpDomainHandler>(provider => provider.GetRequiredService<McpExecutionsHandler>());
+        services.AddSingleton<IMcpDomainHandler>(provider => provider.GetRequiredService<McpPluginsHandler>());
+        services.AddSingleton<McpToolRegistry>();
         services.AddSingleton<McpService>();
 
         var sp = services.BuildServiceProvider();
