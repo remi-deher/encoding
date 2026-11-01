@@ -8,6 +8,7 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
+[Collection(RuntimeCollection.Name)]
 public sealed class FfmpegBuilderTests
 {
     private static JsonElement J(object value)=>JsonSerializer.SerializeToElement(value);

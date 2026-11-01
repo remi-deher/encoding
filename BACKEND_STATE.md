@@ -23,13 +23,13 @@ Bilan de l'audit de séparation des responsabilités et des corrections appliqu�
 
 ### Vérification
 - Compilation sans avertissement.
-- Suite `Encoding.Runtime.Tests` : environ 610 réussis, 17 ignorés, 1 à 3 échecs différents à chaque run complet (`FfmpegBuilderTests`, `RuntimeScenarioTests`, `SourceWriteBarrierTests`), de 29 à 48 s, **tous réussis isolément**. Instables sous charge, non prouvé.
+- Suite `Encoding.Runtime.Tests` (filtre `Category!=Stress`) : **10 runs complets verts d’affilée** après Phase 1 — 612 réussis, 17 ignorés, 0 échec, ~4m50–5m (`timeout 600 dotnet test backend/tests/Encoding.Runtime.Tests --no-build -m:1`). Stabilisation : collection `sqlite` partagée pour `FfmpegBuilderTests` / `SourceWriteBarrierTests`, course `MediaRelayAsync` corrigée, reset `artifactDownloads`, CTS encode réels à 90 s.
 - Le refactor de `RuntimeFlowExecution` n'est couvert que par la suite existante, pas par un scénario bout en bout sur média réel.
 - Les tests de `backend/tests` n'ont pas été reformatés.
 
 ## 2. À corriger (dette réelle)
 
-1. **Tests instables sous charge** : trois tests échouent par intermittence en suite complète. À diagnostiquer (timeouts, ports, concurrence) avant d'en faire un critère de CI.
+1. **Tests instables sous charge** : ~~trois tests intermittents~~ **fait (Phase 1)** — 10× verts.
 2. **Découpage cosmétique** : les classes partielles raccourcissent les fichiers mais gardent la même classe. `McpService`, `AiAssistantService`, `RuntimeRepository`, `ClusterEntityReconciliation`, `MediaActions` ont toujours les mêmes dépendances et le même état partagé.
 3. **`RuntimeFlowExecution`** : les variables locales de l'ancienne méthode sont devenues des champs mutables (`next`, `current`, `context`, `terminal`…) partagés par toutes les étapes. L'état est implicite ; un objet d'état explicite et des étapes qui retournent un résultat seraient plus sûrs.
 4. **SQL à la main dans les dépôts** : requêtes longues en chaînes (`Sql.Command("SELECT …")`) et concaténations ou interpolations (`{filter}`, `{obsolete}`). À auditer pour l'injection et à isoler dans des constantes nommées.
