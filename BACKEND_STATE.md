@@ -9,7 +9,7 @@ Bilan de l'audit de séparation des responsabilités et des corrections appliqu�
 - Interfaces aux frontières utiles : `IProcessToolRunner`, `ILocalPublicationArtifactStore` (+ `TimeProvider` sur le store). Les services MCP/IA ne sont plus un seul monolithe partiel.
 - Aucun fichier source de plus de 600 lignes.
 - Lignes de code de plus de 200 caractères et méthodes de plus de 120 lignes plafonnées par des cliquets (Roslyn pour les méthodes).
-- Plafonds centralisés dans `ArchitectureTests.ArchitectureCeilings` ; analyseurs Roslyn `latest-recommended` sur les projets non-test (`backend/Directory.Build.props`), sans faire échouer le build. `dotnet format --verify-no-changes` reste hors CI.
+- Plafonds centralisés dans `ArchitectureTests.ArchitectureCeilings` ; analyseurs Roslyn `latest-recommended` sur les projets non-test (`backend/Directory.Build.props`). Chaque règle CA recommandée est en suggestion dans `.editorconfig` (le globalconfig du SDK ignore une sévérité de catégorie), donc `-warnaserror` en CI ne les fait pas échouer. `dotnet format --verify-no-changes` reste hors CI.
 
 ### Corrigé dans cette branche
 | Point | Correction | Garde-fou |
