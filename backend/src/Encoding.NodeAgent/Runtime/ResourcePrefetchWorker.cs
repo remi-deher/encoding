@@ -28,7 +28,7 @@ public sealed class ResourcePrefetchWorker(NodeAgentOptions options, WorkerIdent
                             break;
                         }
                         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-                        catch (Exception) { }
+                        catch (Exception exception) { logger.LogDebug(exception, "Préchargement ressource via ce serveur différé."); }
                     }
                 }
             }

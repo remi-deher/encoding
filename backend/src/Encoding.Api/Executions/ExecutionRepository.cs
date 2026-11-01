@@ -15,6 +15,13 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     private static string ActivelyProcessingSql(string executionAlias) =>
         $"({executionAlias}.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until>clock_timestamp() AND {TaskOwnershipRepository.ActiveSql(executionAlias + ".id")})";
 
+    private const string StateFilterPredicate = "e.state=@state";
+    private const string LibraryFilterPredicate = "COALESCE(w.library_id,o.library_id)=@libraryId";
+    private const string NodeFilterPredicate = "e.node_id=@nodeId";
+    private const string SinceFilterPredicate = "e.updated_at>=@since";
+    private const string AfterRevisionFilterSql = " AND revision>@afterRevision";
+    private const string LimitFilterSql = " LIMIT @limit";
+
     private static readonly string Columns = $"""
  e.id,e.media,e.library_name,e.flow_name,e.flow_version,e.state,e.node_id,n.name,
  e.progress,e.detail,e.attempt,e.revision,e.queued_at,e.started_at,e.finished_at,e.updated_at,w.before_metadata::text,w.after_metadata::text,w.published_path
@@ -84,10 +91,11 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
             if (query.Since is { } since)
                 cmd.Parameters.AddWithValue("since", since);
         }
-        if (!string.IsNullOrWhiteSpace(query.State)) predicates.Add("e.state=@state");
-        if (query.LibraryId is not null) predicates.Add("COALESCE(w.library_id,o.library_id)=@libraryId");
-        if (query.NodeId is not null) predicates.Add("e.node_id=@nodeId");
-        if (query.Since is not null) predicates.Add("e.updated_at>=@since");
+        // Allow-listed predicates only — values bind via @params, never concatenate query text from the client.
+        if (!string.IsNullOrWhiteSpace(query.State)) predicates.Add(StateFilterPredicate);
+        if (query.LibraryId is not null) predicates.Add(LibraryFilterPredicate);
+        if (query.NodeId is not null) predicates.Add(NodeFilterPredicate);
+        if (query.Since is not null) predicates.Add(SinceFilterPredicate);
         var whereSql = predicates.Count > 0 ? " WHERE " + string.Join(" AND ", predicates) : string.Empty;
 
         int totalCount;
@@ -140,8 +148,8 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     public async Task<IReadOnlyList<ExecutionEventResponse>> EventsAsync(Guid id, int? afterRevision, int? limit, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
-        var filterSql = afterRevision is not null ? " AND revision>@afterRevision" : string.Empty;
-        var limitSql = limit is not null ? " LIMIT @limit" : string.Empty;
+        var filterSql = afterRevision is not null ? AfterRevisionFilterSql : string.Empty;
+        var limitSql = limit is not null ? LimitFilterSql : string.Empty;
         await using var cmd = Sql.Command($"SELECT id,revision,state,detail,created_at FROM execution_events WHERE execution_id=@id{filterSql} ORDER BY revision{limitSql}", c);
         cmd.Parameters.AddWithValue("id", id);
         if (afterRevision is { } rev) cmd.Parameters.AddWithValue("afterRevision", rev);

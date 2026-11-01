@@ -39,7 +39,7 @@ public sealed class NodeDirectoryBrowserService(
                             }
                         }
                         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
-                        catch (Exception) { }
+                        catch (Exception exception) { logger.LogDebug(exception, "Claim exploration de dossiers momentanément indisponible."); }
                     }
                     if (handled) continue;
                 }

@@ -85,7 +85,7 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
                     await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew", new RuntimeFence(lease.Epoch), probe.Token);
                     refused = true;
                 }
-                catch (Exception) { }
+                catch (Exception probeException) { logger.LogDebug(probeException, "Sonde de renouvellement après conflit indisponible pour {ExecutionId}.", lease.ExecutionId); }
             }
             if (refused)
             {

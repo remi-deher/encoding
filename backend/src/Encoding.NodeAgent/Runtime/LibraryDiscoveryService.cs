@@ -25,7 +25,7 @@ public sealed class LibraryDiscoveryService(NodeAgentOptions options,WorkerIdent
                             if(lease is not null) { await ScanAsync(lease,client,ct); break; }
                         }
                         catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
-                        catch(Exception) { }
+                        catch(Exception exception) { logger.LogDebug(exception, "Claim de scan bibliothèque momentanément indisponible."); }
                     }
                 }
             }

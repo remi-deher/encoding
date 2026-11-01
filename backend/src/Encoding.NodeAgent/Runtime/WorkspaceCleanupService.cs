@@ -89,7 +89,7 @@ public sealed class WorkspaceCleanupService(NodeAgentOptions options, WorkerIden
                 break;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception) { }
+            catch (Exception exception) { logger.LogDebug(exception, "États d’exécution indisponibles pour le nettoyage des dossiers de travail."); }
         }
         if (!queried) return 0;
 

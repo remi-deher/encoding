@@ -38,7 +38,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                                 }
                             }
                             catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
-                            catch(Exception) { }
+                            catch(Exception exception) { logger.LogDebug(exception, "Liste des transferts momentanément indisponible."); }
                         }
                     }
                 }
@@ -217,7 +217,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                     exception is LibraryAccessException ? "permission_denied : " + exception.Message : transfer.Publish ? "publication_failed : Échec de publication du résultat ; confirmation de publication non obtenue." : "source_transfer_failed : Échec de préparation ou de transfert de la source ; traitement interrompu.",
                     null,null),ct);
             }
-            catch(Exception) { }
+            catch(Exception reportException) { logger.LogDebug(reportException, "Signal d’échec source indisponible pour {ExecutionId}.", transfer.ExecutionId); }
         }
         finally { watch.Cancel(); await guard; }
     }

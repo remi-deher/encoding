@@ -144,11 +144,13 @@ public sealed class ClusterTaskMaintenance(DbDataSource db,ClusterPeerIdentitySt
     }
     internal async Task CaptureDirtyAsync(CancellationToken ct)
     {
-        const string obsolete="EXISTS(SELECT 1 FROM executions e WHERE e.id=d.execution_id AND e.finished_at IS NOT NULL) OR EXISTS(SELECT 1 FROM task_ownership o WHERE o.execution_id=d.execution_id AND (o.owner_peer_id<>@local OR o.state NOT IN ('active','frozen')))";
-        await using(var hint=db.CreateCommand($"SELECT EXISTS(SELECT 1 FROM task_checkpoint_dirty d WHERE {obsolete})"))
+        // Fixed predicate reused by SELECT/DELETE — not user input.
+        const string ObsoleteDirtyCheckpointPredicate =
+            "EXISTS(SELECT 1 FROM executions e WHERE e.id=d.execution_id AND e.finished_at IS NOT NULL) OR EXISTS(SELECT 1 FROM task_ownership o WHERE o.execution_id=d.execution_id AND (o.owner_peer_id<>@local OR o.state NOT IN ('active','frozen')))";
+        await using(var hint=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_checkpoint_dirty d WHERE " + ObsoleteDirtyCheckpointPredicate + ")"))
         {
             hint.Parameters.AddWithValue("local",identity.PeerId);
-            if(await hint.ScalarBoolAsync(ct)) {await using var clean=db.CreateCommand($"DELETE FROM task_checkpoint_dirty AS d WHERE {obsolete}");
+            if(await hint.ScalarBoolAsync(ct)) {await using var clean=db.CreateCommand("DELETE FROM task_checkpoint_dirty AS d WHERE " + ObsoleteDirtyCheckpointPredicate);
                 clean.Parameters.AddWithValue("local",identity.PeerId);await clean.ExecuteNonQueryAsync(ct);}
         }
         var ids=new List<Guid>();

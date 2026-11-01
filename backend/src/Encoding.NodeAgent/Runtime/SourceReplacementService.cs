@@ -33,7 +33,7 @@ public sealed class SourceReplacementService(NodeAgentOptions options,WorkerIden
                             foreach(var task in await client.GetAsync<RuntimeReplacementTask[]>("replacements",ct)) {handled=true;await HandleAsync(task,client,ct);}
                         }
                         catch(OperationCanceledException) when(ct.IsCancellationRequested) { throw; }
-                        catch(Exception) { }
+                        catch(Exception exception) { logger.LogDebug(exception, "Claim ou liste de remplacement momentanément indisponible."); }
                     }
                 }
             }

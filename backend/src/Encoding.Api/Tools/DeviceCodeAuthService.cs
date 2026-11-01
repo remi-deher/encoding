@@ -361,7 +361,11 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         await session.InputGate.WaitAsync(ct);
         try
         {
-            if (session.State != "pending" || !session.Prompt.Task.IsCompletedSuccessfully || !session.Prompt.Task.Result.RequiresInput)
+            // Prompt.Task is completed here — read the result without blocking an incomplete awaiter.
+            if (session.State != "pending" || !session.Prompt.Task.IsCompletedSuccessfully)
+                throw new InvalidOperationException("La connexion Claude n’attend plus de code.");
+            var prompt = session.Prompt.Task.GetAwaiter().GetResult();
+            if (!prompt.RequiresInput)
                 throw new InvalidOperationException("La connexion Claude n’attend plus de code.");
             if (session.InputSubmitted) throw new InvalidOperationException("Un code a déjà été transmis à Claude.");
             if (session.Process is null) throw new InvalidOperationException("La session Claude n’accepte plus de code.");

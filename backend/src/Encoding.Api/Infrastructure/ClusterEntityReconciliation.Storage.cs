@@ -50,7 +50,8 @@ public sealed partial class ClusterEntityReconciliation
             ? "last_seen_at = CASE WHEN cluster_nodes.last_seen_at < excluded.last_seen_at THEN excluded.last_seen_at ELSE cluster_nodes.last_seen_at END"
             : $"{column}=excluded.{column}");
         var onConflict = table.Immutable ? "DO NOTHING" : "DO UPDATE SET " + string.Join(",", updates);
-        var sql = $"INSERT INTO {table.Name} ({string.Join(",", table.Columns)}) SELECT {string.Join(",", expressions)} WHERE true ON CONFLICT ({string.Join(",", table.KeyColumns)}) {onConflict}";
+        var sql = "INSERT INTO " + table.Name + " (" + string.Join(",", table.Columns) + ") SELECT "
+            + string.Join(",", expressions) + " WHERE true ON CONFLICT (" + string.Join(",", table.KeyColumns) + ") " + onConflict;
         await using var command = Sql.Command(sql, connection, transaction);
         command.Parameters.AddWithValue("row", JsonKind(localRow));
         foreach (var column in table.BinaryColumns)
@@ -171,7 +172,9 @@ public sealed partial class ClusterEntityReconciliation
             await Encoding.Api.Libraries.LibraryRepository.DeleteWithHistoryAsync(connection, transaction, Guid.Parse(JsonNode.Parse(keyJson)!["id"]!.GetValue<string>()), ct);
             return;
         }
-        var sql = $"DELETE FROM {table.Name} WHERE {string.Join(" AND ", table.KeyColumns.Select(column => column + " = json_extract(@key, '$." + column + "')"))}";
+        // Schema metadata only (EntityTable), never caller-supplied identifiers.
+        var sql = "DELETE FROM " + table.Name + " WHERE " + string.Join(" AND ",
+            table.KeyColumns.Select(column => column + " = json_extract(@key, '$." + column + "')"));
         await using var command = Sql.Command(sql, connection, transaction);
         command.Parameters.AddWithValue("key", keyJson);
         await command.ExecuteNonQueryAsync(ct);
@@ -205,7 +208,8 @@ public sealed partial class ClusterEntityReconciliation
         CancellationToken ct, IReadOnlyCollection<string>? keys = null)
     {
         var states = new Dictionary<string, EntityState>(StringComparer.Ordinal);
-        var filter = keys is null ? "" : " AND entity_key IN(SELECT value FROM json_each(@keys))";
+        const string EntityKeyInKeysFilter = " AND entity_key IN(SELECT value FROM json_each(@keys))";
+        var filter = keys is null ? "" : EntityKeyInKeysFilter;
         await using var command = Sql.Command("SELECT entity_key,fingerprint,occurred_at,origin_id,sequence,is_deleted FROM cluster_sync_entities WHERE entity_type=@type" + filter,
             connection, transaction);
         command.Parameters.AddWithValue("type", type);

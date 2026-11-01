@@ -128,6 +128,30 @@ public sealed class ArchitectureTests
         Assert.True(stale.Length == 0, "Retirer de OversizedFileCeilings : " + string.Join(", ", stale));
     }
 
+    // Dépôts audités Phase 2 : pas d'interpolation de fragments SQL nommés filter/where/table/obsolete.
+    private static readonly string[] SqlFilterAuditFiles =
+    [
+        "Encoding.Api/Resources/ResourceRepository.cs",
+        "Encoding.Api/Executions/ExecutionRepository.cs",
+        "Encoding.Api/Executions/ClusterTaskMaintenance.cs",
+        "Encoding.Api/Infrastructure/ClusterEntityReconciliation.Storage.cs",
+    ];
+
+    [Fact]
+    public void AuditedRepositoriesDoNotInterpolateFreeFormSqlFilters()
+    {
+        // Exact fragment names only ({table}=@id, {filter}, {obsolete}) — not {whereSql}/{table.Name}.
+        var pattern = new Regex(@"\$""(?:[^""]|"""")*\{(?:filter|where|table|obsolete)\}", RegexOptions.IgnoreCase);
+        var offenders = SqlFilterAuditFiles
+            .Select(relative => Path.Combine(SourceRoot, relative))
+            .Where(File.Exists)
+            .Where(path => pattern.IsMatch(File.ReadAllText(path)))
+            .Select(Relative)
+            .ToArray();
+        Assert.True(offenders.Length == 0,
+            "Fragments SQL dynamiques non allow-listés (utiliser des constantes + @params) : " + string.Join(", ", offenders));
+    }
+
     // Les lignes restantes sont des littéraux longs (SQL, textes) ; le total ne doit pas augmenter.
     private const int MaxLongLines = 227;
 

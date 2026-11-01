@@ -32,9 +32,9 @@ Bilan de l'audit de séparation des responsabilités et des corrections appliqu�
 1. **Tests instables sous charge** : ~~trois tests intermittents~~ **fait (Phase 1)** — 10× verts.
 2. **Découpage cosmétique** : les classes partielles raccourcissent les fichiers mais gardent la même classe. `McpService`, `AiAssistantService`, `RuntimeRepository`, `ClusterEntityReconciliation`, `MediaActions` ont toujours les mêmes dépendances et le même état partagé.
 3. **`RuntimeFlowExecution`** : les variables locales de l'ancienne méthode sont devenues des champs mutables (`next`, `current`, `context`, `terminal`…) partagés par toutes les étapes. L'état est implicite ; un objet d'état explicite et des étapes qui retournent un résultat seraient plus sûrs.
-4. **SQL à la main dans les dépôts** : requêtes longues en chaînes (`Sql.Command("SELECT …")`) et concaténations ou interpolations (`{filter}`, `{obsolete}`). À auditer pour l'injection et à isoler dans des constantes nommées.
-5. **Gestion d'erreurs large** : 97 fichiers contiennent `catch (Exception`. Vérifier qu'aucun n'avale une erreur qui doit faire échouer une tâche ou une publication.
-6. **Appels bloquants** : 7 occurrences de `.Result` ou `GetAwaiter().GetResult()` à examiner.
+4. **SQL à la main dans les dépôts** : ~~interpolations `{filter}`/`{obsolete}`/`{table}=@id`~~ **fait (Phase 2)** sur `ResourceRepository`, `ExecutionRepository`, `ClusterTaskMaintenance`, `ClusterEntityReconciliation.Storage` — constantes / concat schema-only + cliquet `AuditedRepositoriesDoNotInterpolateFreeFormSqlFilters`. Les `Sql.Command` longs restent (hors scope).
+5. **Gestion d'erreurs large** : ~~catch vides silencieux sur worker/publish/replace/cleanup~~ **fait (Phase 2)** — log Debug/Warning. **Catch critiques restants acceptés** : boucles heartbeat / claim multi-URL (déjà loguées au niveau supérieur), sondes matérielles / discovery (Debug), `ClusterReconciliationService` (déjà Warning). Compteur « 97 fichiers » abandonné au profit de cette liste.
+6. **Appels bloquants** : **fait (Phase 2, audit)** — conserver `GetAwaiter().GetResult()` ADO.NET dans `SqliteDatabase` / `TransactionReader` (API sync `DbConnection`). `AiAssistantEndpoints.forwarded.Result` = propriété de réponse, pas `Task.Result`. `DeviceCodeAuthService` / `SqliteWriter` : lecture après `IsCompletedSuccessfully` uniquement.
 7. **Documentation** : mettre à jour la fiche de domaine `runtime` (nouvelle organisation de l'exécution) et vérifier `open-questions.md`.
 
 ## 3. Pistes d'amélioration
