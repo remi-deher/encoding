@@ -18,7 +18,7 @@ public sealed class PluginLaunch
 }
 
 /// <summary>Third party implementations run as separate child processes with a versioned JSON envelope.</summary>
-public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration configuration,NodeAgentOptions options)
+public sealed class PluginProcessHost(IProcessToolRunner processes,IConfiguration configuration,NodeAgentOptions options)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private const int MaxVariableChanges=64, MaxVariableNameLength=128, MaxVariableBytes=256*1024, MaxDetailLength=4096, MaxErrorLength=400, MaxFingerprintedFiles=5000;

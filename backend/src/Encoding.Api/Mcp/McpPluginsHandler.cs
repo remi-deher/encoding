@@ -19,9 +19,61 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Mcp;
 
-public sealed partial class McpService
+public sealed class McpPluginsHandler(
+    FlowComponentRegistry components,
+    PluginConfigurationRepository pluginConfigurations,
+    PluginConnectionTester pluginTester,
+    FlowRepository flows,
+    SystemLogRingBuffer ringBuffer,
+    SystemLogRepository systemLogs,
+    Encoding.Api.Updates.ReleaseService releases)
+    : IMcpDomainHandler
 {
-    private McpCallToolResult ToolListPlugins()
+    private static JsonSerializerOptions JsonOptions => McpToolHelpers.JsonOptions;
+
+    private static McpCallToolResult Invalid(string message) => McpToolHelpers.Invalid(message);
+    private static McpCallToolResult Denied(string message) => McpToolHelpers.Denied(message);
+    private static bool TryGuid(JsonElement args, string name, out Guid value) => McpToolHelpers.TryGuid(args, name, out value);
+    private static bool TryInt(JsonElement args, string name, out int value) => McpToolHelpers.TryInt(args, name, out value);
+    private static bool TryDeserialize<T>(JsonElement args, out T value) where T : class => McpToolHelpers.TryDeserialize(args, out value);
+
+    public IReadOnlyCollection<string> ToolNames { get; } =
+    [
+        "list_plugins",
+        "get_plugin_configuration",
+        "save_plugin_configuration",
+        "test_plugin_connection",
+        "get_flow_plugin_configuration",
+        "save_flow_plugin_configuration",
+        "list_media_tools",
+        "get_media_tool_info",
+        "validate_tool_definition",
+        "validate_plugin_manifest",
+        "get_system_logs",
+        "get_version",
+        "get_updates"
+    ];
+
+    public async Task<McpCallToolResult> HandleAsync(string toolName, JsonElement arguments, bool isAdmin, CancellationToken ct) =>
+        toolName switch
+        {
+            "list_plugins" => ToolListPlugins(),
+            "get_plugin_configuration" => await ToolGetPluginConfigurationAsync(arguments, ct),
+            "save_plugin_configuration" => await ToolSavePluginConfigurationAsync(arguments, isAdmin, ct),
+            "test_plugin_connection" => await ToolTestPluginConnectionAsync(arguments, ct),
+            "get_flow_plugin_configuration" => await ToolGetFlowPluginConfigurationAsync(arguments, ct),
+            "save_flow_plugin_configuration" => await ToolSaveFlowPluginConfigurationAsync(arguments, isAdmin, ct),
+            "list_media_tools" => ToolListMediaTools(),
+            "get_media_tool_info" => ToolGetMediaToolInfo(arguments),
+            "validate_tool_definition" => ToolValidateToolDefinition(arguments),
+            "validate_plugin_manifest" => ToolValidatePluginManifest(arguments),
+            "get_system_logs" => await ToolGetSystemLogsAsync(arguments, ct),
+            "get_version" => ToolGetVersion(),
+            "get_updates" => await ToolGetUpdatesAsync(ct),
+            _ => McpCallToolResult.Text($"Outil introuvable : '{toolName}'", isError: true)
+        };
+
+    public McpCallToolResult ToolListPlugins()
     {
         var list = components.Plugins.Select(p => new
         {
@@ -43,7 +95,7 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetPluginConfigurationAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetPluginConfigurationAsync(JsonElement arguments, CancellationToken ct)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("pluginId", out var idProp) || idProp.GetString() is not { Length: > 0 } pluginId)
             return McpCallToolResult.Text("Paramètre 'pluginId' requis.", isError: true);
@@ -56,7 +108,7 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(config, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolSavePluginConfigurationAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolSavePluginConfigurationAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la configuration des plugins requiert le rôle administrateur.", isError: true);
@@ -92,7 +144,7 @@ public sealed partial class McpService
             : McpCallToolResult.Text("Échec d'enregistrement de la configuration.", isError: true);
     }
 
-    private async Task<McpCallToolResult> ToolTestPluginConnectionAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolTestPluginConnectionAsync(JsonElement arguments, CancellationToken ct)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("pluginId", out var idProp) || idProp.GetString() is not { Length: > 0 } pluginId)
             return McpCallToolResult.Text("Paramètre 'pluginId' requis.", isError: true);
@@ -114,7 +166,7 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(testResult, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetFlowPluginConfigurationAsync(JsonElement args, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetFlowPluginConfigurationAsync(JsonElement args, CancellationToken ct)
     {
         if (!TryGuid(args, "flowId", out var flowId) || !args.TryGetProperty("pluginId", out var pluginValue)
             || pluginValue.ValueKind != JsonValueKind.String) return Invalid("Paramètres 'flowId' et 'pluginId' requis.");
@@ -126,7 +178,7 @@ public sealed partial class McpService
         return configuration is null ? Invalid("Flow introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(configuration, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolSaveFlowPluginConfigurationAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolSaveFlowPluginConfigurationAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La configuration d’un plugin dans un flow exige le rôle administrateur.");
         if (!TryGuid(args, "flowId", out var flowId) || !args.TryGetProperty("pluginId", out var pluginValue)
@@ -146,7 +198,7 @@ public sealed partial class McpService
 
     // --- 8. OUTILS MÉDIA & VALIDATION IA ---
 
-    private McpCallToolResult ToolListMediaTools()
+    public McpCallToolResult ToolListMediaTools()
     {
         var tools = new object[]
         {
@@ -232,7 +284,7 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(tools, JsonOptions));
     }
 
-    private McpCallToolResult ToolGetMediaToolInfo(JsonElement arguments)
+    public McpCallToolResult ToolGetMediaToolInfo(JsonElement arguments)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("toolId", out var idProp) || idProp.GetString() is not { Length: > 0 } toolId)
             return McpCallToolResult.Text("Paramètre 'toolId' requis.", isError: true);
@@ -326,7 +378,7 @@ public sealed partial class McpService
             : McpCallToolResult.Text($"Outil '{toolId}' non répertorié ou aucune documentation spécifique disponible.", isError: true);
     }
 
-    private McpCallToolResult ToolValidateToolDefinition(JsonElement arguments)
+    public McpCallToolResult ToolValidateToolDefinition(JsonElement arguments)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("definition", out var defProp) || defProp.ValueKind != JsonValueKind.Object)
             return McpCallToolResult.Text("Paramètre 'definition' (objet JSON décrivant tool.json) requis.", isError: true);
@@ -391,7 +443,7 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(response, JsonOptions), isError: !isValid);
     }
 
-    private McpCallToolResult ToolValidatePluginManifest(JsonElement arguments)
+    public McpCallToolResult ToolValidatePluginManifest(JsonElement arguments)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("manifest", out var manProp) || manProp.ValueKind != JsonValueKind.Object)
             return McpCallToolResult.Text("Paramètre 'manifest' (objet JSON décrivant plugin.json) requis.", isError: true);
@@ -476,7 +528,7 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions), isError: !isValid);
     }
 
-    private async Task<McpCallToolResult> ToolGetSystemLogsAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetSystemLogsAsync(JsonElement arguments, CancellationToken ct)
     {
         var minLevelStr = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("min_level", out var mlProp)
             ? mlProp.GetString()
@@ -528,4 +580,10 @@ public sealed partial class McpService
 
         return McpCallToolResult.Text(JsonSerializer.Serialize(inMemory, JsonOptions));
     }
+
+    public McpCallToolResult ToolGetVersion() =>
+        McpCallToolResult.Text(JsonSerializer.Serialize(new { version = releases.Installed.Version, commit = releases.Installed.Commit }, JsonOptions));
+
+    public async Task<McpCallToolResult> ToolGetUpdatesAsync(CancellationToken ct) =>
+        McpCallToolResult.Text(JsonSerializer.Serialize(await releases.GetUpdatesAsync(ct), JsonOptions));
 }

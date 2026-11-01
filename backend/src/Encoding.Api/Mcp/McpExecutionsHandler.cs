@@ -19,16 +19,69 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Mcp;
 
-public sealed partial class McpService
+public sealed class McpExecutionsHandler(
+    ExecutionRepository executions,
+    FlowRepository flows,
+    FlowComponentRegistry components,
+    FlowDefinitionValidator validator,
+    NodeRepository nodes,
+    NodePresenceOptions presenceOptions)
+    : IMcpDomainHandler
 {
-    private async Task<McpCallToolResult> ToolGetExecutionAsync(JsonElement args, CancellationToken ct)
+    private static JsonSerializerOptions JsonOptions => McpToolHelpers.JsonOptions;
+
+    private static McpCallToolResult Invalid(string message) => McpToolHelpers.Invalid(message);
+    private static McpCallToolResult Denied(string message) => McpToolHelpers.Denied(message);
+    private static bool TryGuid(JsonElement args, string name, out Guid value) => McpToolHelpers.TryGuid(args, name, out value);
+    private static bool TryInt(JsonElement args, string name, out int value) => McpToolHelpers.TryInt(args, name, out value);
+    private static bool TryDeserialize<T>(JsonElement args, out T value) where T : class => McpToolHelpers.TryDeserialize(args, out value);
+
+    public IReadOnlyCollection<string> ToolNames { get; } =
+    [
+        "list_nodes",
+        "get_execution",
+        "get_execution_events",
+        "get_execution_pipeline",
+        "cancel_execution",
+        "retry_execution",
+        "resume_execution",
+        "get_flow_schema",
+        "list_flows",
+        "get_flow",
+        "create_flow",
+        "clone_flow",
+        "delete_flow",
+        "validate_script_draft"
+    ];
+
+    public async Task<McpCallToolResult> HandleAsync(string toolName, JsonElement arguments, bool isAdmin, CancellationToken ct) =>
+        toolName switch
+        {
+            "list_nodes" => await ToolListNodesAsync(ct),
+            "get_execution" => await ToolGetExecutionAsync(arguments, ct),
+            "get_execution_events" => await ToolGetExecutionEventsAsync(arguments, ct),
+            "get_execution_pipeline" => await ToolGetExecutionPipelineAsync(arguments, ct),
+            "cancel_execution" => await ToolCancelExecutionAsync(arguments, isAdmin, ct),
+            "retry_execution" => await ToolRetryExecutionAsync(arguments, isAdmin, ct),
+            "resume_execution" => await ToolResumeExecutionAsync(arguments, isAdmin, ct),
+            "get_flow_schema" => ToolGetFlowSchema(),
+            "list_flows" => await ToolListFlowsAsync(ct),
+            "get_flow" => await ToolGetFlowAsync(arguments, ct),
+            "create_flow" => await ToolCreateFlowAsync(arguments, isAdmin, ct),
+            "clone_flow" => await ToolCloneFlowAsync(arguments, isAdmin, ct),
+            "delete_flow" => await ToolDeleteFlowAsync(arguments, isAdmin, ct),
+            "validate_script_draft" => ToolValidateScriptDraft(arguments),
+            _ => McpCallToolResult.Text($"Outil introuvable : '{toolName}'", isError: true)
+        };
+
+    public async Task<McpCallToolResult> ToolGetExecutionAsync(JsonElement args, CancellationToken ct)
     {
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
         var result = await executions.GetAsync(id, ct);
         return result is null ? Invalid("Exécution introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetExecutionEventsAsync(JsonElement args, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetExecutionEventsAsync(JsonElement args, CancellationToken ct)
     {
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
         if (await executions.GetAsync(id, ct) is null) return Invalid("Exécution introuvable.");
@@ -37,14 +90,14 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(await executions.EventsAsync(id, after, limit, ct), JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetExecutionPipelineAsync(JsonElement args, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetExecutionPipelineAsync(JsonElement args, CancellationToken ct)
     {
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
         if (await executions.GetAsync(id, ct) is null) return Invalid("Exécution introuvable.");
         return McpCallToolResult.Text(JsonSerializer.Serialize(await executions.PipelineAsync(id, ct), JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolCancelExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolCancelExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("L’annulation d’une exécution exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
@@ -52,7 +105,7 @@ public sealed partial class McpService
         return await executions.CancelAsync(id, ct, revision) ? McpCallToolResult.Text("Annulation demandée.") : Invalid("Exécution introuvable ou non annulable dans cet état.");
     }
 
-    private async Task<McpCallToolResult> ToolRetryExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolRetryExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La relance d’une exécution exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
@@ -61,7 +114,7 @@ public sealed partial class McpService
             JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolResumeExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolResumeExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La reprise d’une exécution exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
@@ -71,7 +124,7 @@ public sealed partial class McpService
             : Invalid("Reprise impossible : seule une exécution annulée sans reprise précédente peut être relancée.");
     }
 
-    private McpCallToolResult ToolGetFlowSchema()
+    public McpCallToolResult ToolGetFlowSchema()
     {
         var available = components.Plugins.SelectMany(p => p.Components.Select(c => new
         {
@@ -113,13 +166,13 @@ public sealed partial class McpService
         return McpCallToolResult.Text(JsonSerializer.Serialize(response, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolListFlowsAsync(CancellationToken ct)
+    public async Task<McpCallToolResult> ToolListFlowsAsync(CancellationToken ct)
     {
         var list = await flows.ListAsync(ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetFlowAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetFlowAsync(JsonElement arguments, CancellationToken ct)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("id", out var idProp) || !idProp.TryGetGuid(out var id))
             return McpCallToolResult.Text("Paramètre 'id' (UUID valide) requis.", isError: true);
@@ -133,7 +186,7 @@ public sealed partial class McpService
         return McpCallToolResult.Text($"Flow introuvable avec l'ID {id}.", isError: true);
     }
 
-    private async Task<McpCallToolResult> ToolCreateFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolCreateFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la création de flow requiert le rôle administrateur.", isError: true);
@@ -184,7 +237,7 @@ public sealed partial class McpService
         }
     }
 
-    private async Task<McpCallToolResult> ToolCloneFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolCloneFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : le clonage de flow requiert le rôle administrateur.", isError: true);
@@ -207,7 +260,7 @@ public sealed partial class McpService
         }, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolDeleteFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolDeleteFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la suppression de flow requiert le rôle administrateur.", isError: true);
@@ -228,13 +281,13 @@ public sealed partial class McpService
         };
     }
 
-    private async Task<McpCallToolResult> ToolListNodesAsync(CancellationToken ct)
+    public async Task<McpCallToolResult> ToolListNodesAsync(CancellationToken ct)
     {
         var list = await nodes.ListAsync(presenceOptions.OfflineAfter, ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
     }
 
-    private McpCallToolResult ToolValidateScriptDraft(JsonElement args)
+    public McpCallToolResult ToolValidateScriptDraft(JsonElement args)
     {
         if (args.ValueKind != JsonValueKind.Object) return Invalid("Objet brouillon requis.");
         var errors = new Dictionary<string, string[]>();
@@ -247,33 +300,5 @@ public sealed partial class McpService
         if (description is null || description.Length > 1000) errors["description"] = ["La description est obligatoire et limitée à 1 000 caractères."];
         if (code is null || code.Length > 200000) errors["code"] = ["Le code est obligatoire et limité à 200 000 caractères."];
         return McpCallToolResult.Text(JsonSerializer.Serialize(new { valid = errors.Count == 0, errors }, JsonOptions));
-    }
-
-    private static McpCallToolResult Invalid(string message) => McpCallToolResult.Text(message, isError: true);
-    private static McpCallToolResult Denied(string message) => McpCallToolResult.Text("Permission refusée : " + message, isError: true);
-    private static bool TryGuid(JsonElement args, string name, out Guid value)
-    {
-        value = Guid.Empty;
-        return args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var item)
-            && item.ValueKind == JsonValueKind.String && Guid.TryParse(item.GetString(), out value) && value != Guid.Empty;
-    }
-    private static bool TryInt(JsonElement args, string name, out int value)
-    {
-        value = 0;
-        return args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var item)
-            && item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out value);
-    }
-    private static bool TryDeserialize<T>(JsonElement args, out T value) where T : class
-    {
-        try
-        {
-            value = args.Deserialize<T>(JsonOptions)!;
-            return value is not null;
-        }
-        catch (JsonException)
-        {
-            value = null!;
-            return false;
-        }
     }
 }

@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Encoding.NodeAgent.Runtime.Media;
 
-public sealed class MediaScanner(ProcessToolRunner tools)
+public sealed class MediaScanner(IProcessToolRunner tools)
 {
     public async Task<JsonElement> ScanAsync(string path,CancellationToken ct)
     {
@@ -33,7 +33,7 @@ public sealed class MediaScanner(ProcessToolRunner tools)
     public async Task DecodeAsync(string candidate,string mediaType,CancellationToken ct,bool decodeVideo=true,double? duration=null)
     {
         if(mediaType is not ("video" or "music")) return;
-        var ffmpeg = ProcessToolRunner.Find("ffmpeg") ?? throw new IOException("Outil indisponible : ffmpeg.");
+        var ffmpeg = tools.Find("ffmpeg") ?? throw new IOException("Outil indisponible : ffmpeg.");
         var dir = Path.GetDirectoryName(candidate)!;
 
         if (mediaType == "video" && !decodeVideo)

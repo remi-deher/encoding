@@ -19,9 +19,78 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Mcp;
 
-public sealed partial class McpService
+public sealed class McpAuthoringHandler(
+    ExecutionRepository executions,
+    FlowScriptRepository scripts,
+    ResourceRepository resources,
+    EncodingProfileRepository profiles,
+    FlowTemplateRepository templates,
+    FlowComponentPackRepository componentPacks)
+    : IMcpDomainHandler
 {
-    private async Task<McpCallToolResult> ToolListExecutionsAsync(JsonElement arguments, CancellationToken ct)
+    private static JsonSerializerOptions JsonOptions => McpToolHelpers.JsonOptions;
+
+    private static McpCallToolResult Invalid(string message) => McpToolHelpers.Invalid(message);
+    private static McpCallToolResult Denied(string message) => McpToolHelpers.Denied(message);
+    private static bool TryGuid(JsonElement args, string name, out Guid value) => McpToolHelpers.TryGuid(args, name, out value);
+    private static bool TryInt(JsonElement args, string name, out int value) => McpToolHelpers.TryInt(args, name, out value);
+    private static bool TryDeserialize<T>(JsonElement args, out T value) where T : class => McpToolHelpers.TryDeserialize(args, out value);
+
+    public IReadOnlyCollection<string> ToolNames { get; } =
+    [
+        "list_executions",
+        "list_scripts",
+        "get_script",
+        "save_script",
+        "publish_script",
+        "delete_script",
+        "list_resources",
+        "get_resource",
+        "create_resource",
+        "update_resource",
+        "add_resource_version",
+        "delete_resource",
+        "list_encoding_profiles",
+        "get_encoding_profile",
+        "save_encoding_profile",
+        "publish_encoding_profile",
+        "list_templates",
+        "get_template",
+        "create_template_from_flow",
+        "list_component_packs",
+        "get_component_pack",
+        "create_component_pack_from_flow"
+    ];
+
+    public async Task<McpCallToolResult> HandleAsync(string toolName, JsonElement arguments, bool isAdmin, CancellationToken ct) =>
+        toolName switch
+        {
+            "list_executions" => await ToolListExecutionsAsync(arguments, ct),
+            "list_scripts" => await ToolListScriptsAsync(ct),
+            "get_script" => await ToolGetScriptAsync(arguments, ct),
+            "save_script" => await ToolSaveScriptAsync(arguments, isAdmin, ct),
+            "publish_script" => await ToolPublishScriptAsync(arguments, isAdmin, ct),
+            "delete_script" => await ToolDeleteScriptAsync(arguments, isAdmin, ct),
+            "list_resources" => await ToolListResourcesAsync(ct),
+            "get_resource" => await ToolGetResourceAsync(arguments, ct),
+            "create_resource" => await ToolCreateResourceAsync(arguments, isAdmin, ct),
+            "update_resource" => await ToolUpdateResourceAsync(arguments, isAdmin, ct),
+            "add_resource_version" => await ToolAddResourceVersionAsync(arguments, isAdmin, ct),
+            "delete_resource" => await ToolDeleteResourceAsync(arguments, isAdmin, ct),
+            "list_encoding_profiles" => await ToolListEncodingProfilesAsync(ct),
+            "get_encoding_profile" => await ToolGetEncodingProfileAsync(arguments, ct),
+            "save_encoding_profile" => await ToolSaveEncodingProfileAsync(arguments, isAdmin, ct),
+            "publish_encoding_profile" => await ToolPublishEncodingProfileAsync(arguments, isAdmin, ct),
+            "list_templates" => await ToolListTemplatesAsync(ct),
+            "get_template" => await ToolGetTemplateAsync(arguments, ct),
+            "create_template_from_flow" => await ToolCreateTemplateFromFlowAsync(arguments, isAdmin, ct),
+            "list_component_packs" => await ToolListComponentPacksAsync(ct),
+            "get_component_pack" => await ToolGetComponentPackAsync(arguments, ct),
+            "create_component_pack_from_flow" => await ToolCreateComponentPackFromFlowAsync(arguments, isAdmin, ct),
+            _ => McpCallToolResult.Text($"Outil introuvable : '{toolName}'", isError: true)
+        };
+
+    public async Task<McpCallToolResult> ToolListExecutionsAsync(JsonElement arguments, CancellationToken ct)
     {
         string? state = null;
         var limit = 50;
@@ -42,13 +111,13 @@ public sealed partial class McpService
 
     // --- SCRIPTS ---
 
-    private async Task<McpCallToolResult> ToolListScriptsAsync(CancellationToken ct)
+    public async Task<McpCallToolResult> ToolListScriptsAsync(CancellationToken ct)
     {
         var list = await scripts.ListAsync(ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetScriptAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetScriptAsync(JsonElement arguments, CancellationToken ct)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("id", out var idProp) || !idProp.TryGetGuid(out var id))
             return McpCallToolResult.Text("Paramètre 'id' (UUID) requis.", isError: true);
@@ -59,7 +128,7 @@ public sealed partial class McpService
             : McpCallToolResult.Text($"Script introuvable avec l'ID {id}.", isError: true);
     }
 
-    private async Task<McpCallToolResult> ToolSaveScriptAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolSaveScriptAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la modification de scripts requiert le rôle administrateur.", isError: true);
@@ -102,7 +171,7 @@ public sealed partial class McpService
         }
     }
 
-    private async Task<McpCallToolResult> ToolPublishScriptAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolPublishScriptAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la publication de scripts requiert le rôle administrateur.", isError: true);
@@ -120,24 +189,24 @@ public sealed partial class McpService
             : McpCallToolResult.Text("Échec de publication : script introuvable, code vide ou révision conflictuelle.", isError: true);
     }
 
-    private async Task<McpCallToolResult> ToolDeleteScriptAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolDeleteScriptAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La suppression de scripts exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
         return await scripts.DeleteAsync(id, ct) ? McpCallToolResult.Text("Script supprimé.") : Invalid("Script introuvable.");
     }
 
-    private async Task<McpCallToolResult> ToolListResourcesAsync(CancellationToken ct) =>
+    public async Task<McpCallToolResult> ToolListResourcesAsync(CancellationToken ct) =>
         McpCallToolResult.Text(JsonSerializer.Serialize(await resources.ListAsync(ct), JsonOptions));
 
-    private async Task<McpCallToolResult> ToolGetResourceAsync(JsonElement args, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetResourceAsync(JsonElement args, CancellationToken ct)
     {
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
         var resource = await resources.GetAsync(id, ct);
         return resource is null ? Invalid("Ressource introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(resource, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolCreateResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolCreateResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La création de ressources exige le rôle administrateur.");
         if (args.GetProperty("name").GetString() is not { } name || string.IsNullOrWhiteSpace(name)
@@ -152,7 +221,7 @@ public sealed partial class McpService
         catch (DbException ex) when (Sql.IsUniqueViolation(ex)) { return Invalid("Une ressource porte déjà ce nom."); }
     }
 
-    private async Task<McpCallToolResult> ToolUpdateResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolUpdateResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La modification de ressources exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id) || args.GetProperty("name").GetString() is not { } name
@@ -165,7 +234,7 @@ public sealed partial class McpService
         catch (DbException ex) when (Sql.IsUniqueViolation(ex)) { return Invalid("Une ressource porte déjà ce nom."); }
     }
 
-    private async Task<McpCallToolResult> ToolAddResourceVersionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolAddResourceVersionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La création d’une version exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id) || !TryResourceFiles(args, out var files)) return Invalid("Identifiant ou liste de fichiers invalide.");
@@ -177,7 +246,7 @@ public sealed partial class McpService
         catch (ResourceException ex) { return Invalid(ex.Message); }
     }
 
-    private async Task<McpCallToolResult> ToolDeleteResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolDeleteResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin) return Denied("La suppression de ressources exige le rôle administrateur.");
         if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
@@ -200,13 +269,13 @@ public sealed partial class McpService
 
     // --- PROFILS D'ENCODAGE ---
 
-    private async Task<McpCallToolResult> ToolListEncodingProfilesAsync(CancellationToken ct)
+    public async Task<McpCallToolResult> ToolListEncodingProfilesAsync(CancellationToken ct)
     {
         var list = await profiles.ListAsync(ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetEncodingProfileAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetEncodingProfileAsync(JsonElement arguments, CancellationToken ct)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("id", out var idProp) || !idProp.TryGetGuid(out var id))
             return McpCallToolResult.Text("Paramètre 'id' (UUID) requis.", isError: true);
@@ -217,7 +286,7 @@ public sealed partial class McpService
             : McpCallToolResult.Text($"Profil d'encodage introuvable avec l'ID {id}.", isError: true);
     }
 
-    private async Task<McpCallToolResult> ToolSaveEncodingProfileAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolSaveEncodingProfileAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la modification de profils requiert le rôle administrateur.", isError: true);
@@ -269,7 +338,7 @@ public sealed partial class McpService
         }
     }
 
-    private async Task<McpCallToolResult> ToolPublishEncodingProfileAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolPublishEncodingProfileAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la publication de profils requiert le rôle administrateur.", isError: true);
@@ -289,13 +358,13 @@ public sealed partial class McpService
 
     // --- MODÈLES (TEMPLATES) ---
 
-    private async Task<McpCallToolResult> ToolListTemplatesAsync(CancellationToken ct)
+    public async Task<McpCallToolResult> ToolListTemplatesAsync(CancellationToken ct)
     {
         var list = await templates.ListAsync(ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetTemplateAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetTemplateAsync(JsonElement arguments, CancellationToken ct)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("id", out var idProp) || !idProp.TryGetGuid(out var id))
             return McpCallToolResult.Text("Paramètre 'id' (UUID) requis.", isError: true);
@@ -306,7 +375,7 @@ public sealed partial class McpService
             : McpCallToolResult.Text($"Modèle introuvable avec l'ID {id}.", isError: true);
     }
 
-    private async Task<McpCallToolResult> ToolCreateTemplateFromFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolCreateTemplateFromFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la création de modèles requiert le rôle administrateur.", isError: true);
@@ -330,13 +399,13 @@ public sealed partial class McpService
 
     // --- PACKS DE COMPOSANTS ---
 
-    private async Task<McpCallToolResult> ToolListComponentPacksAsync(CancellationToken ct)
+    public async Task<McpCallToolResult> ToolListComponentPacksAsync(CancellationToken ct)
     {
         var list = await componentPacks.ListAsync(ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
     }
 
-    private async Task<McpCallToolResult> ToolGetComponentPackAsync(JsonElement arguments, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolGetComponentPackAsync(JsonElement arguments, CancellationToken ct)
     {
         if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("id", out var idProp) || !idProp.TryGetGuid(out var id))
             return McpCallToolResult.Text("Paramètre 'id' (UUID) requis.", isError: true);
@@ -347,7 +416,7 @@ public sealed partial class McpService
             : McpCallToolResult.Text($"Pack de composants introuvable avec l'ID {id}.", isError: true);
     }
 
-    private async Task<McpCallToolResult> ToolCreateComponentPackFromFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
+    public async Task<McpCallToolResult> ToolCreateComponentPackFromFlowAsync(JsonElement arguments, bool isAdmin, CancellationToken ct)
     {
         if (!isAdmin)
             return McpCallToolResult.Text("Permission refusée : la création de packs requiert le rôle administrateur.", isError: true);

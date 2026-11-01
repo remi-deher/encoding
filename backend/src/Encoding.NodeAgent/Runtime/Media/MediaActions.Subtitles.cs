@@ -225,7 +225,7 @@ public sealed partial class MediaActions
         }).ToArray();
         if (fontAttachments.Length == 0) return [];
 
-        if (ProcessToolRunner.Find("mkvextract") is not null)
+        if (tools.Find("mkvextract") is not null)
         {
             var tempDir = Path.Combine(directory, "mkv-fonts-" + Guid.NewGuid().ToString("N"));
             try

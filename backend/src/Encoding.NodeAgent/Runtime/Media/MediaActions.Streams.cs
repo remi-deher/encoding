@@ -306,7 +306,7 @@ public sealed partial class MediaActions
             AttachmentField(item,"size"))).ToArray():[];
     private static string AttachmentField(JsonElement item,string primary,string? alternate=null)=>item.TryGetProperty(primary,
         out var value)?value.ToString():alternate is not null&&item.TryGetProperty(alternate,out value)?value.ToString():"";
-    private static async Task<string[]> ExtractAssEventsAsync(ProcessToolRunner tools,string media,JsonElement subtitle,string directory,CancellationToken ct)
+    private static async Task<string[]> ExtractAssEventsAsync(IProcessToolRunner tools,string media,JsonElement subtitle,string directory,CancellationToken ct)
     {
         var index=MetadataInt(subtitle,"index")??throw new MediaToolException("index de piste de sous-titres",1);
         var file=Path.Combine(directory,"validate-"+Guid.NewGuid().ToString("N")+".ass");

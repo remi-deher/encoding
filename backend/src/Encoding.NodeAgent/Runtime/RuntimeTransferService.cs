@@ -6,7 +6,7 @@ using Encoding.NodeAgent.Services;
 namespace Encoding.NodeAgent.Runtime;
 
 public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdentityStore identities,MediaScanner scanner,PublicationGuardRunner guards,
-    LocalPublicationArtifactStore localArtifacts,ILogger<RuntimeTransferService> logger) : BackgroundService
+    ILocalPublicationArtifactStore localArtifacts,ILogger<RuntimeTransferService> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid,Task> active=new();
     protected override async Task ExecuteAsync(CancellationToken ct)

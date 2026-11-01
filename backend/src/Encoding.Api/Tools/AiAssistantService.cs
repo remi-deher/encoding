@@ -13,6 +13,7 @@ using Encoding.Api.Nodes;
 using Encoding.Api.Mcp;
 using Encoding.Api.Libraries;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Cluster;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Libraries;
@@ -21,142 +22,87 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-/// <summary>Owns private assistant conversations, resolves context and prepares bounded confirmed actions.</summary>
-public sealed partial class AiAssistantService(
-    AiClusterStore store,
-    AiClusterService cluster,
-    AiClusterTransport transport,
-    FlowRepository flows,
-    ExecutionRepository executions,
-    LibraryWorkflowRepository libraryWorkflows,
-    LibraryRepository libraries,
-    NodeRepository nodes,
-    NodePresenceOptions nodePresence,
-    McpService mcp,
-    IDataProtectionProvider protection,
-    FlowTemplateRepository? flowTemplates = null)
+/// <summary>Thin façade for assistant endpoints; work lives in Conversations/Send/Actions/Support.</summary>
+public sealed class AiAssistantService(
+    AiAssistantSupportService support,
+    AiAssistantConversationsService conversations,
+    AiAssistantSendService send,
+    AiAssistantActionsService actions)
 {
-    private FlowTemplateRepository FlowTemplates => flowTemplates
-        ?? throw new InvalidOperationException("Le catalogue de modèles de flow n’est pas disponible.");
-    public async Task<AiAssistantOptions> OptionsAsync(CancellationToken ct, bool refresh = false)
+    public static AiAssistantService Create(
+        AiClusterStore store,
+        AiClusterService cluster,
+        AiClusterTransport transport,
+        FlowRepository flows,
+        ExecutionRepository executions,
+        LibraryWorkflowRepository libraryWorkflows,
+        LibraryRepository libraries,
+        NodeRepository nodes,
+        NodePresenceOptions nodePresence,
+        McpService mcp,
+        IDataProtectionProvider protection,
+        FlowTemplateRepository? flowTemplates = null)
     {
-        var settings = await cluster.GetSettingsAsync(ct);
-        if (refresh) await cluster.ModelsAsync(true, ct);
-        var view = await cluster.CachedViewAsync(ct);
-        var policy = await cluster.ModelPolicyAsync(ct);
-        var nodes = settings.AssistantLocalOnly ? view.Nodes.Take(1) : view.Nodes;
-        var catalogs = nodes.Where(n => n.Reachable).Select(n => new AiNodeModelCatalog(n.NodeId, n.Name, n.Catalogs ?? [])).ToArray();
-        var options = catalogs.SelectMany(node => node.Providers
-            .Where(c => c.State == "available"
-                && (!settings.AssistantLocalOnly || c.Provider == "ollama")
-                && (c.Provider != "codex-cli" || settings.CodexEnabled)
-                && (c.Provider != "claude-cli" || settings.ClaudeEnabled)
-                && (c.Provider != "ollama" || settings.OllamaEnabled)
-                && (c.Provider != "openai" || settings.OpenAiEnabled)
-                && (c.Provider != "anthropic" || settings.AnthropicEnabled))
-            .SelectMany(c => c.Models.Where(m => !policy.DisabledModels.Any(d => d.Provider == c.Provider && d.Model == m.Id))
-                .Select(m => new AiAssistantModelOption(c.Provider, m.Id, m.Label, m.ReasoningEfforts,
-                    node.NodeId, node.Name, m.DefaultReasoningEffort, m.ReasoningKnown, m.IsDefault)))).ToArray();
-        var defaultProvider = settings.AssistantProvider ?? settings.DefaultProvider;
-        var inheritedProvider = settings.AssistantProvider is null;
-        var configuredModel = inheritedProvider ? settings.AssistantModel ?? settings.DefaultModel : settings.AssistantModel;
-        var defaultModel = options.FirstOrDefault(option => option.Provider == defaultProvider && option.Model == configuredModel)?.Model
-            ?? options.FirstOrDefault(option => option.Provider == defaultProvider && option.IsDefault)?.Model
-            ?? options.FirstOrDefault(option => option.Provider == defaultProvider)?.Model;
-        var selectedModels = options.Where(option => option.Provider == defaultProvider && option.Model == defaultModel).ToArray();
-        var configuredEffort = settings.AssistantReasoningEffort
-            ?? (inheritedProvider && (settings.AssistantModel is null || settings.AssistantModel == settings.DefaultModel)
-                ? settings.DefaultReasoningEffort : null);
-        var defaultEffort = configuredEffort is { } effort
-            && selectedModels.Any(option => option.ReasoningEfforts.Contains(effort, StringComparer.Ordinal))
-                ? effort
-                : selectedModels.Select(option => option.DefaultReasoningEffort).FirstOrDefault(value => value is not null);
-        return new(defaultProvider, defaultModel, options, catalogs, defaultEffort);
+        var support = new AiAssistantSupportService(store, cluster, transport, flows, executions, libraryWorkflows,
+            libraries, nodes, nodePresence, mcp, protection, flowTemplates);
+        var conversations = new AiAssistantConversationsService(support);
+        var actions = new AiAssistantActionsService(support, conversations);
+        var send = new AiAssistantSendService(support, actions);
+        return new AiAssistantService(support, conversations, send, actions);
     }
 
-    private static IReadOnlyList<string> ReasoningEfforts(string provider, string? model) => provider switch
-    {
-        "codex-cli" => ["low", "medium", "high", "xhigh"],
-        "claude-cli" => ["low", "medium", "high"],
-        "openai" when model is not null && (model.StartsWith("o1", StringComparison.OrdinalIgnoreCase)
-            || model.StartsWith("o3", StringComparison.OrdinalIgnoreCase)
-            || model.StartsWith("o4", StringComparison.OrdinalIgnoreCase)
-            || model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase))
-            => ["low", "medium", "high"],
-        _ => [],
-    };
+    public Task<AiAssistantOptions> OptionsAsync(CancellationToken ct, bool refresh = false) => support.OptionsAsync(ct, refresh);
+    public Task<int> PurgeExpiredAsync(CancellationToken ct) => support.PurgeExpiredAsync(ct);
+    public Task<bool> IsAssistantConversationAsync(string id, CancellationToken ct) => support.IsAssistantConversationAsync(id, ct);
+    public Task<AiAssistantConversation?> RenameAsync(string id, string? title, ClaimsPrincipal user, CancellationToken ct) => support.RenameAsync(id, title, user, ct);
 
-    private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> conversationGates = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> actionGates = new();
-    private readonly IDataProtector actionProtector = protection.CreateProtector("Encoding.AiAssistantAction.v1");
-    private const string ConversationPrefix = "assistant/conversations/";
-    private const string SessionOwnerPrefix = "assistant/session-owner/";
-    private static readonly JsonSerializerOptions ContextJsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-    };
-    private sealed record StoredConversation(
-        string OwnerId,
-        AiAssistantConversation Conversation,
-        IReadOnlyDictionary<Guid, IReadOnlyList<AiAssistantSource>>? TurnSources = null,
-        IReadOnlyDictionary<Guid, string>? UserPrompts = null,
-        IReadOnlyDictionary<Guid, string>? TurnPromptSnapshots = null,
-        IReadOnlyDictionary<Guid, string>? TurnToolCalls = null,
-        IReadOnlyDictionary<Guid, string>? TurnModelPlans = null,
-        IReadOnlyDictionary<Guid, AiTurnModelSelection>? TurnSelections = null,
-        IReadOnlyDictionary<Guid, string?>? TurnActualModels = null);
-    private sealed record ResolvedContext(AiAssistantSource Source, string Data);
-    private const int MaxAssistantFileBytes = 8 * 1024 * 1024;
-    private const int MaxAssistantAttachmentBytes = 16 * 1024 * 1024;
-    private const int MaxAssistantAttachmentCharacters = 1_000_000;
-    private static readonly HashSet<string> AssistantTextFileExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".txt", ".md", ".markdown", ".rst", ".csv", ".tsv", ".log", ".out",
-        ".json", ".jsonc", ".json5", ".yaml", ".yml", ".xml", ".toml", ".ini", ".conf", ".config", ".properties", ".env",
-        ".srt", ".ass", ".ssa", ".vtt", ".sub", ".smi", ".sami", ".ttml", ".dfxp", ".mpl", ".lrc", ".sbv",
-        ".ffmetadata", ".ffpreset", ".ffscript", ".ffconcat", ".filter", ".m3u", ".m3u8", ".nfo", ".prx", ".avs", ".avsi", ".vpy", ".qpfile", ".chapters", ".edl", ".cue", ".xspf", ".pls", ".mpd",
-        ".cs", ".fs", ".vb", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".pyw", ".sh", ".bash", ".zsh",
-        ".ps1", ".psm1", ".bat", ".cmd", ".sql", ".html", ".htm", ".css", ".scss", ".less", ".proto", ".graphql", ".gql",
-        ".dockerfile", ".makefile", ".csproj", ".sln", ".props", ".targets", ".editorconfig", ".gitignore"
-    };
+    public Task<IReadOnlyList<AiAssistantConversation>> ListAsync(ClaimsPrincipal user, CancellationToken ct) => conversations.ListAsync(user, ct);
+    public Task<IReadOnlyList<AiAssistantConversationSearchResult>> SearchAsync(string? q, ClaimsPrincipal user, CancellationToken ct) => conversations.SearchAsync(q, user, ct);
+    public Task<bool> DeleteConversationAsync(string id, ClaimsPrincipal user, CancellationToken ct) => conversations.DeleteConversationAsync(id, user, ct);
+    public Task<IReadOnlyList<AiAssistantActivity>> ActivityAsync(ClaimsPrincipal user, CancellationToken ct) => conversations.ActivityAsync(user, ct);
+    public Task<AiAssistantActivity?> GetActivityAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct) => conversations.GetActivityAsync(requestId, user, ct);
+    public Task<Guid?> GetRequestCoordinatorIdAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct) => conversations.GetRequestCoordinatorIdAsync(requestId, user, ct);
+    public Task RecordOperationActivityAsync(
+        ClaimsPrincipal user, Guid requestId, string operation, string provider, string status,
+        DateTimeOffset startedAt, string? errorCategory, CancellationToken ct) =>
+        conversations.RecordOperationActivityAsync(user, requestId, operation, provider, status, startedAt, errorCategory, ct);
+    public bool CancelRequest(Guid requestId, ClaimsPrincipal user) => conversations.CancelRequest(requestId, user);
+    public Task<bool> CancelRequestAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct) => conversations.CancelRequestAsync(requestId, user, ct);
+    public Task<bool> UpdateFlowProposalActivityAsync(Guid requestId, string decision, ClaimsPrincipal user, CancellationToken ct) =>
+        conversations.UpdateFlowProposalActivityAsync(requestId, decision, user, ct);
+    public Task<AiAssistantConversationDetail?> GetAsync(string id, ClaimsPrincipal user, CancellationToken ct) => conversations.GetAsync(id, user, ct);
+    public Task<AiAssistantConversation?> UpdateSourcesAsync(string id, AiAssistantSourcesRequest request, ClaimsPrincipal user, CancellationToken ct) =>
+        conversations.UpdateSourcesAsync(id, request, user, ct);
 
-    /// <summary>Expire les conversations terminées et l'activité, avec des tombstones répliqués au lieu d'effacer une seule projection locale.</summary>
-    public async Task<int> PurgeExpiredAsync(CancellationToken ct)
-    {
-        var settings = await cluster.GetSettingsAsync(ct);
-        var conversationDays = Math.Clamp(settings.AssistantConversationRetentionDays, 1, 3650);
-        var activityDays = Math.Clamp(settings.AssistantActivityRetentionDays, 1, 3650);
-        var now = DateTimeOffset.UtcNow;
-        var removed = 0;
+    public Task<AiAssistantMessageResponse?> SendAsync(AiAssistantMessageRequest request, ClaimsPrincipal user, CancellationToken ct) => send.SendAsync(request, user, ct);
 
-        var conversations = await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix, ct);
-        foreach (var stored in conversations.Where(record => record.Conversation.UpdatedAt < now.AddDays(-conversationDays)))
-        {
-            var session = await cluster.GetSessionAsync(stored.Conversation.Id, ct);
-            if (session?.PendingRequest is not null) continue;
-
-            await store.DeleteAsync(ConversationKey(stored.OwnerId, stored.Conversation.Id), ct);
-            await store.DeleteAsync(SessionOwnerKey(stored.Conversation.Id), ct);
-            await store.DeleteAsync("session/" + stored.Conversation.Id, ct);
-        await store.DeleteAsync(AiClusterService.CoordinatorKey(stored.Conversation.Id), ct);
-            foreach (var requestId in stored.TurnPromptSnapshots?.Keys ?? Array.Empty<Guid>())
-            {
-                var plannerRequestId = DeriveRequestId(
-                    stored.Conversation.Id + "/" + requestId.ToString("N"), "assistant-read-tool-planner");
-                await DeleteHelperSessionAsync($"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
-            }
-            removed++;
-        }
-
-        var activities = await store.ReadPrefixAsync<StoredActivity>(ActivityPrefix, ct);
-        foreach (var stored in activities.Where(record => record.Activity.UpdatedAt < now.AddDays(-activityDays)))
-        {
-            await store.DeleteAsync(ActivityPrefix + stored.OwnerId + "/" + stored.Activity.RequestId.ToString("N"), ct);
-            removed++;
-        }
-        return removed;
-    }
+    public Task<AiAssistantPreparedAction?> PrepareDeleteFlowAsync(
+        AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+        => actions.PrepareDeleteFlowAsync(request, user, ct);
+    public Task<AiAssistantPreparedAction?> PreparePublishFlowAsync(
+        AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+        => actions.PreparePublishFlowAsync(request, user, ct);
+    public Task<AiAssistantPreparedAction?> PrepareStartLibraryAsync(
+        AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+        => actions.PrepareStartLibraryAsync(request, user, ct);
+    public Task<AiAssistantPreparedAction?> PrepareCancelExecutionAsync(
+        AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+        => actions.PrepareCancelExecutionAsync(request, user, ct);
+    public Task<AiAssistantPreparedAction?> PrepareAssignLibraryFlowAsync(
+        AiAssistantActionCall request, ClaimsPrincipal user, CancellationToken ct)
+        => actions.PrepareAssignLibraryFlowAsync(request, user, ct);
+    public Task<AiAssistantPreparedAction?> PrepareCreateFlowTemplateAsync(
+        AiAssistantActionCall request, ClaimsPrincipal user, CancellationToken ct)
+        => actions.PrepareCreateFlowTemplateAsync(request, user, ct);
+    public Task<bool> ConfirmDeleteFlowAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct) => actions.ConfirmDeleteFlowAsync(request, user, ct);
+    public Task<bool> ConfirmPublishFlowAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct) => actions.ConfirmPublishFlowAsync(request, user, ct);
+    public Task<bool> ConfirmCancelExecutionAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct) => actions.ConfirmCancelExecutionAsync(request, user, ct);
+    public Task<bool> ConfirmAssignLibraryFlowAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct) => actions.ConfirmAssignLibraryFlowAsync(request, user, ct);
+    public Task<bool> ConfirmCreateFlowTemplateAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct) => actions.ConfirmCreateFlowTemplateAsync(request, user, ct);
+    public Task<bool> ConfirmBusinessOperationAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct) => actions.ConfirmBusinessOperationAsync(request, user, ct);
+    public Task<(
+        int Queued, int Skipped)?> ConfirmStartLibraryAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+        => actions.ConfirmStartLibraryAsync(request, user, ct);
 }
 
 public sealed class AiAssistantRetentionService(
@@ -196,3 +142,4 @@ public sealed class AiAssistantRetentionService(
         }
     }
 }
+
