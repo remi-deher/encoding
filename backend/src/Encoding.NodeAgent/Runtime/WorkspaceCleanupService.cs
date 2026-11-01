@@ -27,8 +27,8 @@ public sealed record WorkspaceRetentionOptions(bool Enabled, TimeSpan Completed,
     /// </summary>
     public bool ShouldDelete(string? state, TimeSpan idle) => state switch
     {
-        "succeeded" or "cancelled" => idle >= Completed,
-        "failed" => idle >= Failed,
+        ExecutionStates.Succeeded or ExecutionStates.Cancelled => idle >= Completed,
+        ExecutionStates.Failed => idle >= Failed,
         null => idle >= Unknown,
         _ => false
     };

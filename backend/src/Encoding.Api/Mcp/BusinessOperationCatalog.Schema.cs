@@ -15,14 +15,62 @@ public static partial class BusinessOperationCatalog
         "delete_script", "create_resource", "update_resource", "add_resource_version", "delete_resource"
     };
 
-    private static readonly HashSet<string> AssistantActions = new(StringComparer.Ordinal)
-    {
-        "publish-flow", "delete-flow", "start-library", "cancel-execution",
-        "assign-library-flow", "create-flow-template"
-    };
+    /// <summary>
+    /// Assistant kebab-case special actions and their MCP snake_case tool when one exists.
+    /// <c>null</c> means the assistant action has no identical MCP tool (draft publish / enqueue files).
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string?> AssistantToMcpToolNames =
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["publish-flow"] = null,
+            ["delete-flow"] = "delete_flow",
+            ["start-library"] = null,
+            ["cancel-execution"] = "cancel_execution",
+            ["assign-library-flow"] = "assign_library_flow",
+            ["create-flow-template"] = "create_template_from_flow",
+        };
+
+    private static readonly HashSet<string> AssistantActions = new(AssistantToMcpToolNames.Keys, StringComparer.Ordinal);
 
     public static IReadOnlyList<BusinessOperationDescriptor> Describe() =>
         DescribeTools().Concat(AssistantActions.Order(StringComparer.Ordinal).Select(ActionDescriptor)).ToArray();
+
+    /// <summary>Converts an MCP snake_case tool name to the assistant kebab-case form.</summary>
+    public static string ToAssistantName(string mcpSnakeName) =>
+        mcpSnakeName.Replace('_', '-');
+
+    /// <summary>Converts an assistant kebab-case name to MCP snake_case (mechanical; use <see cref="TryResolveMcpToolName"/> for specials).</summary>
+    public static string ToMcpName(string assistantKebabName) =>
+        assistantKebabName.Replace('-', '_');
+
+    /// <summary>
+    /// Resolves an assistant or MCP name to a catalog MCP tool name when one exists.
+    /// Special assistant actions without an MCP twin return false.
+    /// </summary>
+    public static bool TryResolveMcpToolName(string name, out string mcpName)
+    {
+        if (FindTool(name) is not null)
+        {
+            mcpName = name;
+            return true;
+        }
+
+        if (AssistantToMcpToolNames.TryGetValue(name, out var mapped) && mapped is not null)
+        {
+            mcpName = mapped;
+            return true;
+        }
+
+        var mechanical = ToMcpName(name);
+        if (!string.Equals(mechanical, name, StringComparison.Ordinal) && FindTool(mechanical) is not null)
+        {
+            mcpName = mechanical;
+            return true;
+        }
+
+        mcpName = "";
+        return false;
+    }
 
     public static IReadOnlyList<BusinessOperationDescriptor> DescribeTools() =>
         ToolDefinitions.Select(tool =>

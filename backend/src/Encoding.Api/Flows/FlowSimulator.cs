@@ -164,9 +164,9 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
             next = FlowPath.NextNodeId(flow, node.Id, output);
             lastOutput = output;
         }
-        var failed = terminal == "failed" || terminal is null && lastOutput == "error";
-        if (context.Plan.Count > 0 && !failed) return new("failed", "Le flow se termine avec un plan non exécuté.", steps, TerminalResult: terminal);
-        return new(failed ? "failed" : "completed",
+        var failed = ExecutionOutcomes.IsFailure(terminal, lastOutput);
+        if (context.Plan.Count > 0 && !failed) return new(ExecutionStates.Failed, "Le flow se termine avec un plan non exécuté.", steps, TerminalResult: terminal);
+        return new(failed ? ExecutionStates.Failed : "completed",
             failed ? "Le chemin simulé se termine en échec." : "Chemin simulé terminé. Les résultats supposés restent à vérifier sur un worker réel.", steps,
             TerminalResult: terminal);
     }

@@ -80,7 +80,7 @@ public sealed class AiAssistantActionsService(AiAssistantSupportService support,
         if (execution is null) return null;
         if (execution.Revision != request.ExpectedVersion)
             throw new InvalidOperationException("L’exécution a changé. Actualisez son état avant de préparer l’annulation.");
-        if (execution.State is not ("queued" or "running"))
+        if (execution.State is not (ExecutionStates.Queued or ExecutionStates.Running))
             throw new InvalidOperationException("Cette exécution n’est plus annulable.");
         return PrepareAction(user, "cancel-execution", request.ResourceId, request.ExpectedVersion, null,
             $"Demander l’annulation de « {execution.Media} » ? État : {execution.State}, révision {execution.Revision}.");

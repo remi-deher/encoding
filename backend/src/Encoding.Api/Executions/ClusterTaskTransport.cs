@@ -34,13 +34,13 @@ public sealed class ClusterTaskTransport(DbDataSource db,ClusterPeerIdentityStor
     }
     public async Task<ClusterTaskPeerReply?> CallAsync(Guid peer,string kind,string? payload,CancellationToken ct)
     {
-        var remote=await PeerAsync(peer,ct);var nonce=Guid.NewGuid();using var request=Request(remote.Url,new(2,remote.Cluster,nonce,kind,Payload:payload));
+        var remote=await PeerAsync(peer,ct);var nonce=Guid.NewGuid();using var request=Request(remote.Url,new(ClusterTaskMessageVersions.Current,remote.Cluster,nonce,kind,Payload:payload));
         using var response=await clients.CreateClient("ClusterTaskTransfer").SendAsync(request,HttpCompletionOption.ResponseHeadersRead,ct);if(!response.IsSuccessStatusCode) return null;
         var body=await ReadAsync(await response.Content.ReadAsStreamAsync(ct),ct);if(body is null) return null;
         string? Header(string name)=>response.Headers.TryGetValues(name,out var values)?values.FirstOrDefault():null;
         if(!Guid.TryParse(Header(ClusterReconciliationSignature.PeerHeader),out var author)||author!=peer||!ClusterReconciliationSignature.Verify(remote.Key,
             peer,Header(ClusterReconciliationSignature.TimeHeader),Header(ClusterReconciliationSignature.SignatureHeader),body)) return null;
-        var reply=JsonSerializer.Deserialize<ClusterTaskPeerReply>(body,Json);return reply is {Version:2} && reply.Nonce==nonce && reply.ClusterId==remote.Cluster && reply.PeerId==peer?reply:null;
+        var reply=JsonSerializer.Deserialize<ClusterTaskPeerReply>(body,Json);return reply is not null && ClusterTaskMessageVersions.IsSupported(reply.Version) && reply.Nonce==nonce && reply.ClusterId==remote.Cluster && reply.PeerId==peer?reply:null;
     }
     public async Task FetchAsync(Guid peer,Guid execution,ClusterTaskArtifact artifact,CancellationToken ct)
     {
@@ -51,7 +51,7 @@ public sealed class ClusterTaskTransport(DbDataSource db,ClusterPeerIdentityStor
     private async Task FetchCoreAsync(Guid peer,Guid execution,ClusterTaskArtifact artifact,CancellationToken ct)
     {
         if(await artifacts.IsCachedAsync(execution,artifact.Sha256,artifact.Bytes,ct)) return;
-        var remote=await PeerAsync(peer,ct);using var request=Request(remote.Url,new(2,remote.Cluster,Guid.NewGuid(),"blob",execution,artifact.Sha256));
+        var remote=await PeerAsync(peer,ct);using var request=Request(remote.Url,new(ClusterTaskMessageVersions.Current,remote.Cluster,Guid.NewGuid(),"blob",execution,artifact.Sha256));
         using var response=await clients.CreateClient("ClusterTaskTransfer").SendAsync(request,HttpCompletionOption.ResponseHeadersRead,ct);response.EnsureSuccessStatusCode();
         if(response.Content.Headers.ContentLength is {} bytes && bytes!=artifact.Bytes) throw new InvalidDataException("Taille d’artefact incorrecte.");
         await artifacts.CacheAsync(execution,artifact.Sha256,artifact.Bytes,await response.Content.ReadAsStreamAsync(ct),ct);

@@ -24,4 +24,40 @@ public sealed class BusinessOperationCatalogTests
         Assert.True(BusinessOperationCatalog.ValidateArguments("resume_execution", valid.RootElement));
         Assert.False(BusinessOperationCatalog.ValidateArguments("resume_execution", invalid.RootElement));
     }
+
+    [Fact]
+    public void AssistantKebabNamesMapToMcpSnakeToolsWhenPresent()
+    {
+        Assert.Equal(6, BusinessOperationCatalog.AssistantToMcpToolNames.Count);
+
+        Assert.True(BusinessOperationCatalog.TryResolveMcpToolName("cancel-execution", out var cancel));
+        Assert.Equal("cancel_execution", cancel);
+        Assert.NotNull(BusinessOperationCatalog.FindTool(cancel));
+
+        Assert.True(BusinessOperationCatalog.TryResolveMcpToolName("delete-flow", out var delete));
+        Assert.Equal("delete_flow", delete);
+
+        Assert.True(BusinessOperationCatalog.TryResolveMcpToolName("assign-library-flow", out var assign));
+        Assert.Equal("assign_library_flow", assign);
+
+        Assert.True(BusinessOperationCatalog.TryResolveMcpToolName("create-flow-template", out var template));
+        Assert.Equal("create_template_from_flow", template);
+
+        Assert.False(BusinessOperationCatalog.TryResolveMcpToolName("publish-flow", out _));
+        Assert.False(BusinessOperationCatalog.TryResolveMcpToolName("start-library", out _));
+        Assert.Null(BusinessOperationCatalog.AssistantToMcpToolNames["publish-flow"]);
+        Assert.Null(BusinessOperationCatalog.AssistantToMcpToolNames["start-library"]);
+    }
+
+    [Fact]
+    public void MechanicalKebabSnakeConversionRoundTripsCatalogTools()
+    {
+        foreach (var tool in BusinessOperationCatalog.ToolDefinitions)
+        {
+            var kebab = BusinessOperationCatalog.ToAssistantName(tool.Name);
+            Assert.Equal(tool.Name, BusinessOperationCatalog.ToMcpName(kebab));
+            Assert.True(BusinessOperationCatalog.TryResolveMcpToolName(tool.Name, out var resolved));
+            Assert.Equal(tool.Name, resolved);
+        }
+    }
 }

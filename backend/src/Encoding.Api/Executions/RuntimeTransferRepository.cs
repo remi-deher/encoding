@@ -130,7 +130,7 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
 
     public async Task<bool> FinishAsync(Guid id,Guid worker,FinishRuntimeExecution request,CancellationToken ct,bool sourceFailure=false)
     {
-        if(request.State is not("succeeded" or "failed" or "cancelled" or "deferred") || request.Detail is null || request.Detail.Length>4000) return false;
+        if(request.State is not(ExecutionStates.Succeeded or ExecutionStates.Failed or ExecutionStates.Cancelled or ExecutionStates.Deferred) || request.Detail is null || request.Detail.Length>4000) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,worker,request.Epoch,c,tx,ct,sourceFailure)) return false;
         if (!await RuntimeCommandJournal.StoreAsync(id, request.Commands, c, tx, ct)) return false;
@@ -148,18 +148,18 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         if(request.ContinueFlow)
         {
             // Publication au milieu du flow : état « succeeded » avec un résultat, une seule fois, sans fin de flow.
-            if(sourceFailure || request.State!="succeeded" || request.ResultSha256 is null || request.BeforeMetadata is null || request.AfterMetadata is null) return false;
+            if(sourceFailure || request.State!=ExecutionStates.Succeeded || request.ResultSha256 is null || request.BeforeMetadata is null || request.AfterMetadata is null) return false;
             await using var already=Sql.Command("SELECT publication_requested FROM execution_work WHERE execution_id=@id",c,tx); already.Parameters.AddWithValue("id",id);
             if(await already.ScalarBoolAsync(ct)) return false;
         }
-        else if(request.State is "succeeded" or "deferred")
+        else if(request.State is ExecutionStates.Succeeded or ExecutionStates.Deferred)
         {
             await using var reached=Sql.Command("SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1",c,tx);
             reached.Parameters.AddWithValue("id",id);
             if(await reached.ExecuteScalarAsync(ct) is not string json) return false;
             var cp=System.Text.Json.JsonSerializer.Deserialize<RuntimeCheckpoint>(json,new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
-            if(cp.NextNodeId is not null || cp.OutputId=="error" || cp.TerminalResult=="failed") return false;
-            if(request.State=="deferred" && (cp.TerminalResult!="deferred" || request.DeferMinutes is not >=1 or >1440)) return false;
+            if(cp.NextNodeId is not null || cp.OutputId==ExecutionOutcomes.ErrorOutput || cp.TerminalResult==ExecutionOutcomes.Failed) return false;
+            if(request.State==ExecutionStates.Deferred && (cp.TerminalResult!=ExecutionOutcomes.Deferred || request.DeferMinutes is not >=1 or >1440)) return false;
             if(request.BeforeMetadata is null || request.AfterMetadata is null) return false;
         }
         await using(var metadata=Sql.Command("UPDATE execution_work SET before_metadata=COALESCE(@before,before_metadata),after_metadata=COALESCE(@after,after_metadata) WHERE execution_id=@id",c,tx))
@@ -169,7 +169,7 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
             metadata.Parameters.AddWithValue("after",SqlKind.Json,(object?)request.AfterMetadata?.GetRawText()??DBNull.Value);
             await metadata.ExecuteNonQueryAsync(ct);
         }
-        if(request.State=="succeeded" && request.ResultSha256 is { } sha)
+        if(request.State==ExecutionStates.Succeeded && request.ResultSha256 is { } sha)
         {
             if(!RuntimeArtifactStore.ValidDigest(sha) || request.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(request.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
             if (!await HasIntegrityProofAsync(id, sha, c, tx, ct)) return false;
@@ -191,9 +191,9 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         else
         {
             if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,request.State,worker,
-                request.State=="succeeded"?100:null,request.Detail),c,tx,ct)) return false;
+                request.State==ExecutionStates.Succeeded?100:null,request.Detail),c,tx,ct)) return false;
             await RuntimeRepository.ReleaseAsync(id,c,tx,ct);
-            if(request.State=="deferred")
+            if(request.State==ExecutionStates.Deferred)
             {
                 var next=Guid.NewGuid();
                 await using var schedule=Sql.Command("""

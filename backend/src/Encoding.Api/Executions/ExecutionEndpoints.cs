@@ -151,6 +151,5 @@ public static class ExecutionEndpoints
         }).WithName("ResumeExecution");
     }
 
-    private static bool IsTerminalState(string state) =>
-        state is "succeeded" or "failed" or "cancelled";
+    private static bool IsTerminalState(string state) => ExecutionStates.IsTerminal(state);
 }
