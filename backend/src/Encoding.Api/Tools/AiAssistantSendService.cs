@@ -13,6 +13,7 @@ using Encoding.Api.Nodes;
 using Encoding.Api.Mcp;
 using Encoding.Api.Libraries;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Cluster;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Libraries;
@@ -21,11 +22,12 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed partial class AiAssistantService
+public sealed class AiAssistantSendService(AiAssistantSupportService support, AiAssistantActionsService actions)
 {
+
     public async Task<AiAssistantMessageResponse?> SendAsync(AiAssistantMessageRequest request, ClaimsPrincipal user, CancellationToken ct)
     {
-        var ownerId = OwnerId(user);
+        var ownerId = AiAssistantSupportService.OwnerId(user);
         if (request.RequestId == Guid.Empty || string.IsNullOrWhiteSpace(request.UserPrompt) || request.UserPrompt.Length > 4000)
             throw new ArgumentException("La demande doit contenir un message de 1 à 4 000 caractères et un identifiant de requête valide.");
         var attachments = request.Attachments ?? Array.Empty<AiAssistantFileAttachment>();
@@ -47,23 +49,23 @@ public sealed partial class AiAssistantService
                 || name.Equals(".env", StringComparison.OrdinalIgnoreCase)
                 || name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase);
             var bytes = System.Text.Encoding.UTF8.GetByteCount(content);
-            if (name.Length is 0 or > 180 || (!supportedName && !AssistantTextFileExtensions.Contains(extension)))
+            if (name.Length is 0 or > 180 || (!supportedName && !AiAssistantSupportService.AssistantTextFileExtensions.Contains(extension)))
                 throw new ArgumentException($"Le fichier « {name} » n’est pas dans un format texte pris en charge par l’assistant.");
-            if (bytes > MaxAssistantFileBytes)
+            if (bytes > AiAssistantSupportService.MaxAssistantFileBytes)
                 throw new ArgumentException($"Le fichier « {name} » dépasse la limite de 8 Mo.");
             attachmentBytes += bytes;
             attachmentCharacters += content.Length;
         }
-        if (attachmentBytes > MaxAssistantAttachmentBytes)
+        if (attachmentBytes > AiAssistantSupportService.MaxAssistantAttachmentBytes)
             throw new ArgumentException("Les fichiers joints dépassent la limite cumulée de 16 Mo.");
-        if (attachmentCharacters > MaxAssistantAttachmentCharacters)
+        if (attachmentCharacters > AiAssistantSupportService.MaxAssistantAttachmentCharacters)
             throw new ArgumentException("Le contenu des fichiers joints dépasse la capacité de contexte de l’assistant (1 000 000 caractères).");
 
         var conversationId = string.IsNullOrWhiteSpace(request.ConversationId)
-            ? $"{transport.LocalId:N}.{request.RequestId:N}"
+            ? $"{support.Transport.LocalId:N}.{request.RequestId:N}"
             : request.ConversationId;
-        if (!IsSessionId(conversationId)) return null;
-        var gate = conversationGates.GetOrAdd(ownerId + "/" + conversationId, _ => new SemaphoreSlim(1, 1));
+        if (!AiAssistantSupportService.IsSessionId(conversationId)) return null;
+        var gate = support.conversationGates.GetOrAdd(ownerId + "/" + conversationId, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct);
         try
         {
@@ -75,13 +77,13 @@ public sealed partial class AiAssistantService
             ResolvedContext? context = null;
             if (request.ResourceType is { Length: > 0 } resourceType && request.ResourceId is { } resourceId)
             {
-                context = await ResolveContextAsync(resourceType, resourceId, request.ResourceVersion, ct);
+                context = await support.ResolveContextAsync(resourceType, resourceId, request.ResourceVersion, ct);
                 if (context is null) return null;
             }
-            var id = $"{transport.LocalId:N}.{request.RequestId:N}";
-            var existingOwner = await store.ReadAsync<string>(SessionOwnerKey(id), ct);
+            var id = $"{support.Transport.LocalId:N}.{request.RequestId:N}";
+            var existingOwner = await support.Store.ReadAsync<string>(AiAssistantSupportService.SessionOwnerKey(id), ct);
             if (existingOwner is not null && existingOwner != ownerId) return null;
-            var saved = await ReadConversationAsync(ownerId, id, ct);
+            var saved = await support.ReadConversationAsync(ownerId, id, ct);
             if (saved is not null)
             {
                 if (request.Provider is not null && (request.Provider != saved.Conversation.Provider
@@ -97,12 +99,12 @@ public sealed partial class AiAssistantService
             }
             else
             {
-                var options = await OptionsAsync(ct);
+                var options = await support.OptionsAsync(ct);
                 var provider = request.Provider ?? options.DefaultProvider;
                 var model = request.Provider is null && request.Model is null ? options.DefaultModel : request.Model;
                 var selectedOption = options.Models.FirstOrDefault(option => option.Provider == provider && option.Model == model
                     && (request.NodeId is null || option.NodeId == request.NodeId))
-                    ?? throw new ArgumentException("Le fournisseur ou le modèle choisi n’est pas configuré ou disponible dans le cluster.");
+                    ?? throw new ArgumentException("Le fournisseur ou le modèle choisi n’est pas configuré ou disponible dans le support.Cluster.");
                 if (request.ReasoningEffort is not null && !selectedOption.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal))
                     throw new ArgumentException("L’effort choisi n’est pas pris en charge par ce modèle.");
                 var now = DateTimeOffset.UtcNow;
@@ -110,21 +112,21 @@ public sealed partial class AiAssistantService
                 conversation = new(
                     id,
                     provider,
-                    CreateTitle(request.UserPrompt),
+                    AiAssistantSupportService.CreateTitle(request.UserPrompt),
                     source,
                     now,
                     now,
                     Model: model,
                     ReasoningEffort: request.ReasoningEffort,
                     NodeId: request.NodeId,
-                    TitleSource: TitleSourceFallback);
-                await SaveConversationAsync(ownerId, conversation, ct);
+                    TitleSource: AiAssistantSupportService.TitleSourceFallback);
+                await support.SaveConversationAsync(ownerId, conversation, ct);
             }
         }
         else
         {
-            if (!IsSessionId(request.ConversationId!)) return null;
-            var saved = await ReadConversationAsync(ownerId, request.ConversationId!, ct);
+            if (!AiAssistantSupportService.IsSessionId(request.ConversationId!)) return null;
+            var saved = await support.ReadConversationAsync(ownerId, request.ConversationId!, ct);
             if (saved is null) return null;
             var savedConversation = saved.Conversation;
             if (request.ResourceType is not null && request.ResourceType != savedConversation.Source.Kind
@@ -138,7 +140,7 @@ public sealed partial class AiAssistantService
             var chosenProvider = request.Provider ?? savedConversation.Provider;
             if (chosenProvider == savedConversation.Provider)
             {
-                var availableSelection = (await OptionsAsync(ct)).Models.Any(option =>
+                var availableSelection = (await support.OptionsAsync(ct)).Models.Any(option =>
                     option.Provider == chosenProvider && option.Model == chosenModel
                     && option.NodeId == (request.NodeId ?? savedConversation.NodeId)
                     && (request.ReasoningEffort is null || option.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal)));
@@ -156,7 +158,7 @@ public sealed partial class AiAssistantService
                 && !string.IsNullOrWhiteSpace(conversation.Model)
                 && conversation.Model != savedConversation.Model)
             {
-                var availableSelection = (await OptionsAsync(ct)).Models.Any(option =>
+                var availableSelection = (await support.OptionsAsync(ct)).Models.Any(option =>
                     option.Provider == conversation.Provider && option.Model == conversation.Model
                     && option.NodeId == conversation.NodeId
                     && (request.ReasoningEffort is null || option.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal)));
@@ -165,14 +167,14 @@ public sealed partial class AiAssistantService
             }
         }
 
-        var session = await cluster.GetSessionAsync(conversation.Id, ct);
-        var legacySession = session is not null && session.SystemPrompt != BuildSystemPrompt();
+        var session = await support.Cluster.GetSessionAsync(conversation.Id, ct);
+        var legacySession = session is not null && session.SystemPrompt != AiAssistantSupportService.BuildSystemPrompt();
         var requestedTools = request.ToolCalls ?? Array.Empty<AiAssistantToolCall>();
         if (requestedTools.Count > 3 || requestedTools.Select(tool => tool.Name).Distinct().Count() != requestedTools.Count)
             throw new ArgumentException("Une demande peut consulter jusqu’à trois outils de lecture distincts.");
         if (legacySession && requestedTools.Count > 0)
             throw new InvalidOperationException("Cette ancienne conversation ne prend pas en charge les outils de lecture. Créez une nouvelle conversation.");
-        var storedConversation = await ReadConversationAsync(ownerId, conversation.Id, ct);
+        var storedConversation = await support.ReadConversationAsync(ownerId, conversation.Id, ct);
         var savedUserPrompt = storedConversation?.UserPrompts?.GetValueOrDefault(request.RequestId);
         if (savedUserPrompt is not null && savedUserPrompt != request.UserPrompt)
             throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message.");
@@ -183,7 +185,7 @@ public sealed partial class AiAssistantService
         var savedPromptSnapshot = storedConversation?.TurnPromptSnapshots?.GetValueOrDefault(request.RequestId);
         IReadOnlyList<AiAssistantSource> allSources;
         string contextualPrompt;
-        var systemPrompt = session?.SystemPrompt ?? BuildSystemPrompt();
+        var systemPrompt = session?.SystemPrompt ?? AiAssistantSupportService.BuildSystemPrompt();
         if (savedPromptSnapshot is not null)
         {
             contextualPrompt = savedPromptSnapshot;
@@ -193,7 +195,7 @@ public sealed partial class AiAssistantService
         {
             var sources = conversation.Source.Kind == "application" && conversation.Source.ResourceId == Guid.Empty
                 ? Array.Empty<AiAssistantSource>()
-                : ConversationSources(conversation).ToArray();
+                : AiAssistantSupportService.ConversationSources(conversation).ToArray();
             if (legacySession && conversation.AdditionalSources is { Count: > 0 })
                 throw new InvalidOperationException("Cette ancienne conversation ne peut pas recevoir de nouvelles ressources. Créez une nouvelle conversation.");
             var resolved = new List<ResolvedContext>();
@@ -204,7 +206,7 @@ public sealed partial class AiAssistantService
                     resolved.Add(new(source, string.Empty));
                     continue;
                 }
-                var context = await ResolveContextAsync(source.Kind, source.ResourceId, source.Version, ct);
+                var context = await support.ResolveContextAsync(source.Kind, source.ResourceId, source.Version, ct);
                 if (context is null) return null;
                 resolved.Add(context);
             }
@@ -214,7 +216,7 @@ public sealed partial class AiAssistantService
             var toolContexts = new List<ResolvedContext>();
             foreach (var tool in requestedTools)
             {
-                var selectedToolResult = await mcp.CallAssistantReadToolAsync(tool, ct);
+                var selectedToolResult = await support.Mcp.CallAssistantReadToolAsync(tool, ct);
                 var data = JsonSerializer.Serialize(selectedToolResult.Data);
                 toolContexts.Add(new(new AiAssistantSource("tool", Guid.NewGuid(), selectedToolResult.Label, selectedToolResult.Href), data));
             }
@@ -223,7 +225,7 @@ public sealed partial class AiAssistantService
             var allContexts = resolved.Concat(toolContexts).ToArray();
             allSources = allContexts.Select(context => context.Source).ToArray();
             if (allSources.Count == 0) allSources = [conversation.Source];
-            contextualPrompt = legacySession ? request.UserPrompt : BuildContextualPrompt(request.UserPrompt, allContexts);
+            contextualPrompt = legacySession ? request.UserPrompt : AiAssistantSupportService.BuildContextualPrompt(request.UserPrompt, allContexts);
             if (attachments.Count > 0)
             {
                 var files = string.Join("\n\n", attachments.Select(file =>
@@ -260,26 +262,26 @@ public sealed partial class AiAssistantService
         var turnToolCalls = storedConversation?.TurnToolCalls?.ToDictionary(pair => pair.Key, pair => pair.Value)
             ?? new Dictionary<Guid, string>();
         turnToolCalls[request.RequestId] = serializedToolCalls;
-        await SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts, turnPromptSnapshots, turnToolCalls);
+        await support.SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts, turnPromptSnapshots, turnToolCalls);
         var startedAt = DateTimeOffset.UtcNow;
         var activity = new AiAssistantActivity(request.RequestId, conversation.Id, conversation.Provider,
             "running", startedAt, startedAt, null, null, Tools: requestedTools.Select(tool => tool.Name).ToArray(),
             Progress: "preparing", ProgressDetail: "Préparation de votre demande");
         using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var activeKey = (ownerId, request.RequestId);
-        if (!activeRequests.TryAdd(activeKey, requestCancellation))
+        if (!support.activeRequests.TryAdd(activeKey, requestCancellation))
             throw new InvalidOperationException("Cette demande est déjà en cours.");
-        try { await SaveActivityAsync(ownerId, activity, ct); }
+        try { await support.SaveActivityAsync(ownerId, activity, ct); }
         catch
         {
-            activeRequests.TryRemove(activeKey, out _);
+            support.activeRequests.TryRemove(activeKey, out _);
             throw;
         }
         AiCompletionResult result;
         AiAssistantActionProposal? actionProposal = null;
         try
         {
-            var policy = await cluster.GetSettingsAsync(ct);
+            var policy = await support.Cluster.GetSettingsAsync(ct);
             var modelPlans = storedConversation?.TurnModelPlans?.ToDictionary(pair => pair.Key, pair => pair.Value)
                 ?? new Dictionary<Guid, string>();
             var useExistingPrompt = storedConversation?.TurnModelPlans?.ContainsKey(request.RequestId) != true
@@ -291,21 +293,21 @@ public sealed partial class AiAssistantService
             }
             else if (modelPlans.TryGetValue(request.RequestId, out var savedPlan))
             {
-                plan = JsonSerializer.Deserialize<AiAssistantToolPlan>(savedPlan, ContextJsonOptions)
+                plan = JsonSerializer.Deserialize<AiAssistantToolPlan>(savedPlan, AiAssistantSupportService.ContextJsonOptions)
                     ?? throw new InvalidOperationException("La décision d’outil conservée est invalide.");
             }
             else
             {
                 activity = activity with { Progress = "context", ProgressDetail = "Recherche des informations utiles dans Encoding", UpdatedAt = DateTimeOffset.UtcNow };
-                await SaveActivityAsync(ownerId, activity, requestCancellation.Token);
-                var plannerRequestId = DeriveRequestId(
+                await support.SaveActivityAsync(ownerId, activity, requestCancellation.Token);
+                var plannerRequestId = AiAssistantSupportService.DeriveRequestId(
                     conversation.Id + "/" + request.RequestId.ToString("N"), "assistant-read-tool-planner");
                 var plannerSessionId = $"{conversation.Id.Split('.')[0]}.{plannerRequestId:N}";
-                await store.SaveAsync(SessionOwnerKey(plannerSessionId), ownerId, requestCancellation.Token);
-                await cluster.AdoptSessionAsync(plannerSessionId, requestCancellation.Token);
-                var planner = await cluster.GenerateAsync(
+                await support.Store.SaveAsync(AiAssistantSupportService.SessionOwnerKey(plannerSessionId), ownerId, requestCancellation.Token);
+                await support.Cluster.AdoptSessionAsync(plannerSessionId, requestCancellation.Token);
+                var planner = await support.Cluster.GenerateAsync(
                     conversation.Provider,
-                    new AiPrompt(BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId,
+                    new AiPrompt(AiAssistantSupportService.BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId,
                         RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
                     requestCancellation.Token,
                     localOnly: policy.AssistantLocalOnly);
@@ -317,7 +319,7 @@ public sealed partial class AiAssistantService
                     // Malformed structured output may not select or execute a tool; let the normal assistant answer.
                     plan = new("answer", Content: "La sortie de préparation était invalide. Réponds directement à la demande avec les sources fournies.");
                 }
-                modelPlans[request.RequestId] = JsonSerializer.Serialize(plan, ContextJsonOptions);
+                modelPlans[request.RequestId] = JsonSerializer.Serialize(plan, AiAssistantSupportService.ContextJsonOptions);
             }
 
             if (plan.Kind == "action_call")
@@ -328,8 +330,8 @@ public sealed partial class AiAssistantService
                 {
                     var actionCall = AiAssistantToolPlanParser.ParseActionCall(plan);
                     activity = activity with { Progress = "preparing-action", ProgressDetail = "Préparation d’une action à confirmer", UpdatedAt = DateTimeOffset.UtcNow };
-                    await SaveActivityAsync(ownerId, activity, requestCancellation.Token);
-                    var prepared = await PrepareAssistantActionAsync(actionCall, user, requestCancellation.Token)
+                    await support.SaveActivityAsync(ownerId, activity, requestCancellation.Token);
+                    var prepared = await actions.PrepareAssistantActionAsync(actionCall, user, requestCancellation.Token)
                         ?? throw new InvalidOperationException("La ressource ou sa version n’est plus disponible pour cette action.");
                     var businessOperation = BusinessOperationCatalog.FindTool(actionCall.Name) is { RequiresAdministrator: true };
                     actionProposal = new(businessOperation ? "business-operation" : actionCall.Name,
@@ -356,8 +358,8 @@ public sealed partial class AiAssistantService
                 if (existingTool is null)
                 {
                     activity = activity with { Progress = "reading", ProgressDetail = "Consultation des ressources nécessaires", UpdatedAt = DateTimeOffset.UtcNow };
-                    await SaveActivityAsync(ownerId, activity, requestCancellation.Token);
-                    var toolResult = await mcp.CallAssistantReadToolAsync(tool, requestCancellation.Token);
+                    await support.SaveActivityAsync(ownerId, activity, requestCancellation.Token);
+                    var toolResult = await support.Mcp.CallAssistantReadToolAsync(tool, requestCancellation.Token);
                     modelTools.Add(tool);
                     var toolContext = new ResolvedContext(
                         new AiAssistantSource("tool", Guid.NewGuid(), toolResult.Label, toolResult.Href),
@@ -365,26 +367,26 @@ public sealed partial class AiAssistantService
                     if (toolContext.Data.Length > 80_000 || toolContext.Data.Length + contextualPrompt.Length > 1_200_000)
                         throw new ArgumentException("Le résultat de l’outil dépasse la taille de contexte prise en charge.");
                     allSources = [.. allSources, toolContext.Source];
-                    contextualPrompt = AppendModelToolResult(contextualPrompt, toolContext);
+                    contextualPrompt = AiAssistantSupportService.AppendModelToolResult(contextualPrompt, toolContext);
                 }
             }
             else if (!reusePreparedPrompt)
             {
-                contextualPrompt = AppendModelDraft(contextualPrompt, plan.Content!);
+                contextualPrompt = AiAssistantSupportService.AppendModelDraft(contextualPrompt, plan.Content!);
             }
 
             if (!reusePreparedPrompt)
             {
                 turnSources[request.RequestId] = allSources;
                 turnPromptSnapshots[request.RequestId] = contextualPrompt;
-                await SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts, turnPromptSnapshots,
+                await support.SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts, turnPromptSnapshots,
                     turnToolCalls, modelPlans);
             }
             activity = activity with { Tools = modelTools.Select(tool => tool.Name).ToArray() };
             activity = activity with { Progress = actionProposal is null ? "generating" : "confirmation",
                 ProgressDetail = actionProposal is null ? "Rédaction de la réponse" : "Action prête à vérifier", UpdatedAt = DateTimeOffset.UtcNow };
-            await SaveActivityAsync(ownerId, activity, ct);
-            result = await cluster.GenerateAsync(
+            await support.SaveActivityAsync(ownerId, activity, ct);
+            result = await support.Cluster.GenerateAsync(
                 conversation.Provider,
                 new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId,
                     ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
@@ -395,7 +397,7 @@ public sealed partial class AiAssistantService
         catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested)
         {
             var cancelledAt = DateTimeOffset.UtcNow;
-            await SaveActivityAsync(ownerId, activity with { Status = "cancelled", UpdatedAt = cancelledAt,
+            await support.SaveActivityAsync(ownerId, activity with { Status = "cancelled", UpdatedAt = cancelledAt,
                 DurationMilliseconds = (long)(cancelledAt - startedAt).TotalMilliseconds,
                 ErrorCategory = ct.IsCancellationRequested ? null : "remote-result-uncertain",
                 Progress = "cancelled", ProgressDetail = "Demande interrompue" }, CancellationToken.None);
@@ -407,14 +409,15 @@ public sealed partial class AiAssistantService
         catch (Exception exception)
         {
             var failedAt = DateTimeOffset.UtcNow;
-            await SaveActivityAsync(ownerId, activity with { Status = "failed", UpdatedAt = failedAt,
+            await support.SaveActivityAsync(ownerId, activity with { Status = "failed", UpdatedAt = failedAt,
                 DurationMilliseconds = (long)(failedAt - startedAt).TotalMilliseconds,
-                ErrorCategory = CategorizeException(exception), Progress = "failed", ProgressDetail = FriendlyError(exception) }, CancellationToken.None);
+                ErrorCategory = AiAssistantSupportService.CategorizeException(exception),
+                    Progress = "failed", ProgressDetail = AiAssistantSupportService.FriendlyError(exception) }, CancellationToken.None);
             throw;
         }
         finally
         {
-            activeRequests.TryRemove(activeKey, out _);
+            support.activeRequests.TryRemove(activeKey, out _);
         }
 
         var completedAt = DateTimeOffset.UtcNow;
@@ -423,18 +426,18 @@ public sealed partial class AiAssistantService
             Status = result.Success ? "succeeded" : "failed",
             UpdatedAt = completedAt,
             DurationMilliseconds = (long)(completedAt - startedAt).TotalMilliseconds,
-            ErrorCategory = result.Success ? null : CategorizeError(result.ErrorMessage),
+            ErrorCategory = result.Success ? null : AiAssistantSupportService.CategorizeError(result.ErrorMessage),
             Progress = result.Success ? actionProposal is null ? "completed" : "confirmation" : "failed",
             ProgressDetail = result.Success
                 ? actionProposal is null ? "Réponse prête" : "Action prête à vérifier"
-                : FriendlyProviderError(result.ErrorMessage),
+                : AiAssistantSupportService.FriendlyProviderError(result.ErrorMessage),
         };
-        await SaveActivityAsync(ownerId, activity, ct);
+        await support.SaveActivityAsync(ownerId, activity, ct);
 
         conversation = conversation with { UpdatedAt = DateTimeOffset.UtcNow };
         var updatedSelections = storedConversation?.TurnSelections?.ToDictionary(pair => pair.Key, pair => pair.Value)
             ?? new Dictionary<Guid, AiTurnModelSelection>();
-        var selectedOptionForTurn = (await OptionsAsync(ct)).Models.FirstOrDefault(option =>
+        var selectedOptionForTurn = (await support.OptionsAsync(ct)).Models.FirstOrDefault(option =>
             option.Provider == conversation.Provider && option.Model == conversation.Model && option.NodeId == conversation.NodeId);
         if (selectedOptionForTurn is not null)
             updatedSelections[request.RequestId] = new(conversation.Provider, conversation.Model,
@@ -444,23 +447,23 @@ public sealed partial class AiAssistantService
             ?? new Dictionary<Guid, string?>();
         updatedActualModels[request.RequestId] = observedModel;
         var latestConversation = conversation with { Provider = conversation.Provider, Model = conversation.Model, ReasoningEffort = conversation.ReasoningEffort, NodeId = conversation.NodeId };
-        if (result.Success && latestConversation.TitleSource == TitleSourceFallback && userPrompts.Count <= MaxTitleAttemptTurns)
+        if (result.Success && latestConversation.TitleSource == AiAssistantSupportService.TitleSourceFallback && userPrompts.Count <= AiAssistantSupportService.MaxTitleAttemptTurns)
         {
-            var generated = await TryGenerateTitleAsync(latestConversation, request.UserPrompt, result.Content, ownerId, userPrompts.Count, ct);
+            var generated = await support.TryGenerateTitleAsync(latestConversation, request.UserPrompt, result.Content, ownerId, userPrompts.Count, ct);
             if (generated is not null)
-                latestConversation = latestConversation with { Title = generated, TitleSource = TitleSourceAi };
+                latestConversation = latestConversation with { Title = generated, TitleSource = AiAssistantSupportService.TitleSourceAi };
         }
         // A rename made while the answer was being generated always wins over the automatic title.
-        if (await ReadConversationAsync(ownerId, conversation.Id, ct) is { Conversation.TitleSource: TitleSourceUser } renamed)
-            latestConversation = latestConversation with { Title = renamed.Conversation.Title, TitleSource = TitleSourceUser };
-        await SaveConversationAsync(ownerId, latestConversation, ct,
+        if (await support.ReadConversationAsync(ownerId, conversation.Id, ct) is { Conversation.TitleSource: AiAssistantSupportService.TitleSourceUser } renamed)
+            latestConversation = latestConversation with { Title = renamed.Conversation.Title, TitleSource = AiAssistantSupportService.TitleSourceUser };
+        await support.SaveConversationAsync(ownerId, latestConversation, ct,
             turnSelections: updatedSelections, turnActualModels: updatedActualModels);
         return new(
             result.Success,
             latestConversation,
             result.RequestId ?? request.RequestId,
             result.Success ? result.Content : null,
-            result.Success ? null : FriendlyProviderError(result.ErrorMessage),
+            result.Success ? null : AiAssistantSupportService.FriendlyProviderError(result.ErrorMessage),
             allSources,
             updatedSelections.GetValueOrDefault(request.RequestId),
             observedModel,
@@ -469,4 +472,5 @@ public sealed partial class AiAssistantService
         }
         finally { gate.Release(); }
     }
+
 }

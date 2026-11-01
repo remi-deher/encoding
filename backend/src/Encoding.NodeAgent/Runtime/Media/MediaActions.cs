@@ -10,7 +10,7 @@ namespace Encoding.NodeAgent.Runtime.Media;
 public sealed record MediaActionOutcome(string? Primary,IReadOnlyList<string> Additional,JsonElement? Value=null,
     IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings=null,bool NeedsChanges=false);
 
-public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IToolCapabilityProbe capabilities,ILogger<MediaActions>? logger=null)
+public sealed partial class MediaActions(IProcessToolRunner tools,MediaScanner scanner,IToolCapabilityProbe capabilities,ILogger<MediaActions>? logger=null)
 {
     public static string Text(IReadOnlyDictionary<string,JsonElement> c,string key,string fallback="")=>c.TryGetValue(key,out var v)&&v.ValueKind==JsonValueKind.String?v.GetString()!:fallback;
     public static string Number(IReadOnlyDictionary<string,JsonElement> c,string key,decimal fallback=0)=>c.TryGetValue(key,
@@ -90,7 +90,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         if(id is "base-convert-image" or "base-resize-image" or "base-crop-image" or "image-convert" or "image-resize" or "image-crop")
         {
             var file=Output(directory,node,(id is "base-convert-image" or "image-convert")?"."+Text(config,"format","webp"):Path.GetExtension(current));
-            var exe=ProcessToolRunner.Find("magick") is not null?"magick":"convert"; var args=new List<string> { current };
+            var exe=tools.Find("magick") is not null?"magick":"convert"; var args=new List<string> { current };
             if(id is "base-convert-image" or "image-convert") args.AddRange(["-quality",Number(config,"quality",85)]);
             if(id is "base-resize-image" or "image-resize") args.AddRange(["-resize",Number(config,"width",1920)+"x"+Number(config,"height",1080)+(Flag(config,"preserveAspectRatio",true)?">":"!")]);
             if(id is "base-crop-image" or "image-crop")

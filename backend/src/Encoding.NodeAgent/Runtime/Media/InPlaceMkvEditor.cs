@@ -13,7 +13,7 @@ public sealed record InPlaceEditResult(string Status,string Detail,string? NewSh
 /// ou de durée, ou une propriété non appliquée, restaure le fichier d'origine. Une intention écrite avant la modification permet
 /// de trancher une reprise après perte du nœud.
 /// </summary>
-public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
+public sealed class InPlaceMkvEditor(IProcessToolRunner tools)
 {
     public const string IntentName="in-place.json";
     public const string BackupName="before-edit.mkv";

@@ -31,13 +31,16 @@ builder.Services.AddSingleton<ISystemLogNodeContext>(sp =>
     });
 });
 builder.Services.AddSystemLogging();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ProcessToolRunner>();
+builder.Services.AddSingleton<IProcessToolRunner>(provider => provider.GetRequiredService<ProcessToolRunner>());
 builder.Services.AddSingleton<PluginProcessHost>();
 builder.Services.AddSingleton<IPublicationGuardInvoker,PluginPublicationGuardInvoker>();
 builder.Services.AddSingleton<PublicationGuardRunner>();
 builder.Services.AddSingleton<MediaScanner>();
 builder.Services.AddSingleton<MediaActions>();
 builder.Services.AddSingleton<LocalPublicationArtifactStore>();
+builder.Services.AddSingleton<ILocalPublicationArtifactStore>(provider => provider.GetRequiredService<LocalPublicationArtifactStore>());
 builder.Services.AddSingleton<RuntimeFlowRunner>();
 builder.Services.AddHostedService<RuntimeTransferService>();
 builder.Services.AddHostedService<WorkspaceCleanupService>();

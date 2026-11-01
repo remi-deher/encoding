@@ -36,6 +36,48 @@ public sealed class ArchitectureTests
 
     private static readonly string[] EndpointStorageDebt = [];
 
+    // Dette connue : endpoints qui injectent encore un *Repository. Ne jamais agrandir la liste.
+    private static readonly string[] EndpointRepositoryDebt =
+    [
+        "Encoding.Api/Auth/ApiTokenEndpoints.cs",
+        "Encoding.Api/Auth/AuthEndpoints.cs",
+        "Encoding.Api/Cluster/LeadershipEndpoints.cs",
+        "Encoding.Api/Executions/ExecutionEndpoints.cs",
+        "Encoding.Api/Executions/RuntimeEndpoints.cs",
+        "Encoding.Api/Executions/SourceReplacementEndpoints.cs",
+        "Encoding.Api/Executions/TaskOwnershipEndpoints.cs",
+        "Encoding.Api/Flows/EncodingProfileEndpoints.cs",
+        "Encoding.Api/Flows/FlowAiEndpoints.cs",
+        "Encoding.Api/Flows/FlowComponentPackEndpoints.cs",
+        "Encoding.Api/Flows/FlowEndpoints.cs",
+        "Encoding.Api/Flows/FlowScriptEndpoints.cs",
+        "Encoding.Api/Flows/FlowSimulationEndpoints.cs",
+        "Encoding.Api/Flows/FlowTemplateEndpoints.cs",
+        "Encoding.Api/Infrastructure/ClusterEndpoints.cs",
+        "Encoding.Api/Infrastructure/ClusterReconciliationEndpoints.cs",
+        "Encoding.Api/Infrastructure/ClusterTaskEndpoints.cs",
+        "Encoding.Api/Libraries/LibraryActivityEndpoints.cs",
+        "Encoding.Api/Libraries/LibraryEndpoints.cs",
+        "Encoding.Api/Libraries/LibraryWorkflowEndpoints.cs",
+        "Encoding.Api/Logging/SystemLogEndpoints.cs",
+        "Encoding.Api/Nodes/EnrollmentWindowEndpoints.cs",
+        "Encoding.Api/Nodes/LocalNodeEndpoints.cs",
+        "Encoding.Api/Nodes/NodeEndpoints.cs",
+        "Encoding.Api/Nodes/NodeGroupEndpoints.cs",
+        "Encoding.Api/Plugins/ArrWebhookEndpoints.cs",
+        "Encoding.Api/Plugins/PluginConfigurationEndpoints.cs",
+        "Encoding.Api/Plugins/PluginStoreEndpoints.cs",
+        "Encoding.Api/Resources/ResourceEndpoints.cs",
+    ];
+
+    // Dette connue : new HttpClient() hors IHttpClientFactory. Ne jamais agrandir la liste.
+    private static readonly string[] HttpClientConstructionDebt =
+    [
+        "Encoding.Api/Mcp/McpCommand.cs",
+        "Encoding.NodeAgent/Services/WorkerClusterDiscovery.cs",
+        "Encoding.NodeAgent/Services/WorkerEnrollmentService.cs",
+    ];
+
     [Fact]
     public void ProjectReferencesFollowTheLayering()
     {
@@ -82,6 +124,34 @@ public sealed class ArchitectureTests
             .Where(file => Regex.IsMatch(File.ReadAllText(file), @"\b(File|Directory)\.\w+\(|\bFileStream\b|\bProcess\b"))
             .Select(Relative).ToArray();
         Assert.True(offenders.Length == 0, "Accès fichier ou processus direct dans les endpoints (utiliser FileResults ou un service) : " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void EndpointsDoNotInjectRepositoriesDirectly()
+    {
+        var repositoryParam = new Regex(@"\b([A-Z][A-Za-z0-9]*Repository)\s+[a-zA-Z_]");
+        var offenders = SourceFiles("Encoding.Api").Where(file => file.EndsWith("Endpoints.cs"))
+            .Where(file => repositoryParam.IsMatch(File.ReadAllText(file)))
+            .Select(Relative).ToArray();
+        var unexpected = offenders.Except(EndpointRepositoryDebt).ToArray();
+        Assert.True(unexpected.Length == 0, "Endpoints injectant un dépôt (passer par un service) : " + string.Join(", ", unexpected));
+        var stale = EndpointRepositoryDebt.Except(offenders).ToArray();
+        Assert.True(stale.Length == 0, "Retirer de EndpointRepositoryDebt : " + string.Join(", ", stale));
+    }
+
+    [Fact]
+    public void HttpClientsAreCreatedOnlyViaAllowListedFactories()
+    {
+        var offenders = AllowedProjectReferences.Keys.SelectMany(SourceFiles)
+            .Where(file => Regex.IsMatch(File.ReadAllText(file), @"\bnew\s+HttpClient\b"))
+            .Select(Relative).Except(HttpClientConstructionDebt).ToArray();
+        Assert.True(offenders.Length == 0, "new HttpClient() hors fabrique allow-listée : " + string.Join(", ", offenders));
+        var stale = HttpClientConstructionDebt.Where(relative =>
+        {
+            var path = Path.Combine(SourceRoot, relative);
+            return !File.Exists(path) || !Regex.IsMatch(File.ReadAllText(path), @"\bnew\s+HttpClient\b");
+        }).ToArray();
+        Assert.True(stale.Length == 0, "Retirer de HttpClientConstructionDebt : " + string.Join(", ", stale));
     }
 
     [Fact]

@@ -8,7 +8,7 @@ public sealed record ToolResult(int ExitCode, string Output, string Error = "");
 public sealed class MediaToolException(string tool, int exitCode, string? detail = null)
     : Exception($"L’outil {tool} a échoué (code {exitCode})." + (string.IsNullOrWhiteSpace(detail) ? "" : " " + detail));
 
-public sealed class ProcessToolRunner
+public sealed class ProcessToolRunner : IProcessToolRunner
 {
     private const int CapturedLogLimit = 32 * 1024;
 
@@ -19,6 +19,8 @@ public sealed class ProcessToolRunner
         return (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(directory => Path.Combine(directory, name)).FirstOrDefault(File.Exists);
     }
+
+    string? IProcessToolRunner.Find(string executable) => Find(executable);
 
     public async Task<ToolResult> RunAsync(string executable, IEnumerable<string> arguments, string workingDirectory,
         TimeSpan timeout, CancellationToken ct, string? input = null, int outputLimit = 2 * 1024 * 1024,

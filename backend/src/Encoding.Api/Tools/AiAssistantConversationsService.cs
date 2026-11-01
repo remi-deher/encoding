@@ -13,6 +13,7 @@ using Encoding.Api.Nodes;
 using Encoding.Api.Mcp;
 using Encoding.Api.Libraries;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Cluster;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Libraries;
@@ -21,19 +22,20 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed partial class AiAssistantService
+public sealed class AiAssistantConversationsService(AiAssistantSupportService support)
 {
+
     public async Task<IReadOnlyList<AiAssistantConversation>> ListAsync(ClaimsPrincipal user, CancellationToken ct)
     {
-        var ownerId = OwnerId(user);
-        var conversations = await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix + ownerId + "/", ct);
+        var ownerId = AiAssistantSupportService.OwnerId(user);
+        var conversations = await support.Store.ReadPrefixAsync<StoredConversation>(AiAssistantSupportService.ConversationPrefix + ownerId + "/", ct);
         var page = conversations
             .Select(record => record.Conversation)
             .OrderByDescending(conversation => conversation.UpdatedAt)
             .Take(100)
             .ToArray();
         for (var index = 0; index < page.Length; index++)
-            page[index] = page[index] with { CoordinatorId = await cluster.CoordinatorAsync(page[index].Id, ct) };
+            page[index] = page[index] with { CoordinatorId = await support.Cluster.CoordinatorAsync(page[index].Id, ct) };
         return page;
     }
 
@@ -46,8 +48,8 @@ public sealed partial class AiAssistantService
         var normalizedQuery = NormalizeSearchText(originalQuery);
         if (normalizedQuery.Length is < 2 or > 120) return [];
 
-        var ownerId = OwnerId(user);
-        var records = (await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix + ownerId + "/", ct))
+        var ownerId = AiAssistantSupportService.OwnerId(user);
+        var records = (await support.Store.ReadPrefixAsync<StoredConversation>(AiAssistantSupportService.ConversationPrefix + ownerId + "/", ct))
             .OrderByDescending(record => record.Conversation.UpdatedAt)
             .Take(100)
             .ToArray();
@@ -67,7 +69,7 @@ public sealed partial class AiAssistantService
                     sourceLabel, $"Conversation · {sourceLabel} · {conversation.Provider}",
                     null, null, conversation.UpdatedAt));
             }
-            else if (await cluster.GetSessionAsync(conversation.Id, ct) is { } session)
+            else if (await support.Cluster.GetSessionAsync(conversation.Id, ct) is { } session)
             {
                 for (var turnIndex = 0; turnIndex < session.Turns.Count; turnIndex++)
                 {
@@ -91,10 +93,10 @@ public sealed partial class AiAssistantService
         return results;
     }
 
-    private static bool ContainsSearchText(string? value, string normalizedQuery) =>
+    public static bool ContainsSearchText(string? value, string normalizedQuery) =>
         value is not null && NormalizeSearchText(value).Contains(normalizedQuery, StringComparison.Ordinal);
 
-    private static string NormalizeSearchText(string value)
+    public static string NormalizeSearchText(string value)
     {
         var decomposed = value.Normalize(NormalizationForm.FormD);
         var normalized = new StringBuilder(decomposed.Length);
@@ -106,7 +108,7 @@ public sealed partial class AiAssistantService
         return normalized.ToString().Normalize(NormalizationForm.FormC);
     }
 
-    private static string SearchSnippet(string value, string query)
+    public static string SearchSnippet(string value, string query)
     {
         var index = NormalizeSearchText(value).IndexOf(NormalizeSearchText(query), StringComparison.Ordinal);
         if (index < 0) index = 0;
@@ -118,11 +120,11 @@ public sealed partial class AiAssistantService
 
     public async Task<bool> DeleteConversationAsync(string id, ClaimsPrincipal user, CancellationToken ct)
     {
-        if (!IsSessionId(id)) return false;
-        var ownerId = OwnerId(user);
-        var stored = await ReadConversationAsync(ownerId, id, ct);
+        if (!AiAssistantSupportService.IsSessionId(id)) return false;
+        var ownerId = AiAssistantSupportService.OwnerId(user);
+        var stored = await support.ReadConversationAsync(ownerId, id, ct);
         if (stored is null) return false;
-        var session = await cluster.GetSessionAsync(id, ct);
+        var session = await support.Cluster.GetSessionAsync(id, ct);
         if (session?.PendingRequest is not null)
             throw new InvalidOperationException("Terminez ou reprenez la demande en cours avant de supprimer cette conversation.");
 
@@ -130,31 +132,31 @@ public sealed partial class AiAssistantService
         return true;
     }
 
-    private async Task DeleteStoredConversationAsync(StoredConversation stored, CancellationToken ct)
+    public async Task DeleteStoredConversationAsync(StoredConversation stored, CancellationToken ct)
     {
-        await store.DeleteAsync(ConversationKey(stored.OwnerId, stored.Conversation.Id), ct);
-        await store.DeleteAsync(SessionOwnerKey(stored.Conversation.Id), ct);
-        await store.DeleteAsync("session/" + stored.Conversation.Id, ct);
-            await store.DeleteAsync(AiClusterService.CoordinatorKey(stored.Conversation.Id), ct);
-        for (var attempt = 1; attempt <= MaxTitleAttemptTurns; attempt++)
+        await support.Store.DeleteAsync(AiAssistantSupportService.ConversationKey(stored.OwnerId, stored.Conversation.Id), ct);
+        await support.Store.DeleteAsync(AiAssistantSupportService.SessionOwnerKey(stored.Conversation.Id), ct);
+        await support.Store.DeleteAsync("session/" + stored.Conversation.Id, ct);
+            await support.Store.DeleteAsync(AiClusterService.CoordinatorKey(stored.Conversation.Id), ct);
+        for (var attempt = 1; attempt <= AiAssistantSupportService.MaxTitleAttemptTurns; attempt++)
         {
-            var titleSessionId = $"{stored.Conversation.Id.Split('.')[0]}.{TitleRequestId(stored.Conversation.Id, attempt):N}";
-            await store.DeleteAsync(SessionOwnerKey(titleSessionId), ct);
-            await DeleteHelperSessionAsync(titleSessionId, ct);
+            var titleSessionId = $"{stored.Conversation.Id.Split('.')[0]}.{AiAssistantSupportService.TitleRequestId(stored.Conversation.Id, attempt):N}";
+            await support.Store.DeleteAsync(AiAssistantSupportService.SessionOwnerKey(titleSessionId), ct);
+            await support.DeleteHelperSessionAsync(titleSessionId, ct);
         }
         foreach (var requestId in stored.TurnPromptSnapshots?.Keys ?? Array.Empty<Guid>())
         {
-            var plannerRequestId = DeriveRequestId(
+            var plannerRequestId = AiAssistantSupportService.DeriveRequestId(
                 stored.Conversation.Id + "/" + requestId.ToString("N"), "assistant-read-tool-planner");
-            await DeleteHelperSessionAsync($"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
+            await support.DeleteHelperSessionAsync($"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
         }
     }
 
     public async Task<IReadOnlyList<AiAssistantActivity>> ActivityAsync(ClaimsPrincipal user, CancellationToken ct)
     {
-        var ownerId = OwnerId(user);
-        var records = await store.ReadPrefixAsync<StoredActivity>(ActivityPrefix + ownerId + "/", ct);
-        var titles = (await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix + ownerId + "/", ct))
+        var ownerId = AiAssistantSupportService.OwnerId(user);
+        var records = await support.Store.ReadPrefixAsync<StoredActivity>(AiAssistantSupportService.ActivityPrefix + ownerId + "/", ct);
+        var titles = (await support.Store.ReadPrefixAsync<StoredConversation>(AiAssistantSupportService.ConversationPrefix + ownerId + "/", ct))
             .ToDictionary(record => record.Conversation.Id, record => record.Conversation.Title, StringComparer.Ordinal);
         return records.Select(record => WithTitle(record.Activity, titles))
             .OrderByDescending(activity => activity.UpdatedAt)
@@ -162,15 +164,15 @@ public sealed partial class AiAssistantService
             .ToArray();
     }
 
-    private static AiAssistantActivity WithTitle(AiAssistantActivity activity, IReadOnlyDictionary<string, string> titles) =>
+    public static AiAssistantActivity WithTitle(AiAssistantActivity activity, IReadOnlyDictionary<string, string> titles) =>
         activity.ConversationId is { } id && titles.TryGetValue(id, out var title) ? activity with { ConversationTitle = title } : activity;
 
     public async Task<AiAssistantActivity?> GetActivityAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct)
     {
         if (requestId == Guid.Empty) throw new ArgumentException("Identifiant de demande invalide.");
-        var ownerId = OwnerId(user);
+        var ownerId = AiAssistantSupportService.OwnerId(user);
         var activity = await ReadActivityAsync(ownerId, requestId, ct);
-        if (activity?.ConversationId is { } id && IsSessionId(id) && await ReadConversationAsync(ownerId, id, ct) is { } stored)
+        if (activity?.ConversationId is { } id && AiAssistantSupportService.IsSessionId(id) && await support.ReadConversationAsync(ownerId, id, ct) is { } stored)
             activity = activity with { ConversationTitle = stored.Conversation.Title };
         return activity;
     }
@@ -178,12 +180,12 @@ public sealed partial class AiAssistantService
     public async Task<Guid?> GetRequestCoordinatorIdAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct)
     {
         if (requestId == Guid.Empty) return null;
-        var activity = await ReadActivityAsync(OwnerId(user), requestId, ct);
-        return await cluster.CoordinatorAsync(activity?.ConversationId, ct);
+        var activity = await ReadActivityAsync(AiAssistantSupportService.OwnerId(user), requestId, ct);
+        return await support.Cluster.CoordinatorAsync(activity?.ConversationId, ct);
     }
 
-    private async Task<AiAssistantActivity?> ReadActivityAsync(string ownerId, Guid requestId, CancellationToken ct) =>
-        (await store.ReadAsync<StoredActivity>(ActivityPrefix + ownerId + "/" + requestId.ToString("N"), ct))?.Activity;
+    public async Task<AiAssistantActivity?> ReadActivityAsync(string ownerId, Guid requestId, CancellationToken ct) =>
+        (await support.Store.ReadAsync<StoredActivity>(AiAssistantSupportService.ActivityPrefix + ownerId + "/" + requestId.ToString("N"), ct))?.Activity;
 
     public async Task RecordOperationActivityAsync(
         ClaimsPrincipal user,
@@ -200,14 +202,14 @@ public sealed partial class AiAssistantService
         var activity = new AiAssistantActivity(requestId, null, provider, status, startedAt, updatedAt,
             status == "running" ? null : (long)(updatedAt - startedAt).TotalMilliseconds,
             errorCategory, operation);
-        await SaveActivityAsync(OwnerId(user), activity, ct);
+        await support.SaveActivityAsync(AiAssistantSupportService.OwnerId(user), activity, ct);
     }
 
     public bool CancelRequest(Guid requestId, ClaimsPrincipal user)
     {
         if (requestId == Guid.Empty) return false;
-        var key = (OwnerId(user), requestId);
-        if (!activeRequests.TryGetValue(key, out var cancellation)) return false;
+        var key = (AiAssistantSupportService.OwnerId(user), requestId);
+        if (!support.activeRequests.TryGetValue(key, out var cancellation)) return false;
         try
         {
             cancellation.Cancel();
@@ -227,24 +229,24 @@ public sealed partial class AiAssistantService
     {
         if (decision is not ("applied-to-editor" or "rejected"))
             throw new ArgumentException("Décision de proposition invalide.");
-        var ownerId = OwnerId(user);
-        var key = ActivityPrefix + ownerId + "/" + requestId.ToString("N");
-        var stored = await store.ReadAsync<StoredActivity>(key, ct);
+        var ownerId = AiAssistantSupportService.OwnerId(user);
+        var key = AiAssistantSupportService.ActivityPrefix + ownerId + "/" + requestId.ToString("N");
+        var stored = await support.Store.ReadAsync<StoredActivity>(key, ct);
         if (stored is null || stored.Activity.Operation is not ("flow-generation" or "flow-refactor")) return false;
         if (stored.Activity.Status == decision) return true;
         if (stored.Activity.Status != "proposal-ready") return false;
-        await SaveActivityAsync(ownerId, stored.Activity with { Status = decision, UpdatedAt = DateTimeOffset.UtcNow }, ct);
+        await support.SaveActivityAsync(ownerId, stored.Activity with { Status = decision, UpdatedAt = DateTimeOffset.UtcNow }, ct);
         return true;
     }
 
     public async Task<AiAssistantConversationDetail?> GetAsync(string id, ClaimsPrincipal user, CancellationToken ct)
     {
-        if (!IsSessionId(id)) return null;
-        var stored = await ReadConversationAsync(ownerId: OwnerId(user), id, ct);
+        if (!AiAssistantSupportService.IsSessionId(id)) return null;
+        var stored = await support.ReadConversationAsync(ownerId: AiAssistantSupportService.OwnerId(user), id, ct);
         if (stored is null) return null;
-        var conversation = stored.Conversation with { CoordinatorId = await cluster.CoordinatorAsync(id, ct) };
+        var conversation = stored.Conversation with { CoordinatorId = await support.Cluster.CoordinatorAsync(id, ct) };
 
-        var session = await cluster.GetSessionAsync(id, ct);
+        var session = await support.Cluster.GetSessionAsync(id, ct);
         var turns = session?.Turns.Select(turn => new AiAssistantTurn(
             turn.RequestId, stored.UserPrompts?.GetValueOrDefault(turn.RequestId) ?? turn.UserPrompt, turn.Content,
             stored.TurnSources?.GetValueOrDefault(turn.RequestId) ?? [conversation.Source],
@@ -265,14 +267,14 @@ public sealed partial class AiAssistantService
         ClaimsPrincipal user,
         CancellationToken ct)
     {
-        if (!IsSessionId(id)) return null;
-        var ownerId = OwnerId(user);
-        var stored = await ReadConversationAsync(ownerId, id, ct);
+        if (!AiAssistantSupportService.IsSessionId(id)) return null;
+        var ownerId = AiAssistantSupportService.OwnerId(user);
+        var stored = await support.ReadConversationAsync(ownerId, id, ct);
         if (stored is null) return null;
-        var session = await cluster.GetSessionAsync(id, ct);
+        var session = await support.Cluster.GetSessionAsync(id, ct);
         if (session?.PendingRequest is not null)
             throw new InvalidOperationException("Reprenez ou terminez la demande en cours avant de modifier ses ressources.");
-        if (session is not null && session.SystemPrompt != BuildSystemPrompt())
+        if (session is not null && session.SystemPrompt != AiAssistantSupportService.BuildSystemPrompt())
             throw new InvalidOperationException("Cette ancienne conversation conserve son contexte initial. Créez une nouvelle conversation pour modifier ses ressources.");
         if (request.Sources is null || request.Sources.Count is < 1 or > 5)
             throw new ArgumentException("Une conversation doit conserver entre une et cinq ressources.");
@@ -283,7 +285,7 @@ public sealed partial class AiAssistantService
         var resolved = new List<AiAssistantSource>(request.Sources.Count);
         foreach (var reference in request.Sources)
         {
-            var context = await ResolveContextAsync(reference.Type, reference.Id, reference.Version, ct);
+            var context = await support.ResolveContextAsync(reference.Type, reference.Id, reference.Version, ct);
             if (context is null) return null;
             resolved.Add(context.Source);
         }
@@ -294,7 +296,8 @@ public sealed partial class AiAssistantService
             AdditionalSources = resolved.Skip(1).ToArray(),
             UpdatedAt = DateTimeOffset.UtcNow,
         };
-        await SaveConversationAsync(ownerId, conversation, ct);
+        await support.SaveConversationAsync(ownerId, conversation, ct);
         return conversation;
     }
+
 }

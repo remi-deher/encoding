@@ -367,7 +367,7 @@ public sealed class AiClusterTests
     {
         await using var mesh = await Mesh.CreateAsync();
         await mesh.PrepareOpenAiCatalogsAsync();
-        var assistant = new AiAssistantService(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
+        var assistant = AiAssistantService.Create(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
             null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
         var options = await assistant.OptionsAsync(Ct);
         Assert.Equal(2, options.Models.Count);
@@ -384,10 +384,10 @@ public sealed class AiClusterTests
     {
         var mesh = await Mesh.CreateAsync();
         await mesh.PrepareOpenAiCatalogsAsync();
-        var assistant = new AiAssistantService(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
+        var assistant = AiAssistantService.Create(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
             null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
         mesh.First.Assistant = assistant;
-        mesh.Second.Assistant = new AiAssistantService(mesh.Second.Store, mesh.Second.Service, mesh.Second.Transport,
+        mesh.Second.Assistant = AiAssistantService.Create(mesh.Second.Store, mesh.Second.Service, mesh.Second.Transport,
             null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
         var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([
             new(System.Security.Claims.ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
@@ -492,10 +492,10 @@ public sealed class AiClusterTests
         var resourceId = Guid.NewGuid();
         var nodes = new NodeRepository(mesh.First.Database.Db);
         await nodes.EnrollAsync(new(resourceId, "worker", [Encoding.Contracts.Nodes.NodeRole.Worker], 1, [], "node-secret"), true, Ct);
-        var assistant = new AiAssistantService(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
+        var assistant = AiAssistantService.Create(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
             null!, null!, null!, null!, nodes, new NodePresenceOptions(TimeSpan.FromMinutes(2)), null!, new EphemeralDataProtectionProvider());
         mesh.First.Assistant = assistant;
-        var remoteAssistant = new AiAssistantService(mesh.Second.Store, mesh.Second.Service, mesh.Second.Transport,
+        var remoteAssistant = AiAssistantService.Create(mesh.Second.Store, mesh.Second.Service, mesh.Second.Transport,
             null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
         mesh.Second.Assistant = remoteAssistant;
         var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([
