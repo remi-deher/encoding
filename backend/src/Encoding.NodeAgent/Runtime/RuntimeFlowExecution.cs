@@ -19,26 +19,7 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
     private readonly CancellationTokenSource job = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
     private readonly SemaphoreSlim leaseGate = new(1, 1);
     private readonly string directory = Path.Combine(options.DataDirectory, "executions", lease.ExecutionId.ToString("D"), lease.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture));
-    private readonly HashSet<string> conformingNodes = new(StringComparer.Ordinal);
-    private bool publicationConfirmed;
-    private string? activeBlock;
-    private int revision = lease.Revision;
-    private bool cancelled;
-    private bool lost;
-    private string? sourceSha;
-    private bool directRead;
-    private string extension = "";
-    private string original = "";
-    private MediaFileStamp? observed;
-    private RuntimeContext context = null!;
-    private FlowPlacementPlan? placementPlan;
-    private Dictionary<string, JsonElement> variables = new();
-    private string? next;
-    private string? terminal;
-    private string? lastOutput;
-    private string current = "";
-    private bool materialized;
-    private MediaFileStamp? currentStamp;
+    private readonly FlowExecutionState state = new(lease.Revision);
 
     public void Dispose()
     {
@@ -55,12 +36,14 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         try
         {
             await InitializeAsync();
-            if (!await RunStepsAsync()) return;
+            var steps = await RunStepsAsync();
+            ApplyStepOutcome(steps);
+            if (steps.StopsLocalRun) return;
             await FinishAsync();
         }
         catch (OperationCanceledException) when (job.IsCancellationRequested)
         {
-            if (cancelled && !lost) await FailureAsync("cancelled", "Annulation confirmée après arrêt des processus.");
+            if (state.IsCancelled && !state.IsLost) await FailureAsync("cancelled", "Annulation confirmée après arrêt des processus.");
         }
         catch (HttpRequestException exception) when (exception.StatusCode == System.Net.HttpStatusCode.Conflict)
         {
@@ -70,7 +53,7 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
             // si le bail a réellement changé d'époque, le renouvellement sera refusé et l'ancien worker
             // ne pourra rien modifier.
             logger.LogWarning(exception, "Complétion de l’exécution {ExecutionId} refusée par le cluster ; tentative de clôture en échec.", lease.ExecutionId);
-            lost = true;
+            state.MarkLost();
             await FailureAsync("failed", "cluster_refused : Le cluster a refusé une étape ou une complétion de l’exécution.");
         }
         catch (HttpRequestException exception) when (exception.StatusCode is null || (int)exception.StatusCode >= 500)
@@ -94,26 +77,27 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
             }
             else
             {
-                lost = true;
+                state.MarkLost();
                 logger.LogWarning(exception, "Exécution {ExecutionId} interrompue pendant un échange HTTP ({StatusCode}) ; reprise après expiration du bail.", lease.ExecutionId, exception.StatusCode);
             }
         }
         catch (Exception exception)
         {
             logger.LogWarning("Exécution {ExecutionId} interrompue : {Type}", lease.ExecutionId, exception.GetType().Name);
-            if (!lost)
+            if (!state.IsLost)
             {
                 var code = exception.Message.StartsWith("placement_impossible:", StringComparison.Ordinal) ? "placement_impossible" : exception switch
                 {
                     LibraryAccessException or UnauthorizedAccessException => "permission_denied",
                     MediaToolException => "media_tool_failed",
                     OperationCanceledException or TimeoutException => "operation_timeout",
-                    _ => lease.Flow.Nodes.FirstOrDefault(node => node.Id == activeBlock)?.Component.PluginId is "plex" or "sonarr" or "radarr" or "jellyfin" ? "integration_infrastructure_failed" : "execution_infrastructure_failed"
+                    _ => lease.Flow.Nodes.FirstOrDefault(node => node.Id == state.ActiveBlock)?.Component.PluginId
+                        is "plex" or "sonarr" or "radarr" or "jellyfin" ? "integration_infrastructure_failed" : "execution_infrastructure_failed"
                 };
                 var detail = code == "placement_impossible" || exception is MediaToolException or FlowArtifactReferenceException or LibraryAccessException
                     ? exception.Message : "Vérifiez les outils, accès et intégrations de cette étape.";
-                await FailureAsync("failed", $"{code} : bloc {activeBlock ?? "préparation"}. "
-                    + (publicationConfirmed ? "Publication média confirmée ; échec d’une étape ultérieure. " : "Aucune nouvelle confirmation de publication obtenue. ") + detail);
+                await FailureAsync("failed", $"{code} : bloc {state.ActiveBlock ?? "préparation"}. "
+                    + (state.PublicationConfirmed ? "Publication média confirmée ; échec d’une étape ultérieure. " : "Aucune nouvelle confirmation de publication obtenue. ") + detail);
             }
         }
         finally { job.Cancel(); await renewal; }
@@ -138,7 +122,7 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
                     catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
                     {
                         logger.LogWarning("Bail de l’exécution {ExecutionId} révoqué par le cluster (HTTP 409).", lease.ExecutionId);
-                        lost = true;
+                        state.MarkLost();
                         job.Cancel();
                         break;
                     }
@@ -150,7 +134,7 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
                         if (consecutiveFailures >= 5)
                         {
                             logger.LogError("Bail de l’exécution {ExecutionId} considéré comme perdu après 5 échecs consécutifs.", lease.ExecutionId);
-                            lost = true;
+                            state.MarkLost();
                             job.Cancel();
                             break;
                         }
@@ -163,46 +147,51 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
 
     private async Task InitializeAsync()
     {
-        sourceSha = lease.SourceSha256;
-        directRead = lease.DirectRead && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null;
-        while (sourceSha is null && !directRead)
+        state.SourceSha = lease.SourceSha256;
+        state.DirectRead = lease.DirectRead && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null;
+        while (state.SourceSha is null && !state.DirectRead)
         {
             var source = await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}", job.Token);
-            sourceSha = source.SourceSha256; if (sourceSha is null) await Task.Delay(TimeSpan.FromSeconds(2), job.Token);
+            state.SourceSha = source.SourceSha256; if (state.SourceSha is null) await Task.Delay(TimeSpan.FromSeconds(2), job.Token);
         }
-        extension = Path.GetExtension(lease.MediaPath); if (string.IsNullOrWhiteSpace(extension)) extension = ".mkv";
-        original = directRead ? SafeMediaPaths.Resolve(lease.SourceRoot!, lease.MediaPath) : Path.Combine(directory, "source" + extension);
+        state.Extension = Path.GetExtension(lease.MediaPath); if (string.IsNullOrWhiteSpace(state.Extension)) state.Extension = ".mkv";
+        state.Original = state.DirectRead ? SafeMediaPaths.Resolve(lease.SourceRoot!, lease.MediaPath) : Path.Combine(directory, "source" + state.Extension);
         if (lease.VerifyPublicationAccess && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null)
             await LibraryAccessVerifier.VerifyPublicationAsync(lease.SourceRoot, job.Token, lease.VerifyReplacementAccess ? lease.MediaPath : null);
-        observed = directRead ? MediaFileStamp.Read(original) : null;
-        context = lease.Checkpoint?.Context ?? new(sourceSha ?? "", extension, new Dictionary<string, JsonElement>(), null, null, [],
-            DirectSource: observed is null ? null : new(observed.Bytes, observed.LastWriteUtcTicks));
-        placementPlan = lease.PlacementPlan;
-        if (context.DirectSource is { } prior)
+        state.Observed = state.DirectRead ? MediaFileStamp.Read(state.Original) : null;
+        state.Context = lease.Checkpoint?.Context ?? new(state.SourceSha ?? "", state.Extension, new Dictionary<string, JsonElement>(), null, null, [],
+            DirectSource: state.Observed is null ? null : new(state.Observed.Bytes, state.Observed.LastWriteUtcTicks));
+        state.PlacementPlan = lease.PlacementPlan;
+        if (state.Context.DirectSource is { } prior)
         {
-            if (directRead) new MediaFileStamp(prior.Bytes, prior.LastWriteUtcTicks).Verify(original);
-            else context = context with { CurrentSha256 = sourceSha!, DirectSource = null };
+            if (state.DirectRead) new MediaFileStamp(prior.Bytes, prior.LastWriteUtcTicks).Verify(state.Original);
+            else state.Context = state.Context with { CurrentSha256 = state.SourceSha!, DirectSource = null };
         }
-        variables = new Dictionary<string, JsonElement>(context.Variables);
-        publicationConfirmed = variables.ContainsKey("runtime.published");
-        next = lease.Checkpoint?.NextNodeId;
-        if (lease.Checkpoint is null) next = lease.EntryNodeId;
-        terminal = lease.Checkpoint?.TerminalResult; lastOutput = lease.Checkpoint?.OutputId;
-        current = directRead ? original : Path.Combine(directory, "current" + context.Extension);
-        materialized = false;
-        currentStamp = null;
-        if (directRead && context.BeforeMetadata is null)
+        state.Variables = new Dictionary<string, JsonElement>(state.Context.Variables);
+        state.PublicationConfirmed = state.Variables.ContainsKey("runtime.published");
+        state.Next = lease.Checkpoint?.NextNodeId;
+        if (lease.Checkpoint is null) state.Next = lease.EntryNodeId;
+        state.Terminal = lease.Checkpoint?.TerminalResult; state.LastOutput = lease.Checkpoint?.OutputId;
+        state.Current = state.DirectRead ? state.Original : Path.Combine(directory, "current" + state.Context.Extension);
+        state.Materialized = false;
+        state.CurrentStamp = null;
+        if (state.DirectRead && state.Context.BeforeMetadata is null)
         {
             // Source lisible en place : le sondage ne coûte aucune copie, on publie donc les métadonnées d'origine tout de suite.
-            try { observed!.Verify(original); context = context with { BeforeMetadata = await scanner.ScanAsync(original, job.Token) }; observed.Verify(original); }
-            catch (Exception) when (!job.IsCancellationRequested) { context = context with { BeforeMetadata = null }; }
+            try
+            {
+                state.Observed!.Verify(state.Original);
+                state.Context = state.Context with { BeforeMetadata = await scanner.ScanAsync(state.Original, job.Token) };
+                state.Observed.Verify(state.Original);
+            }
+            catch (Exception) when (!job.IsCancellationRequested) { state.Context = state.Context with { BeforeMetadata = null }; }
             await ReportSourceMetadataAsync();
         }
-        if (placementPlan is not null)
+        if (state.PlacementPlan is not null)
         {
-            placementPlan = await client.PostAsync<FlowPlacementPlan>($"executions/{lease.ExecutionId:D}/placement-plan", new RuntimeFence(lease.Epoch), job.Token) ?? placementPlan;
-            if (placementPlan.Strategy == FlowPlacementPlan.StrategyImpossible)
-                throw new IOException("placement_impossible: " + placementPlan.Reason);
+            state.PlacementPlan = await client.PostAsync<FlowPlacementPlan>($"executions/{lease.ExecutionId:D}/placement-plan", new RuntimeFence(lease.Epoch), job.Token) ?? state.PlacementPlan;
+            if (state.PlacementPlan.Strategy == FlowPlacementPlan.StrategyImpossible)
+                throw new IOException("placement_impossible: " + state.PlacementPlan.Reason);
         }
     }
 
@@ -213,64 +202,64 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(30));
             var status = (await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew", new RuntimeFence(lease.Epoch, commandCapture.ForHeartbeat()), timeout.Token))!;
-            Volatile.Write(ref revision, status.Revision);
-            if (status.CancelRequested) { cancelled = true; job.Cancel(); }
+            state.ApplyLeaseRenewal(status.Revision, status.CancelRequested, job.Cancel);
             return status;
         }
         finally { leaseGate.Release(); }
     }
     private async Task EnsureFilesAsync()
     {
-        if (materialized) return;
-        if (directRead)
+        if (state.Materialized) return;
+        if (state.DirectRead)
         {
-            observed!.Verify(original);
+            state.Observed!.Verify(state.Original);
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source/prepare", new RuntimeFence(lease.Epoch), job.Token);
-            while (sourceSha is null)
+            while (state.SourceSha is null)
             {
-                sourceSha = (await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}", job.Token)).SourceSha256;
-                if (sourceSha is null) await Task.Delay(TimeSpan.FromMilliseconds(250), job.Token);
+                state.SourceSha = (await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}", job.Token)).SourceSha256;
+                if (state.SourceSha is null) await Task.Delay(TimeSpan.FromMilliseconds(250), job.Token);
             }
-            observed.Verify(original);
-            directRead = false;
-            original = Path.Combine(directory, "source" + extension);
-            current = Path.Combine(directory, "current" + context.Extension);
-            context = context with { CurrentSha256 = sourceSha, DirectSource = null };
+            state.Observed.Verify(state.Original);
+            state.DirectRead = false;
+            state.Original = Path.Combine(directory, "source" + state.Extension);
+            state.Current = Path.Combine(directory, "current" + state.Context.Extension);
+            state.Context = state.Context with { CurrentSha256 = state.SourceSha, DirectSource = null };
         }
-        await client.DownloadAsync(lease.ExecutionId, lease.Epoch, sourceSha!, original, job.Token);
-        if (context.CurrentSha256 == sourceSha)
+        await client.DownloadAsync(lease.ExecutionId, lease.Epoch, state.SourceSha!, state.Original, job.Token);
+        if (state.Context.CurrentSha256 == state.SourceSha)
         {
-            if (original != current && !File.Exists(current))
+            if (state.Original != state.Current && !File.Exists(state.Current))
             {
-                File.Copy(original, current, true);
+                File.Copy(state.Original, state.Current, true);
             }
         }
-        else await client.DownloadAsync(lease.ExecutionId, lease.Epoch, context.CurrentSha256, current, job.Token);
-        foreach (var variable in variables.Where(pair => pair.Key.StartsWith("artifact.", StringComparison.Ordinal)))
+        else await client.DownloadAsync(lease.ExecutionId, lease.Epoch, state.Context.CurrentSha256, state.Current, job.Token);
+        foreach (var variable in state.Variables.Where(pair => pair.Key.StartsWith("artifact.", StringComparison.Ordinal)))
         {
             var sha = variable.Value.GetProperty("sha256").GetString()!;
             var name = variable.Value.GetProperty("name").GetString()!;
             var artifactDirectory = Path.Combine(directory, "artifacts", sha); Directory.CreateDirectory(artifactDirectory);
             await client.DownloadAsync(lease.ExecutionId, lease.Epoch, sha, SafeMediaPaths.Resolve(artifactDirectory, Path.GetFileName(name)), job.Token);
         }
-        materialized = true;
-        currentStamp = MediaFileStamp.Read(current);
+        state.Materialized = true;
+        state.CurrentStamp = MediaFileStamp.Read(state.Current);
     }
     // Les métadonnées d'origine sont visibles dans l'activité dès le sondage, sans attendre la fin d'une étape.
     private async Task ReportSourceMetadataAsync()
     {
-        if (context.BeforeMetadata is not { } metadata) return;
+        if (state.Context.BeforeMetadata is not { } metadata) return;
         try
         {
-            placementPlan = await client.PostAsync<FlowPlacementPlan>($"executions/{lease.ExecutionId:D}/source-metadata", new ReportSourceMetadata(lease.Epoch, metadata), job.Token) ?? placementPlan;
+            state.PlacementPlan = await client.PostAsync<FlowPlacementPlan>(
+                $"executions/{lease.ExecutionId:D}/source-metadata", new ReportSourceMetadata(lease.Epoch, metadata), job.Token) ?? state.PlacementPlan;
         }
         catch (Exception) when (!job.IsCancellationRequested) { }
-        if (placementPlan?.Strategy == FlowPlacementPlan.StrategyImpossible)
-            throw new IOException("placement_impossible: " + placementPlan.Reason);
+        if (state.PlacementPlan?.Strategy == FlowPlacementPlan.StrategyImpossible)
+            throw new IOException("placement_impossible: " + state.PlacementPlan.Reason);
     }
     private bool AudioAlreadyCompliant(IReadOnlyDictionary<string, System.Text.Json.JsonElement> configuration)
     {
-        if (context.BeforeMetadata is not { } metadata || context.Plan.Count > 0 || FfmpegBuilderPolicy.Active(variables)) return false;
+        if (state.Context.BeforeMetadata is not { } metadata || state.Context.Plan.Count > 0 || FfmpegBuilderPolicy.Active(state.Variables)) return false;
         try { return AudioRulePlanner.Plan(metadata, AudioRuleOptions.From(configuration)).Steps("probe", AudioRuleOptions.From(configuration)).Count == 0; }
         catch (AudioRuleException) { return false; }
     }
@@ -279,39 +268,42 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
     {
         var naming = id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id);
         var subtitles = id is "base-subtitle-manage" or "subtitles-manage" || FlowOperationConfiguration.IsSubtitleOperation(id);
-        if (!directRead || !(naming || subtitles) || context.BeforeMetadata is not { } metadata || context.Plan.Count > 0 || FfmpegBuilderPolicy.Active(variables)) return false;
+        if (!state.DirectRead || !(naming || subtitles) || state.Context.BeforeMetadata is not { } metadata
+            || state.Context.Plan.Count > 0 || FfmpegBuilderPolicy.Active(state.Variables)) return false;
         if (naming && MediaActions.Text(configuration, "mode", "apply") == "snapshot") return false;
         try
         {
-            observed!.Verify(original);
+            state.Observed!.Verify(state.Original);
             var outcome = naming
-                ? await actions.TrackNamesAsync(configuration, metadata, variables.TryGetValue("tracks.origin", out var saved) ? saved : null, original, directory, nodeId, job.Token, planOnly: true)
-                : await actions.SubtitleManageAsync(configuration, metadata, original, directory, nodeId, job.Token, planOnly: true);
-            observed.Verify(original);
+                ? await actions.TrackNamesAsync(configuration, metadata,
+                    state.Variables.TryGetValue("tracks.origin", out var saved) ? saved : null,
+                    state.Original, directory, nodeId, job.Token, planOnly: true)
+                : await actions.SubtitleManageAsync(configuration, metadata, state.Original, directory, nodeId, job.Token, planOnly: true);
+            state.Observed.Verify(state.Original);
             if (outcome.NeedsChanges || outcome.Primary is not null) return false;
-            conformingNodes.Add(nodeId); return true;
+            state.ConformingNodes.Add(nodeId); return true;
         }
         catch (Exception) when (!job.IsCancellationRequested) { return false; }
     }
     private async Task EnsureScanAsync()
     {
-        if (directRead) observed!.Verify(original);
+        if (state.DirectRead) state.Observed!.Verify(state.Original);
         else await EnsureFilesAsync();
-        if (context.BeforeMetadata is null)
+        if (state.Context.BeforeMetadata is null)
         {
-            context = context with { BeforeMetadata = await scanner.ScanAsync(original, job.Token) };
+            state.Context = state.Context with { BeforeMetadata = await scanner.ScanAsync(state.Original, job.Token) };
             await ReportSourceMetadataAsync();
         }
-        if (context.CurrentMetadata is null) context = context with { CurrentMetadata = current == original
-            || context.CurrentSha256 == sourceSha ? context.BeforeMetadata : await scanner.ScanAsync(current, job.Token) };
-        if (directRead) observed!.Verify(original);
+        if (state.Context.CurrentMetadata is null) state.Context = state.Context with { CurrentMetadata = state.Current == state.Original
+            || state.Context.CurrentSha256 == state.SourceSha ? state.Context.BeforeMetadata : await scanner.ScanAsync(state.Current, job.Token) };
+        if (state.DirectRead) state.Observed!.Verify(state.Original);
     }
     private async Task<string> ExtraAsync(string path)
     {
         if (FlowArtifactReference.TryParse(path, out var reference))
         {
             await EnsureFilesAsync();
-            var artifact = reference.Resolve(variables);
+            var artifact = reference.Resolve(state.Variables);
             var sha = artifact.GetProperty("sha256").GetString()!;
             var folder = Path.Combine(directory, "artifacts", sha); Directory.CreateDirectory(folder);
             var target = SafeMediaPaths.Resolve(folder, Path.GetFileName(artifact.GetProperty("name").GetString()!));
@@ -321,31 +313,31 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         if (path.StartsWith(FlowArtifactReference.Prefix, StringComparison.Ordinal))
             throw new FlowArtifactReferenceException("Référence de fichier produit invalide.");
         path = path.Replace('\\', '/');
-        RuntimeSourceState state;
+        RuntimeSourceState sourceState;
         while (true)
         {
-            state = await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}", job.Token);
-            if (state.Inputs?.TryGetValue(path, out _) == true) break;
+            sourceState = await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}", job.Token);
+            if (sourceState.Inputs?.TryGetValue(path, out _) == true) break;
             await Task.Delay(TimeSpan.FromSeconds(2), job.Token);
         }
         var file = Path.Combine(directory, "input-" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(path)))[..16] + Path.GetExtension(path));
-        await client.DownloadAsync(lease.ExecutionId, lease.Epoch, state.Inputs![path], file, job.Token); return file;
+        await client.DownloadAsync(lease.ExecutionId, lease.Epoch, sourceState.Inputs![path], file, job.Token); return file;
     }
     private async Task EnsurePublicationIntegrityAsync()
     {
         await EnsureFilesAsync();
-        if (await SafeMediaPaths.DigestAsync(current, job.Token) != context.CurrentSha256)
+        if (await SafeMediaPaths.DigestAsync(state.Current, job.Token) != state.Context.CurrentSha256)
             throw new IOException("Le résultat a changé après son contrôle ; publication refusée.");
         if (!MediaIntegrityPolicy.IsExplicit(lease.Flow))
         {
-            await scanner.ValidateAsync(current, lease.Flow.MediaType, context.BeforeMetadata, job.Token);
+            await scanner.ValidateAsync(state.Current, lease.Flow.MediaType, state.Context.BeforeMetadata, job.Token);
             return;
         }
-        if (!variables.TryGetValue(MediaIntegrityPolicy.ReceiptVariable, out var value)
+        if (!state.Variables.TryGetValue(MediaIntegrityPolicy.ReceiptVariable, out var value)
             || value.Deserialize<MediaIntegrityReport>(new JsonSerializerOptions(JsonSerializerDefaults.Web)) is not { Output: "valid" } receipt
-            || receipt.Sha256 != context.CurrentSha256)
+            || receipt.Sha256 != state.Context.CurrentSha256)
             throw new IOException("Contrôle média explicite manquant ou invalide pour le résultat courant.");
-        await scanner.ValidateAsync(current, lease.Flow.MediaType, context.BeforeMetadata, job.Token);
+        await scanner.ValidateAsync(state.Current, lease.Flow.MediaType, state.Context.BeforeMetadata, job.Token);
     }
     private async Task ApplyOutcomeAsync(MediaActionOutcome outcome, string node)
     {
@@ -355,19 +347,19 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
             var sha = await SafeMediaPaths.DigestAsync(additional, job.Token);
             await client.PutAsync(lease.ExecutionId, lease.Epoch, additional, sha, false, job.Token);
             var description = JsonSerializer.SerializeToElement(new { sha256 = sha, name = Path.GetFileName(additional) });
-            variables["artifact." + node + "." + Path.GetFileName(additional)] = description;
-            variables[new FlowArtifactReference(node, artifactIndex++).VariableKey] = description;
+            state.Variables["artifact." + node + "." + Path.GetFileName(additional)] = description;
+            state.Variables[new FlowArtifactReference(node, artifactIndex++).VariableKey] = description;
         }
         if (outcome.Primary is { } candidate)
         {
-            var metadata = await scanner.ValidateAsync(candidate, lease.Flow.MediaType, context.BeforeMetadata, job.Token);
+            var metadata = await scanner.ValidateAsync(candidate, lease.Flow.MediaType, state.Context.BeforeMetadata, job.Token);
             var sha = await SafeMediaPaths.DigestAsync(candidate, job.Token);
             await client.PutAsync(lease.ExecutionId, lease.Epoch, candidate, sha, false, job.Token);
-            current = candidate; context = context with { CurrentSha256 = sha, Extension = Path.GetExtension(candidate), CurrentMetadata = metadata };
-            currentStamp = MediaFileStamp.Read(current);
+            state.Current = candidate; state.Context = state.Context with { CurrentSha256 = sha, Extension = Path.GetExtension(candidate), CurrentMetadata = metadata };
+            state.CurrentStamp = MediaFileStamp.Read(state.Current);
         }
         if (outcome.VideoEncodings is { Count: > 0 })
-            context = context with { VideoEncodings = [.. (context.VideoEncodings ?? []), .. outcome.VideoEncodings] };
+            state.Context = state.Context with { VideoEncodings = [.. (state.Context.VideoEncodings ?? []), .. outcome.VideoEncodings] };
     }
     private async Task FailureAsync(string state, string detail)
     {
@@ -383,24 +375,25 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
 
     private async Task FinishAsync()
     {
-        await EnsureScanAsync(); context = context with { Variables = variables };
-        if (directRead) observed!.Verify(original);
-        var failed = terminal == "failed" || terminal is null && lastOutput == "error";
-        if (context.Plan.Count > 0 && !failed) throw new IOException("Le flow se termine avec un plan non exécuté.");
+        await EnsureScanAsync(); state.Context = state.Context with { Variables = state.Variables };
+        if (state.DirectRead) state.Observed!.Verify(state.Original);
+        var failed = state.Terminal == "failed" || state.Terminal is null && state.LastOutput == "error";
+        if (state.Context.Plan.Count > 0 && !failed) throw new IOException("Le flow se termine avec un plan non exécuté.");
 
         // Après une publication par bloc (ADR 0003), la référence est le fichier publié : la fin du flow ne republie pas.
-        var publishedSha = variables.TryGetValue("runtime.published", out var publication) && publication.TryGetProperty("sha256", out var publishedDigest) ? publishedDigest.GetString() : null;
-        var changed = !failed && terminal is not ("unchanged" or "deferred") && context.CurrentSha256 != (publishedSha ?? sourceSha ?? "");
+        var publishedSha = state.Variables.TryGetValue("runtime.published", out var publication) && publication.TryGetProperty("sha256", out var publishedDigest) ? publishedDigest.GetString() : null;
+        var changed = !failed && state.Terminal is not ("unchanged" or "deferred") && state.Context.CurrentSha256 != (publishedSha ?? state.SourceSha ?? "");
         if (changed && publishedSha is not null) throw new IOException("Le média a été modifié après sa publication ; ce résultat ne peut pas être publié une seconde fois.");
-        if (changed && variables.ContainsKey("runtime.inPlaceEdited")) throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
+        if (changed && state.Variables.ContainsKey("runtime.inPlaceEdited"))
+            throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
         if (changed) await EnsurePublicationIntegrityAsync();
         if (changed && lease.SourceNodeId == client.NodeId && lease.SourceRoot is not null)
-            localPublicationArtifacts.Register(lease.ExecutionId, lease.Epoch, context.CurrentSha256, current);
+            localPublicationArtifacts.Register(lease.ExecutionId, lease.Epoch, state.Context.CurrentSha256, state.Current);
         await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish", new FinishRuntimeExecution(lease.Epoch, Guid.NewGuid(),
-            Volatile.Read(ref revision), failed ? "failed" : terminal == "deferred" ? "deferred" : "succeeded",
-            failed ? "Le flow a atteint une fin en échec." : "Flow terminé ; scans média réalisés.", changed ? context.CurrentSha256 : null,
-                changed ? context.Extension : null, context.BeforeMetadata, context.CurrentMetadata,
-                terminal == "deferred" ? (variables.TryGetValue("runtime.deferMinutes", out var delay) ? delay.GetInt32() : 2) : null,
+            state.Revision, failed ? "failed" : state.Terminal == "deferred" ? "deferred" : "succeeded",
+            failed ? "Le flow a atteint une fin en échec." : "Flow terminé ; scans média réalisés.", changed ? state.Context.CurrentSha256 : null,
+                changed ? state.Context.Extension : null, state.Context.BeforeMetadata, state.Context.CurrentMetadata,
+                state.Terminal == "deferred" ? (state.Variables.TryGetValue("runtime.deferMinutes", out var delay) ? delay.GetInt32() : 2) : null,
             commandCapture.Pending()), job.Token);
         if (changed)
         {
@@ -449,9 +442,12 @@ internal sealed partial class RuntimeFlowExecution(NodeAgentOptions options, Med
         var code = MediaActions.Text(config, "code");
         if (id == "base-condition")
         {
-            var expression = "(function(){ const context=JSON.parse(" + JsonSerializer.Serialize(JsonSerializer.Serialize(context)) + "); const variables=context.variables; return (" + MediaActions.Text(config,
-                "expression") + "); })()";
-            code = "const vm=require('vm'); return {outputId: vm.runInNewContext(" + JsonSerializer.Serialize(expression) + ",Object.create(null),{timeout:5000,contextCodeGeneration:{strings:false,wasm:false}})?'yes':'no'};";
+            var expression = "(function(){ const context=JSON.parse("
+                + JsonSerializer.Serialize(JsonSerializer.Serialize(context))
+                + "); const variables=context.variables; return (" + MediaActions.Text(config, "expression") + "); })()";
+            code = "const vm=require('vm'); return {outputId: vm.runInNewContext("
+                + JsonSerializer.Serialize(expression)
+                + ",Object.create(null),{timeout:5000,contextCodeGeneration:{strings:false,wasm:false}})?'yes':'no'};";
         }
         var file = Path.Combine(directory, "script-" + Guid.NewGuid().ToString("N") + (python ? ".py" : ".js"));
         var body = ScriptTools.Compose(python, id == "base-script" && MediaActions.Flag(config, "useTools"), code);
